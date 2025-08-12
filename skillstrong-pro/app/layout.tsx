@@ -1,3 +1,24 @@
-import './globals.css';import React,{useEffect} from 'react';import NavBar from '@/components/NavBar';import { initAnalytics } from '@/lib/analytics';
-export const metadata={title:'SkillStrong — Manufacturing Careers',description:'Explore careers, training & apprenticeships'};
-export default function RootLayout({children}:{children:React.ReactNode}){useEffect(()=>{initAnalytics();},[]);return(<html lang='en'><body><div className='container'><NavBar/>{children}<footer className='footer'>© 2025 SkillStrong</footer></div></body></html>);}
+import './globals.css';
+import React from 'react';
+import NavBar from '@/components/NavBar';
+import AnalyticsInit from '@/components/AnalyticsInit';
+
+export const metadata = {
+  title: 'SkillStrong — Manufacturing Careers',
+  description: 'Explore careers, training & apprenticeships',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <AnalyticsInit />
+        <div className="container">
+          <NavBar />
+          {children}
+          <footer className="footer">© {new Date().getFullYear()} SkillStrong</footer>
+        </div>
+      </body>
+    </html>
+  );
+}
