@@ -1,12 +1,198 @@
-'use client';import React,{useEffect,useRef,useState} from 'react';import { supabase } from '@/lib/supabase';
-type Guided={answer:string;buttons?:{label:string;action?:string;query?:string}[];nav?:{title:string;url?:string}[];facts?:{k:string;v:string}[]};
-type Item={type:'assistant'|'user'|'results';content:any};
-export default function Chat(){const [items,setItems]=useState<Item[]>([]);const [input,setInput]=useState('');const [busy,setBusy]=useState(false);const [zip,setZip]=useState('');const ref=useRef<HTMLDivElement>(null);
-useEffect(()=>{supabase.auth.getUser().then(async({data})=>{const u=data.user;if(!u){window.location.href='/auth';return;}const {data:prof}=await supabase.from('profiles').select('*').eq('id',u.id).single();setZip((prof as any)?.zip||'');});},[]);
-useEffect(()=>{ref.current?.scrollTo({top:999999});},[items]);
-const starters=[{label:'Explore by job types',q:'Explore manufacturing by job types'},{label:'Explore by salary range',q:'Show manufacturing roles by salary bands'},{label:'Explore by training length',q:'Which careers need under 12 months of training?'}];
-const salary=[{label:'<$40k',q:'Show manufacturing jobs under $40,000/year with short training'},{label:'$40–60k',q:'Show manufacturing jobs between $40,000 and $60,000/year'},{label:'$60–80k+',q:'Show manufacturing jobs above $60,000/year'}];
-async function send(t:string){setBusy(true);const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})});const g:Guided=await r.json();setItems(p=>[...p,{type:'assistant',content:g}]);setBusy(false);}
-async function onChip(b:{label:string;action?:string;query?:string}){if(b.action==='search_jobs'||b.action==='search_training'||b.action==='search_web'){let q=b.query||b.label;const z=zip||prompt('Enter ZIP for nearby results')||'';const r=await fetch('/api/search?q='+encodeURIComponent(q+(z?(' near '+z):'')));const data=await r.json();setItems(p=>[...p,{type:'results',content:data}]);return;}setItems(p=>[...p,{type:'user',content:b.label}]);await send(b.label);}
-async function submit(){if(!input)return;setItems(p=>[...p,{type:'user',content:input}]);await send(input);setInput('');}
-return(<div className='main'><div className='topbar'>Manufacturing Career Explorer</div><div className='scroll' ref={ref}>{items.length===0&&(<><div className='answer' style={{maxWidth:860,margin:'0 auto'}}><div style={{fontWeight:700,marginBottom:10}}>How would you like to explore?</div><div className='chips'>{starters.map(c=><div key={c.label} className='chip' onClick={()=>onChip({label:c.label})}>{c.label}</div>)}</div><div style={{height:12}}/><div className='small'>Salary explorer</div><div className='chips'>{salary.map(c=><div key={c.label} className='chip' onClick={()=>onChip({label:c.label})}>{c.label}</div>)}</div></div><div style={{height:24}}/><div className='answer' style={{maxWidth:860,margin:'0 auto'}}><div className='small'>Your ZIP for nearby results</div><div style={{display:'flex',gap:8,marginTop:8}}><input className='input' placeholder='ZIP code' value={zip} onChange={e=>setZip(e.target.value)}/><button className='chip' onClick={async()=>{const {data:{user}}=await supabase.auth.getUser();if(user)await supabase.from('profiles').upsert({id:user.id,email:user.email,zip});alert('Saved ZIP.');}}>Save</button></div></div></>)}{items.map((it,i)=>(<div key={i} style={{maxWidth:900,margin:'14px auto'}}>{it.type==='user'&&(<div style={{textAlign:'right'}}><div className='chip' style={{background:'#e8f0fe',borderColor:'#cfe0ff',display:'inline-block'}}>{it.content}</div></div>)}{it.type==='assistant'&&(<div className='answer'><div style={{whiteSpace:'pre-wrap',marginBottom:12}}>{it.content.answer}</div>{Array.isArray(it.content.facts)&&it.content.facts.length>0&&(<div className='chips' style={{marginBottom:8}}>{it.content.facts.map((f:any,ix:number)=><div key={ix} className='chip'>{f.k}: {f.v}</div>)}</div>)}{Array.isArray(it.content.buttons)&&(<div className='chips'>{it.content.buttons.map((b:any,ix:number)=><div key={ix} className='chip' onClick={()=>onChip(b)}>{b.label}</div>)}</div>)}</div>)}{it.type==='results'&&(<div className='answer'><div style={{fontWeight:700,marginBottom:8}}>Results</div><div style={{display:'grid',gap:10}}>{(it.content.items||[]).map((r:any,ix:number)=>(<a key={ix} href={r.url} target='_blank' rel='noreferrer' className='card' style={{display:'block'}}><div style={{fontWeight:700}}>{r.title}</div><div className='small'>{r.snippet}</div><div className='small' style={{marginTop:6}}>{r.url}</div></a>))}</div></div>)}</div>))}</div><div className='inputbar'><input className='input-xl' placeholder='Ask me anything...' value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')submit();}}/></div></div>);}
+'use client';
+import React, { useEffect, useRef, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+
+type Guided = {
+  answer: string;
+  buttons?: { label?: string; action?: string; query?: string }[];
+  nav?: { title?: string; url?: string }[];
+  facts?: { k?: string; v?: string }[];
+};
+
+type Item = { type: 'assistant' | 'user' | 'results'; content: any };
+
+export default function ChatPage() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [zip, setZip] = useState('');
+  const scRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      const u = data.user;
+      if (!u) {
+        window.location.href = '/auth';
+        return;
+      }
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', u.id)
+        .single();
+      setZip((prof as any)?.zip || '');
+    });
+  }, []);
+
+  useEffect(() => {
+    scRef.current?.scrollTo({ top: 999999 });
+  }, [items]);
+
+  const starters = [
+    { label: 'Explore by job types' },
+    { label: 'Explore by salary range' },
+    { label: 'Explore by training length' },
+  ];
+
+  const salaryChips = [
+    { label: '<$40k' },
+    { label: '$40–60k' },
+    { label: '$60–80k+' },
+  ];
+
+  async function send(text: string) {
+    setBusy(true);
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, zip }),
+    });
+    const guided: Guided = await res.json();
+    setItems((prev) => [...prev, { type: 'assistant', content: guided }]);
+    setBusy(false);
+  }
+
+  async function onChipClick(btn: { label?: string; action?: string; query?: string }) {
+    const label = btn.label || '';
+    if (btn.action === 'search_jobs' || btn.action === 'search_training' || btn.action === 'search_web') {
+      const q = btn.query || label;
+      const url = `/api/search?action=${encodeURIComponent(btn.action)}&q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip || '')}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setItems((prev) => [...prev, { type: 'results', content: data }]);
+      return;
+    }
+    setItems((prev) => [...prev, { type: 'user', content: label }]);
+    await send(label);
+  }
+
+  async function onSubmit() {
+    if (!input.trim()) return;
+    setItems((prev) => [...prev, { type: 'user', content: input }]);
+    await send(input);
+    setInput('');
+  }
+
+  return (
+    <div className="main">
+      <div className="topbar">Manufacturing Career Explorer</div>
+      <div className="scroll" ref={scRef}>
+        {items.length === 0 && (
+          <>
+            <div className="answer" style={{ maxWidth: 860, margin: '0 auto' }}>
+              <div style={{ fontWeight: 700, marginBottom: 10 }}>How would you like to explore?</div>
+              <div className="chips">
+                {starters.map((c) => (
+                  <div key={c.label} className="chip" onClick={() => onChipClick(c)}>
+                    {c.label}
+                  </div>
+                ))}
+              </div>
+              <div style={{ height: 12 }} />
+              <div className="small">Salary explorer</div>
+              <div className="chips">
+                {salaryChips.map((c) => (
+                  <div key={c.label} className="chip" onClick={() => onChipClick(c)}>
+                    {c.label}
+                  </div>
+                ))}
+              </div>
+              <div style={{ height: 16 }} />
+              <div className="small">ZIP for nearby results (set it in your <a href="/account">Account</a>)</div>
+              {zip && <div className="chip">{zip}</div>}
+            </div>
+          </>
+        )}
+
+        {items.map((it, idx) => (
+          <div key={idx} style={{ maxWidth: 900, margin: '14px auto' }}>
+            {it.type === 'user' && (
+              <div style={{ textAlign: 'right' }}>
+                <div className="chip" style={{ background: '#e8f0fe', borderColor: '#cfe0ff', display: 'inline-block' }}>
+                  {it.content}
+                </div>
+              </div>
+            )}
+            {it.type === 'assistant' && <AssistantBlock guided={it.content as Guided} onChip={onChipClick} />}
+            {it.type === 'results' && <ResultsBlock data={it.content} />}
+          </div>
+        ))}
+      </div>
+      <div className="inputbar">
+        <input
+          className="input-xl"
+          placeholder="Ask me anything..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onSubmit();
+          }}
+          disabled={busy}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AssistantBlock({
+  guided,
+  onChip,
+}: {
+  guided: Guided;
+  onChip: (b: any) => void;
+}) {
+  const btns = (guided.buttons || []).filter((b) => b && b.label);
+  const facts = (guided.facts || []).filter((f) => f && (f.k || f.v));
+  return (
+    <div className="answer">
+      <div style={{ whiteSpace: 'pre-wrap', marginBottom: 12 }}>{guided.answer}</div>
+      {!!facts.length && (
+        <div className="chips" style={{ marginBottom: 8 }}>
+          {facts.map((f, i) => (
+            <div key={i} className="chip">
+              {f.k ? `${f.k}: ` : ''}{f.v || ''}
+            </div>
+          ))}
+        </div>
+      )}
+      {!!btns.length && (
+        <div className="chips">
+          {btns.map((b, i) => (
+            <div key={i} className="chip" onClick={() => onChip(b)}>
+              {b.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResultsBlock({ data }: { data: any }) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  if (!items.length) return null;
+  return (
+    <div className="answer">
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>Results</div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map((it: any, idx: number) => (
+          <a key={idx} href={it.url} target="_blank" rel="noreferrer" className="card" style={{ display: 'block' }}>
+            <div style={{ fontWeight: 700 }}>{it.title}</div>
+            <div className="small">{it.snippet}</div>
+            <div className="small" style={{ marginTop: 6 }}>{it.url}</div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
