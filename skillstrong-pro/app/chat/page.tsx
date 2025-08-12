@@ -176,46 +176,23 @@ function AssistantBlock({ guided, onChip }:{ guided: Guided, onChip:(b:any)=>voi
   );
 }
 
-function ResultsBlock({ data }:{ data:any }) {
-  // Internet RAG payload
+function ResultsBlock({ data, onFollowup }: { data: any; onFollowup: (q: string) => void }) {
   if (data?.answer_markdown) {
     return (
       <div className="answer">
-        <div style={{ marginBottom: 12 }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{data.answer_markdown}</ReactMarkdown>
-        </div>
-        {Array.isArray(data.images) && data.images.length > 0 && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px,1fr))', gap:10, marginBottom:10 }}>
-            {data.images.map((im:any, i:number) => (
-              <a key={i} href={im.url} target="_blank" rel="noreferrer" className="card">
-                {/* keep <img> simple to avoid Next image domain config */}
-                <img src={im.url} alt={im.caption||'image'} style={{ width:'100%', borderRadius:12 }} />
-                {im.caption && <div className="small" style={{marginTop:6}}>{im.caption}</div>}
-              </a>
-            ))}
-          </div>
-        )}
-        {Array.isArray(data.citations) && data.citations.length > 0 && (
-          <div className="small">
-            <strong>Sources:</strong>{' '}
-            {data.citations.map((c:any, i:number) => (
-              <span key={i}>
-                [{i+1}] <a href={c.url} target="_blank" rel="noreferrer">{c.title || c.url}</a>{' '}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* ...markdown & images... */}
         {Array.isArray(data.followups) && data.followups.length > 0 && (
-          <div className="chips" style={{ marginTop:10 }}>
-            {data.followups.map((f:string, i:number) => (
-              <div key={i} className="chip" onClick={()=>setItems((prev)=>[...prev, { type:'user', content:f }])}>{f}</div>
+          <div className="chips" style={{ marginTop: 10 }}>
+            {data.followups.map((f: string, i: number) => (
+              <div key={i} className="chip" onClick={() => onFollowup(f)}>
+                {f}
+              </div>
             ))}
           </div>
         )}
       </div>
     );
   }
-
   // fallback: raw links list (older search)
   const items = Array.isArray(data?.items) ? data.items : [];
   if (!items.length) return null;
