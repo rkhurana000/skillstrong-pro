@@ -1,8 +1,8 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { supabase } from '@/lib/supabaseClient';
 
 type Guided = {
   answer: string;
@@ -29,7 +29,7 @@ export default function ChatPage() {
       }
       const { data: prof } = await supabase
         .from('profiles')
-        .select('*')
+        .select('zip')
         .eq('id', u.id)
         .single();
       setZip((prof as any)?.zip || '');
@@ -46,11 +46,7 @@ export default function ChatPage() {
     { label: 'Explore by training length' },
   ];
 
-  const salaryChips = [
-    { label: '<$40k' },
-    { label: '$40–60k' },
-    { label: '$60–80k+' },
-  ];
+  const salaryChips = [{ label: '<$40k' }, { label: '$40–60k' }, { label: '$60–80k+' }];
 
   async function send(text: string) {
     setBusy(true);
@@ -68,15 +64,9 @@ export default function ChatPage() {
     const label = btn.label || '';
     if (btn.action === 'research') {
       const q = btn.query || label;
-      const url = `/api/research?action=search_web&q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip || '')}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      setItems((prev) => [...prev, { type: 'results', content: data }]);
-      return;
-    }
-    if (btn.action === 'search_jobs' || btn.action === 'search_training' || btn.action === 'search_web') {
-      const q = btn.query || label;
-      const url = `/api/search?action=${encodeURIComponent(btn.action)}&q=${encodeURIComponent(q)}&zip=${encodeURIComponent(zip || '')}`;
+      const url = `/api/research?action=search_web&q=${encodeURIComponent(
+        q
+      )}&zip=${encodeURIComponent(zip || '')}`;
       const res = await fetch(url);
       const data = await res.json();
       setItems((prev) => [...prev, { type: 'results', content: data }]);
@@ -98,51 +88,58 @@ export default function ChatPage() {
       <div className="topbar">Manufacturing Career Explorer</div>
       <div className="scroll" ref={scRef}>
         {items.length === 0 && (
-          <>
-            <div className="answer" style={{ maxWidth: 860, margin: '0 auto' }}>
-              <div style={{ fontWeight: 700, marginBottom: 10 }}>How would you like to explore?</div>
-              <div className="chips">
-                {starters.map((c) => (
-                  <div key={c.label} className="chip" onClick={() => onChipClick(c)}>
-                    {c.label}
-                  </div>
-                ))}
-              </div>
-              <div style={{ height: 12 }} />
-              <div className="small">Salary explorer</div>
-              <div className="chips">
-                {salaryChips.map((c) => (
-                  <div key={c.label} className="chip" onClick={() => onChipClick(c)}>
-                    {c.label}
-                  </div>
-                ))}
-              </div>
-              <div style={{ height: 16 }} />
-              <div className="small">ZIP for nearby results (set it in your <a href="/account">Account</a>)</div>
-              {zip && <div className="chip">{zip}</div>}
+          <div className="answer" style={{ maxWidth: 860, margin: '0 auto' }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>
+              How would you like to explore?
             </div>
-          </>
+            <div className="chips">
+              {starters.map((c) => (
+                <div key={c.label} className="chip" onClick={() => onChipClick(c)}>
+                  {c.label}
+                </div>
+              ))}
+            </div>
+            <div style={{ height: 12 }} />
+            <div className="small">Salary explorer</div>
+            <div className="chips">
+              {salaryChips.map((c) => (
+                <div key={c.label} className="chip" onClick={() => onChipClick(c)}>
+                  {c.label}
+                </div>
+              ))}
+            </div>
+            <div style={{ height: 16 }} />
+            <div className="small">
+              ZIP for nearby results (set it in your <a href="/account">Account</a>)
+            </div>
+            {zip && <div className="chip">{zip}</div>}
+          </div>
         )}
 
         {items.map((it, idx) => (
           <div key={idx} style={{ maxWidth: 900, margin: '14px auto' }}>
             {it.type === 'user' && (
               <div style={{ textAlign: 'right' }}>
-                <div className="chip" style={{ background: '#e8f0fe', borderColor: '#cfe0ff', display: 'inline-block' }}>
+                <div
+                  className="chip"
+                  style={{ background: '#e8f0fe', borderColor: '#cfe0ff', display: 'inline-block' }}
+                >
                   {it.content}
                 </div>
               </div>
             )}
-            {it.type === 'assistant' && <AssistantBlock guided={it.content as Guided} onChip={onChipClick} />}
+            {it.type === 'assistant' && (
+              <AssistantBlock guided={it.content as Guided} onChip={onChipClick} />
+            )}
             {it.type === 'results' && (
-  <ResultsBlock
-    data={it.content}
-    onFollowup={(f) => {
-      setItems((prev) => [...prev, { type: 'user', content: f }]);
-      send(f);
-    }}
-  />
-)}
+              <ResultsBlock
+                data={it.content}
+                onFollowup={(f) => {
+                  setItems((prev) => [...prev, { type: 'user', content: f }]);
+                  send(f);
+                }}
+              />
+            )}
           </div>
         ))}
       </div>
@@ -162,9 +159,15 @@ export default function ChatPage() {
   );
 }
 
-function AssistantBlock({ guided, onChip }:{ guided: Guided, onChip:(b:any)=>void }){
-  const btns = (guided.buttons || []).filter(b => b && b.label);
-  const facts = (guided.facts || []).filter(f => f && (f.k || f.v));
+function AssistantBlock({
+  guided,
+  onChip,
+}: {
+  guided: Guided;
+  onChip: (b: any) => void;
+}) {
+  const btns = (guided.buttons || []).filter((b) => b && b.label);
+  const facts = (guided.facts || []).filter((f) => f && (f.k || f.v));
   return (
     <div className="answer">
       <div style={{ marginBottom: 12 }}>
@@ -172,23 +175,77 @@ function AssistantBlock({ guided, onChip }:{ guided: Guided, onChip:(b:any)=>voi
       </div>
       {!!facts.length && (
         <div className="chips" style={{ marginBottom: 8 }}>
-          {facts.map((f,i) => <div key={i} className="chip">{f.k ? `${f.k}: ` : ''}{f.v || ''}</div>)}
+          {facts.map((f, i) => (
+            <div key={i} className="chip">
+              {f.k ? `${f.k}: ` : ''}
+              {f.v || ''}
+            </div>
+          ))}
         </div>
       )}
       {!!btns.length && (
         <div className="chips">
-          {btns.map((b,i) => <div key={i} className="chip" onClick={()=>onChip(b)}>{b.label}</div>)}
+          {btns.map((b, i) => (
+            <div key={i} className="chip" onClick={() => onChip(b)}>
+              {b.label}
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function ResultsBlock({ data, onFollowup }: { data: any; onFollowup: (q: string) => void }) {
+function ResultsBlock({
+  data,
+  onFollowup,
+}: {
+  data: any;
+  onFollowup: (q: string) => void;
+}) {
+  // Internet RAG payload
   if (data?.answer_markdown) {
     return (
       <div className="answer">
-        {/* ...markdown & images... */}
+        <div style={{ marginBottom: 12 }}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {data.answer_markdown}
+          </ReactMarkdown>
+        </div>
+        {Array.isArray(data.images) && data.images.length > 0 && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))',
+              gap: 10,
+              marginBottom: 10,
+            }}
+          >
+            {data.images.map((im: any, i: number) => (
+              <a key={i} href={im.url} target="_blank" rel="noreferrer" className="card">
+                <img
+                  src={im.url}
+                  alt={im.caption || 'image'}
+                  style={{ width: '100%', borderRadius: 12 }}
+                />
+                {im.caption && <div className="small" style={{ marginTop: 6 }}>{im.caption}</div>}
+              </a>
+            ))}
+          </div>
+        )}
+        {Array.isArray(data.citations) && data.citations.length > 0 && (
+          <div className="small">
+            <strong>Sources:</strong>{' '}
+            {data.citations.map((c: any, i: number) => (
+              <span key={i}>
+                [{i + 1}]&nbsp;
+                <a href={c.url} target="_blank" rel="noreferrer">
+                  {c.title || c.url}
+                </a>{' '}
+              </span>
+            ))}
+          </div>
+        )}
         {Array.isArray(data.followups) && data.followups.length > 0 && (
           <div className="chips" style={{ marginTop: 10 }}>
             {data.followups.map((f: string, i: number) => (
@@ -201,18 +258,19 @@ function ResultsBlock({ data, onFollowup }: { data: any; onFollowup: (q: string)
       </div>
     );
   }
+
   // fallback: raw links list (older search)
   const items = Array.isArray(data?.items) ? data.items : [];
   if (!items.length) return null;
   return (
     <div className="answer">
-      <div style={{ fontWeight:700, marginBottom:8 }}>Results</div>
-      <div style={{ display:'grid', gap:10 }}>
-        {items.map((it:any, idx:number)=>(
-          <a key={idx} href={it.url} target="_blank" rel="noreferrer" className="card" style={{display:'block'}}>
-            <div style={{fontWeight:700}}>{it.title}</div>
+      <div style={{ fontWeight: 700, marginBottom: 8 }}>Results</div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map((it: any, idx: number) => (
+          <a key={idx} href={it.url} target="_blank" rel="noreferrer" className="card" style={{ display: 'block' }}>
+            <div style={{ fontWeight: 700 }}>{it.title}</div>
             <div className="small">{it.snippet}</div>
-            <div className="small" style={{marginTop:6}}>{it.url}</div>
+            <div className="small" style={{ marginTop: 6 }}>{it.url}</div>
           </a>
         ))}
       </div>
