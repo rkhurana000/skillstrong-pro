@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabase'; // <-- fixed import
 
 type Guided = {
   answer: string;
