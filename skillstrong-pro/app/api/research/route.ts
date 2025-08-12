@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cseSearch, fetchReadable, templateQuery, Vertical } from '@/lib/search';
 import { callGeminiJSON } from '@/lib/gemini';
+import { cseSearch, fetchReadable, templateQuery, Vertical, type SearchItem } from '@/lib/search';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const top = (res.items as SearchItem[]).slice(0, 3);
+const pages = (
+  await Promise.all(top.map((it: SearchItem) => fetchReadable(it.url)))
+).filter(Boolean) as any[];
 
 const SYS = `
 You are a manufacturing careers guide. Synthesize from the provided sources only.
