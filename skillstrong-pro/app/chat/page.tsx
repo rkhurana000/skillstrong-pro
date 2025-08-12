@@ -134,7 +134,15 @@ export default function ChatPage() {
               </div>
             )}
             {it.type === 'assistant' && <AssistantBlock guided={it.content as Guided} onChip={onChipClick} />}
-            {it.type === 'results' && <ResultsBlock data={it.content} />}
+            {it.type === 'results' && (
+  <ResultsBlock
+    data={it.content}
+    onFollowup={(f) => {
+      setItems((prev) => [...prev, { type: 'user', content: f }]);
+      send(f);
+    }}
+  />
+)}
           </div>
         ))}
       </div>
