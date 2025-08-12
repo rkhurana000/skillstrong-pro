@@ -5,94 +5,51 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const JOBS = [
-  'Welding',
-  'CNC Machining',
-  'Quality Control',
-  'Automation and Robotics',
-  'Production Management',
-  'Supply Chain Logistics',
-  'Additive Manufacturing (3D Printing)',
+  'Welding', 'CNC Machining', 'Quality Control',
+  'Automation and Robotics', 'Production Management',
+  'Supply Chain Logistics', 'Additive Manufacturing (3D Printing)',
 ];
 
-const BASE_SYS = `You are a friendly manufacturing career guide for US high-school students.
-Keep answers under 120 words. Be concrete and practical.
-ALWAYS reply as JSON with keys: answer (string), buttons (array), nav (array), facts (array).
-- Each button has: { "label": string, "action"?: "search_jobs"|"search_training"|"search_web", "query"?: string }
-- If the user asks to explore job types, suggest the core set: ${JOBS.join(', ')}.
-- When the user picks a job, include 3–6 follow-up buttons like:
-  • "What does it pay?" (no action, just a question)
-  • "Entry certifications" (action: "search_training", query: "<job> certificate")
-  • "Apprenticeships near me" (action: "search_training", query: "<job> apprenticeship")
-  • "Find jobs" (action: "search_jobs", query: "<job> jobs")
-Return JSON only (no extra text).`;
+const SYS = `
+You are a friendly manufacturing career guide for US high-school students.
+Keep each answer under ~180–220 words. Use markdown: headings, bullet lists, short paragraphs.
+ALWAYS return JSON: { "answer": string, "buttons": [{ "label": string, "action"?: string, "query"?: string }], "facts": [{ "k": string, "v": string }] }
 
-function isExploreJobs(text: string) {
-  return /explore.*(job|skill)s?/i.test(text);
-}
+Rules:
+- First, clarify and teach. Prefer 1–2 turns of follow-ups before any web search.
+- Suggest 3–6 follow-up buttons that go deeper (e.g., pay, training length, entry certs, day-to-day, growth).
+- Only include actions like "research" (for web) when the user explicitly asks for lists/resources.
+- If user says "Explore by job types", provide canonical job chips: ${JOBS.join(', ')}.
+- If a job is chosen, include practical follow-ups: Pay; Entry certifications; Apprenticeships near me; Find jobs; Day-to-day.
+`;
 
-function detectJob(text: string) {
-  const t = text.toLowerCase();
-  return JOBS.find(j => t.includes(j.toLowerCase().split(' (')[0]));
-}
+function askedJobs(text: string) { return /explore.*(job|skill)s?/i.test(text); }
 
 export async function POST(req: NextRequest) {
-  try {
-    const { text, zip } = await req.json();
-    const userText = String(text || '');
-    const job = detectJob(userText);
+  const { text, zip } = await req.json();
+  const userText = String(text || '');
 
-    // If the user asked to explore job types, return the canonical job chips immediately.
-    if (isExploreJobs(userText)) {
-      return NextResponse.json({
-        answer:
-          'Pick a job family to dive in. I’ll show a quick overview and next steps.',
-        buttons: JOBS.map(label => ({ label })),
-        nav: [],
-        facts: [],
-      });
-    }
-
-    // Ask Gemini for a short answer + (optional) buttons
-    const guided = await callGeminiJSON(userText, BASE_SYS);
-    let buttons: any[] = Array.isArray(guided.buttons) ? guided.buttons : [];
-
-    // Fallback buttons when a job is detected but Gemini didn’t return enough
-    if (job && buttons.filter(b => b?.label).length < 3) {
-      const near = zip ? ` near ${zip}` : '';
-      buttons = [
-        { label: 'What does it pay?' },
-        { label: 'Entry certifications', action: 'search_training', query: `${job} certificate` },
-        { label: 'Apprenticeships near me', action: 'search_training', query: `${job} apprenticeship${near}`.trim() },
-        { label: 'Find jobs', action: 'search_jobs', query: `${job} jobs` },
-      ];
-    }
-
-    // Minimum viable buttons if Gemini returned none and no job detected
-    if (!buttons.length) {
-      buttons = [
-        { label: 'Explore by job types' },
-        { label: 'Explore by salary range' },
-        { label: 'Explore by training length' },
-      ];
-    }
-
+  if (askedJobs(userText)) {
     return NextResponse.json({
-      answer: String(guided.answer || 'Here are ways to explore.'),
-      buttons,
-      nav: Array.isArray(guided.nav) ? guided.nav.slice(0, 6) : [],
-      facts: Array.isArray(guided.facts) ? guided.facts.slice(0, 6) : [],
-    });
-  } catch (e) {
-    console.error('chat error', e);
-    return NextResponse.json({
-      answer: 'Provider error. Try again.',
-      buttons: [
-        { label: 'Explore by job types' },
-        { label: 'Explore by salary range' },
-        { label: 'Explore by training length' },
-      ],
-      nav: [],
-      facts: [],
+      answer: 'Pick a job family to dive in:',
+      buttons: JOBS.map(label => ({ label })),
+      facts: []
     });
   }
+
+  const guided = await callGeminiJSON(userText + (zip ? `\nUser ZIP: ${zip}` : ''), SYS);
+
+  // Ensure we never render empty chips
+  const buttons = (Array.isArray(guided.buttons) ? guided.buttons : []).filter((b: any) => b?.label);
+
+  // Add a gentle "Use the web" option only after at least one answer turn
+  if (!buttons.some((b: any) => b.action === 'research')) {
+    buttons.push({ label: 'Search the web for this', action: 'research', query: userText });
+  }
+
+  return NextResponse.json({
+    answer: String(guided.answer || 'Here are ways to explore.'),
+    buttons: buttons.slice(0, 8),
+    facts: Array.isArray(guided.facts) ? guided.facts.slice(0, 6) : [],
+  });
 }
