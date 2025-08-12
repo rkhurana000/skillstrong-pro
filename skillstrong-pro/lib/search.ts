@@ -5,6 +5,7 @@ const CSE_ID = process.env.GOOGLE_CSE_ID!;
 const CSE_KEY = process.env.GOOGLE_CSE_KEY!;
 
 export type Vertical = 'search_web'|'search_training'|'search_jobs'|'pay'|'outlook';
+export type SearchItem = { title: string; url: string; snippet: string };
 
 function near(zip?: string) { return zip ? ` near ${zip}` : ''; }
 
@@ -28,14 +29,16 @@ export function templateQuery(action: Vertical, base: string, zip?: string) {
   return `${base} site:bls.gov OR site:onetonline.org OR site:careeronestop.org`;
 }
 
-export async function cseSearch(q: string, num = 6) {
+export async function cseSearch(q: string, num = 6): Promise<{ items: SearchItem[] } | null> {
   if (!CSE_ID || !CSE_KEY) return null;
   const url = `https://www.googleapis.com/customsearch/v1?key=${CSE_KEY}&cx=${CSE_ID}&num=${num}&q=${encodeURIComponent(q)}`;
   const r = await fetch(url);
   if (!r.ok) return null;
   const j = await r.json();
-  const items = (j.items || []).map((it: any) => ({
-    title: it.title, url: it.link, snippet: it.snippet
+  const items: SearchItem[] = (j.items || []).map((it: any) => ({
+    title: it.title,
+    url: it.link,
+    snippet: it.snippet,
   }));
   return { items };
 }
