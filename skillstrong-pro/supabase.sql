@@ -1,0 +1,8 @@
+create table if not exists public.profiles (id uuid primary key references auth.users(id) on delete cascade,email text unique,created_at timestamp with time zone default now(),zip text);
+alter table public.profiles enable row level security; create policy "own profile" on public.profiles for all using (id=auth.uid()) with check (id=auth.uid());
+create table if not exists public.sessions (id uuid primary key default gen_random_uuid(),user_id uuid not null references auth.users(id) on delete cascade,title text default 'Session',created_at timestamp with time zone default now());
+alter table public.sessions enable row level security; create policy "own sessions" on public.sessions for all using (user_id=auth.uid()) with check (user_id=auth.uid());
+create table if not exists public.plans (id uuid primary key default gen_random_uuid(),session_id uuid not null references public.sessions(id) on delete cascade,user_id uuid not null references auth.users(id) on delete cascade,plan_json jsonb not null,created_at timestamp with time zone default now());
+alter table public.plans enable row level security; create policy "own plans" on public.plans for all using (user_id=auth.uid()) with check (user_id=auth.uid());
+create table if not exists public.messages (id uuid primary key default gen_random_uuid(),session_id uuid not null references public.sessions(id) on delete cascade,user_id uuid not null references auth.users(id) on delete cascade,role text not null check (role in ('user','assistant','system')),content_json jsonb not null,created_at timestamp with time zone default now());
+alter table public.messages enable row level security; create policy "own messages" on public.messages for all using (user_id=auth.uid()) with check (user_id=auth.uid());

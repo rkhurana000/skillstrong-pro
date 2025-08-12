@@ -1,0 +1,6 @@
+'use client';import { useEffect,useState } from 'react';import { supabase } from '@/lib/supabase';
+export default function Account(){const [email,setEmail]=useState('');const [zip,setZip]=useState('');const [msg,setMsg]=useState<string|null>(null);
+useEffect(()=>{supabase.auth.getUser().then(async({data})=>{const u=data.user;if(!u){window.location.href='/auth';return;}setEmail(u.email||'');const {data:prof}=await supabase.from('profiles').select('*').eq('id',u.id).single();setZip((prof as any)?.zip||'');});},[]);
+async function save(){const {data:{user}}=await supabase.auth.getUser();if(!user)return;await supabase.from('profiles').upsert({id:user.id,email:user.email,zip});setMsg('Saved!');}
+async function signOut(){await supabase.auth.signOut();window.location.href='/';}
+return(<main className='section'><div className='card auth-card'><h2 className='h2'>Account</h2><div className='small'>Signed in as {email}</div><div style={{height:10}}/><input className='input' placeholder='ZIP code (for nearby results)' value={zip} onChange={e=>setZip(e.target.value)}/><div style={{height:10}}/><button className='btn' onClick={save}>Save</button>{msg&&<div className='small'>{msg}</div>}<div style={{height:16}}/><button className='chip' onClick={signOut}>Sign out</button></div></main>);}
