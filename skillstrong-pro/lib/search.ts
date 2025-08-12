@@ -1,6 +1,5 @@
 // lib/search.ts
 import * as cheerio from 'cheerio';
-import { htmlToText } from 'html-to-text';
 
 const CSE_ID = process.env.GOOGLE_CSE_ID || '';
 const CSE_KEY = process.env.GOOGLE_CSE_KEY || '';
@@ -56,6 +55,7 @@ export async function cseSearch(
   return { items };
 }
 
+/** Fetch page and extract readable text with Cheerio (no extra deps) */
 export async function fetchReadable(url: string) {
   try {
     const r = await fetch(url, {
@@ -64,26 +64,36 @@ export async function fetchReadable(url: string) {
     if (!r.ok) return null;
     const html = await r.text();
     const $ = cheerio.load(html);
-    const title = $('title').first().text() || url;
-    const og =
+
+    // Basic clean up: remove obvious chrome
+    $('script, style, nav, footer, noscript').remove();
+
+    const title =
+      $('meta[property="og:title"]').attr('content') ||
+      $('title').first().text() ||
+      url;
+
+    const ogImage =
       $('meta[property="og:image"]').attr('content') ||
       $('meta[name="og:image"]').attr('content') ||
       '';
-    const text = htmlToText(html, {
-      wordwrap: 0,
-      selectors: [
-        { selector: 'nav', format: 'skip' },
-        { selector: 'script', format: 'skip' },
-        { selector: 'style', format: 'skip' },
-        { selector: 'footer', format: 'skip' },
-      ],
-    });
-    const trimmed = text
-      .split('\n')
-      .filter(Boolean)
-      .slice(0, 300)
-      .join('\n');
-    return { title, url, text: trimmed, image: og };
+
+    // Prefer main/article if present; fallback to body text
+    const mainText =
+      $('main').text().trim() ||
+      $('article').text().trim() ||
+      $('body').text().trim();
+
+    // Normalize whitespace and trim to a sane size
+    const text = mainText
+      .replace(/\r/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    const trimmed = text.split('\n').filter(Boolean).slice(0, 300).join('\n');
+
+    return { title, url, text: trimmed, image: ogImage };
   } catch {
     return null;
   }
