@@ -6,11 +6,6 @@ import { cseSearch, fetchReadable, templateQuery, Vertical, type SearchItem } fr
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const top = (res.items as SearchItem[]).slice(0, 3);
-const pages = (
-  await Promise.all(top.map((it: SearchItem) => fetchReadable(it.url)))
-).filter(Boolean) as any[];
-
 const SYS = `
 You are a manufacturing careers guide. Synthesize from the provided sources only.
 Return JSON:
@@ -24,6 +19,9 @@ Return JSON:
 - Cite with [1], [2] markers in the markdown in order of the citations array.
 - Do NOT hallucinate URLs. Use only the provided URLs.
 `;
+const context = pages
+  .map((p: any, i: number) => `Source ${i + 1}: ${p.title}\nURL: ${p.url}\nContent:\n${p.text}\n---\n`)
+  .join('\n');
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -45,8 +43,10 @@ export async function GET(req: NextRequest) {
   }
 
   // 2) Scrape top 3 pages
-  const top = res.items.slice(0, 3);
-  const pages = (await Promise.all(top.map(it => fetchReadable(it.url)))).filter(Boolean) as any[];
+const top = (res.items as SearchItem[]).slice(0, 3);
+const pages = (
+  await Promise.all(top.map((it: SearchItem) => fetchReadable(it.url)))
+).filter(Boolean) as any[];
 
   // 3) Build context for Gemini
   const context = pages.map((p, i) =>
