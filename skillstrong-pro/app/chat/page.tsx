@@ -1,8 +1,7 @@
 'use client';
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { supabase } from '@/lib/supabase'; // <-- fixed import
+import { supabase } from '@/lib/supabase'; // or '@/lib/supabaseClient' if you added the shim
 
 type Guided = {
   answer: string;
@@ -171,7 +170,7 @@ function AssistantBlock({
   return (
     <div className="answer">
       <div style={{ marginBottom: 12 }}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{guided.answer}</ReactMarkdown>
+        <ReactMarkdown>{guided.answer}</ReactMarkdown>
       </div>
       {!!facts.length && (
         <div className="chips" style={{ marginBottom: 8 }}>
@@ -208,9 +207,7 @@ function ResultsBlock({
     return (
       <div className="answer">
         <div style={{ marginBottom: 12 }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {data.answer_markdown}
-          </ReactMarkdown>
+          <ReactMarkdown>{data.answer_markdown}</ReactMarkdown>
         </div>
         {Array.isArray(data.images) && data.images.length > 0 && (
           <div
