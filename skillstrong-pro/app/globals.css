@@ -44,6 +44,15 @@ a:visited{color:var(--accent)}
 .site-header .brand{font-weight:800}
 .site-header nav a{color:var(--ink);padding:6px 8px;border-radius:8px;text-decoration:none}
 .site-header nav a:hover{background:#eef2ff}
+/* Header tweaks (ensures nav spacing even if markup changes slightly) */
+.site-header nav{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.site-header .brand a{color:var(--ink);text-decoration:none}
+.site-header .brand a:hover{text-decoration:none}
+
+/* Sub-nav “pills” row (e.g., Explore Careers / How it works) */
+.subnav{display:flex;gap:12px;align-items:center;margin:8px 0 18px}
+.subnav a{display:inline-block;padding:6px 10px;border-radius:10px;color:var(--ink);text-decoration:none;background:#f3f5ff;border:1px solid #e4e9ff}
+.subnav a:hover{background:#e8ecff}
 
 
 
