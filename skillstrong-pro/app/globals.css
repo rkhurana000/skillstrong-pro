@@ -1,82 +1,70 @@
-/* ===== SkillStrong — Global Styles (site-wide) ===== */
-
-/* CSS variables */
+/* app/globals.css */
 :root{
-  --bg:#f7f8fb;
-  --panel:#ffffff;
-  --ink:#0f172a;
-  --muted:#475569;
-  --accent:#2b64f8;
-
-  /* chat-only tokens are still defined so components can reference them,
-     but the actual chat layout & components are scoped in page.tsx */
-  --chip:#eef3ff;
-  --chipBorder:#d6e3ff;
+  --bg:#0b1020;
+  --panel:#0f152a;
+  --panel-2:#111831;
+  --text:#e6ebff;
+  --muted:#a9b4d0;
+  --brand:#6ea8ff;
+  --ring:rgba(110,168,255,.45);
+  --card:#0f152a;
+  --card-border:#1b2445;
 }
 
-/* Reset / baseline */
 *{box-sizing:border-box}
-html,body{padding:0;margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","Noto Sans","Apple Color Emoji","Segoe UI Emoji";
-  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+html,body{padding:0;margin:0}
+body{background:#0b1020;color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;line-height:1.5}
+
+/* ---------- Layout shell ---------- */
+.container{max-width:1160px;margin:0 auto;padding:24px}
+.page{max-width:900px;margin:0 auto;padding:32px 24px}
+
+/* ---------- Top Nav ---------- */
+.site-nav{
+  position:sticky;top:0;z-index:30;
+  backdrop-filter:saturate(150%) blur(12px);
+  background:linear-gradient(180deg,rgba(15,21,42,.85),rgba(15,21,42,.65));
+  border-bottom:1px solid rgba(255,255,255,.06);
 }
-
-/* Links (disable purple visited, subtle hover) */
-a{color:var(--accent);text-decoration:none}
-a:hover{text-decoration:underline}
-a:visited{color:var(--accent)}
-
-/* Generic layout helpers you can use on marketing pages */
-.container{max-width:1100px;margin:0 auto;padding:0 16px}
-.hero .lead{color:var(--muted);font-size:18px}
-.section{margin:24px 0}
-.section h2{margin:14px 0 8px}
-.section ul{padding-left:20px}
-
-/* Cards used on marketing tiles */
-.card{background:var(--panel);border:1px solid #e9eef7;border-radius:16px;padding:18px}
-.card + .card{margin-top:12px}
-.card h3{margin:0 0 6px}
-
-/* (Optional) simple site top nav if you have one */
-.site-header{background:var(--panel);border-bottom:1px solid #e9eef7}
-.site-header .container{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 16px}
-.site-header .brand{font-weight:800}
-.site-header nav a{color:var(--ink);padding:6px 8px;border-radius:8px;text-decoration:none}
-.site-header nav a:hover{background:#eef2ff}
-/* Header tweaks (ensures nav spacing even if markup changes slightly) */
-.site-header nav{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-.site-header .brand a{color:var(--ink);text-decoration:none}
-.site-header .brand a:hover{text-decoration:none}
-
-/* Sub-nav “pills” row (e.g., Explore Careers / How it works) */
-.subnav{display:flex;gap:12px;align-items:center;margin:8px 0 18px}
-.subnav a{display:inline-block;padding:6px 10px;border-radius:10px;color:var(--ink);text-decoration:none;background:#f3f5ff;border:1px solid #e4e9ff}
-.subnav a:hover{background:#e8ecff}
-/* Home hero */
-.hero { margin: 28px 0 10px; }
-.eyebrow { color: var(--muted); font-weight: 600; letter-spacing: .02em; margin: 0 0 8px; }
-.lede { margin: 10px 0 0; max-width: 70ch; }
-
-/* Sub-nav pills under the hero */
-.subnav{display:flex;gap:12px;align-items:center;margin:16px 0 22px}
-.subnav a{display:inline-block;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #e0e7ff;color:#0f172a;text-decoration:none}
-.subnav a:hover{background:#e3e9ff}
-
-/* Feature cards grid */
-.card-grid{display:grid;gap:16px}
-@media (min-width: 900px){ .card-grid{grid-template-columns:repeat(3,1fr)} }
-
-.feature-card{
-  background: var(--card, #fff);
-  border: 1px solid var(--card-border, #e5e7eb);
-  border-radius: 16px;
-  padding: 18px 20px;
-  box-shadow: var(--card-shadow, 0 1px 2px rgba(0,0,0,.04));
+.site-nav .nav-inner{max-width:1160px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;gap:20px}
+.brand{font-weight:800;letter-spacing:.3px;text-decoration:none;color:#fff}
+.nav-links{display:flex;gap:14px;flex-wrap:wrap}
+.nav-link{
+  color:var(--muted);text-decoration:none;padding:8px 12px;border-radius:10px;transition:.15s background,.15s color
 }
-.feature-card h3{ margin: 0 0 8px; font-size: 1.1rem; }
-.feature-card p{ margin: 0 0 12px; color: var(--ink, #0f172a); }
-.feature-card .link{ font-weight: 600; text-decoration: none; }
-.feature-card .link:hover{ text-decoration: underline; }
+.nav-link:hover{color:#fff;background:rgba(255,255,255,.06)}
+.nav-link.active{color:#fff;background:rgba(110,168,255,.12);border:1px solid rgba(110,168,255,.25)}
 
+/* ---------- Marketing (namespaced) ---------- */
+.marketing{max-width:1160px;margin:0 auto;padding:40px 24px}
 
+.hero{margin:16px 0 24px}
+.kicker{color:var(--muted);text-transform:uppercase;letter-spacing:.18em;font-size:.78rem;margin:0 0 10px}
+.hero h1{font-size:clamp(28px,4vw,40px);line-height:1.15;margin:0 0 10px}
+.lead{color:var(--muted);max-width:72ch;margin:0 0 18px}
+
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 22px}
+.pill{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:10px 14px;border-radius:999px;text-decoration:none;
+  color:#0b1020;background:var(--brand);font-weight:700
+}
+.pill.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.18)}
+.pill:focus,.pill:hover{outline:0;box-shadow:0 0 0 6px var(--ring)}
+
+.cards{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{
+  grid-column:span 12;background:var(--panel);
+  border:1px solid var(--card-border);border-radius:16px;
+  padding:18px 18px 16px;
+}
+@media (min-width:880px){
+  .card{grid-column:span 4}
+}
+.card h3{margin:2px 0 6px;font-size:20px}
+.card p{margin:0 0 12px;color:var(--muted)}
+.card .cta{color:var(--brand);text-decoration:none;font-weight:700}
+.card .cta:hover{text-decoration:underline}
+
+/* ---------- Chat page helper wrapper (doesn't touch your chat styles) ---------- */
+.chat{max-width:980px;margin:0 auto;padding:18px 16px}
