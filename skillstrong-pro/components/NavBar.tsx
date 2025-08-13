@@ -1,3 +1,4 @@
 'use client';import Link from 'next/link';import { useEffect,useState } from 'react';import { supabase } from '@/lib/supabase';
 export default function NavBar(){const [email,setEmail]=useState('');useEffect(()=>{supabase.auth.getUser().then(({data})=>setEmail(data.user?.email||''));},[]);
-return(<nav className='navbar'><div className='brand'>SkillStrong</div><div className='navlinks'><Link href='/'>Home</Link><Link href='/#features'>Features</Link><Link href='/quiz'>Interest Quiz</Link><Link href='/chat' className='cta'>Explore Careers</Link>{email?<Link href='/account'>Account</Link>:<Link href='/auth'>Sign in</Link>}</div></nav>);}
+return(<nav className='navbar'><div className='brand'>SkillStrong</div><div className='navlinks'><Link href='/'>Home</Link><Link href='/#features'>Features</Link><Link href='/quiz'>Interest Quiz</Link><a href="/about">About</a>
+<Link href='/chat' className='cta'>Explore Careers</Link>{email?<Link href='/account'>Account</Link>:<Link href='/auth'>Sign in</Link>}</div></nav>);}
