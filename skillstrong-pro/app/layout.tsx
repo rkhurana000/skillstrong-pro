@@ -1,23 +1,42 @@
 import './globals.css';
 import React from 'react';
-import NavBar from '@/components/NavBar';
-import AnalyticsInit from '@/components/AnalyticsInit';
 
 export const metadata = {
-  title: 'SkillStrong — Manufacturing Careers',
-  description: 'Explore careers, training & apprenticeships',
+  title: 'SkillStrong — Future-Proof Careers',
+  description:
+    'Explore manufacturing roles, training, apprenticeships and pay with a guided AI coach.',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>
-        <AnalyticsInit />
-        <div className="container">
-          <NavBar />
+        {/* Site header expects the .site-header class for spacing/hover styles */}
+        <header className="site-header">
+          <div className="container">
+            <div className="brand">
+              <a href="/">SkillStrong</a>
+            </div>
+            <nav>
+              <a href="/">Home</a>
+              <a href="/features">Features</a>
+              <a href="/interest">Interest</a>
+              <a href="/quiz">Quiz</a>
+              <a href="/about">About</a>
+              <a href="/explore">Explore Careers</a>
+              <a href="/account">Account</a>
+            </nav>
+          </div>
+        </header>
+
+        {/* Main content wrapper */}
+        <main className="container" style={{ paddingTop: 20, paddingBottom: 60 }}>
           {children}
-          <footer className="footer">© {new Date().getFullYear()} SkillStrong</footer>
-        </div>
+        </main>
       </body>
     </html>
   );
