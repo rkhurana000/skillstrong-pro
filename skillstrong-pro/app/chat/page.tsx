@@ -1,4 +1,5 @@
 'use client';
+import './chat.css';
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { supabase } from '@/lib/supabase'; // if you’re using the shim, '@/lib/supabaseClient'
