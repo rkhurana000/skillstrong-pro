@@ -53,6 +53,30 @@ a:visited{color:var(--accent)}
 .subnav{display:flex;gap:12px;align-items:center;margin:8px 0 18px}
 .subnav a{display:inline-block;padding:6px 10px;border-radius:10px;color:var(--ink);text-decoration:none;background:#f3f5ff;border:1px solid #e4e9ff}
 .subnav a:hover{background:#e8ecff}
+/* Home hero */
+.hero { margin: 28px 0 10px; }
+.eyebrow { color: var(--muted); font-weight: 600; letter-spacing: .02em; margin: 0 0 8px; }
+.lede { margin: 10px 0 0; max-width: 70ch; }
 
+/* Sub-nav pills under the hero */
+.subnav{display:flex;gap:12px;align-items:center;margin:16px 0 22px}
+.subnav a{display:inline-block;padding:6px 12px;border-radius:999px;background:#eef2ff;border:1px solid #e0e7ff;color:#0f172a;text-decoration:none}
+.subnav a:hover{background:#e3e9ff}
+
+/* Feature cards grid */
+.card-grid{display:grid;gap:16px}
+@media (min-width: 900px){ .card-grid{grid-template-columns:repeat(3,1fr)} }
+
+.feature-card{
+  background: var(--card, #fff);
+  border: 1px solid var(--card-border, #e5e7eb);
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: var(--card-shadow, 0 1px 2px rgba(0,0,0,.04));
+}
+.feature-card h3{ margin: 0 0 8px; font-size: 1.1rem; }
+.feature-card p{ margin: 0 0 12px; color: var(--ink, #0f172a); }
+.feature-card .link{ font-weight: 600; text-decoration: none; }
+.feature-card .link:hover{ text-decoration: underline; }
 
 
