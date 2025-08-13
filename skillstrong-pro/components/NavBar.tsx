@@ -1,4 +1,35 @@
-'use client';import Link from 'next/link';import { useEffect,useState } from 'react';import { supabase } from '@/lib/supabase';
-export default function NavBar(){const [email,setEmail]=useState('');useEffect(()=>{supabase.auth.getUser().then(({data})=>setEmail(data.user?.email||''));},[]);
-return(<nav className='navbar'><div className='brand'>SkillStrong</div><div className='navlinks'><Link href='/'>Home</Link><Link href='/#features'>Features</Link><Link href='/quiz'>Interest Quiz</Link><a href="/about">About</a>
-<Link href='/chat' className='cta'>Explore Careers</Link>{email?<Link href='/account'>Account</Link>:<Link href='/auth'>Sign in</Link>}</div></nav>);}
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+const tabs = [
+  { href: '/', label: 'Home' },
+  { href: '/features', label: 'Features' },
+  { href: '/interest', label: 'Interest' },
+  { href: '/quiz', label: 'Quiz' },
+  { href: '/about', label: 'About' },
+  // We’ll render /chat directly for Explore Careers
+  { href: '/chat', label: 'Explore Careers' },
+  { href: '/account', label: 'Account' },
+];
+
+export default function NavBar() {
+  const pathname = usePathname();
+  return (
+    <header className="topbar">
+      <Link href="/" className="logo">SkillStrong</Link>
+      <nav>
+        {tabs.map(t => (
+          <Link
+            key={t.href}
+            href={t.href}
+            className={['navlink', pathname === t.href ? 'active' : ''].join(' ')}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </nav>
+    </header>
+  );
+}
