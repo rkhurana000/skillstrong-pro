@@ -56,3 +56,16 @@
 
 /* Image grid */
 .image-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:8px 0}
+
+/* ---- site-wide link baseline (fix purple visited + spacing) ---- */
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:visited { color: var(--accent); }
+
+/* ---- header / topbar nav spacing & hover ---- */
+.topbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.topbar .brand { font-weight: 800; margin-right: 8px; }
+.topbar a { color: var(--ink); text-decoration: none; padding: 6px 8px; border-radius: 8px; }
+.topbar a + a { margin-left: 6px; }       /* space links even if not in a <nav> */
+.topbar a:hover { background: #eef2ff; }
+
