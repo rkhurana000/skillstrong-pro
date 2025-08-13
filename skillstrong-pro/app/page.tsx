@@ -1,53 +1,57 @@
-export const metadata = {
-  title: 'SkillStrong — Future-Proof Careers',
-  description: 'Explore manufacturing careers, training & apprenticeships with a guided AI coach.',
-};
+// app/page.tsx
+import Link from "next/link";
 
-export default function HomePage() {
+export default function Home() {
   return (
-    <main className="container" style={{ paddingBottom: 48 }}>
-      <p className="eyebrow">Future-Proof Careers</p>
+    <main className="marketing">
+      <section className="hero">
+        <p className="kicker">Future-Proof Careers</p>
+        <h1>Find your path in today’s manufacturing economy</h1>
+        <p className="lead">
+          Welding, robotics, quality, maintenance, CNC—great jobs without a
+          4-year degree. Explore roles, pay, training, and apprenticeships with
+          a guided AI coach.
+        </p>
 
-      <h1>Find your path in today’s manufacturing economy</h1>
+        <div className="hero-actions">
+          <Link href="/explore" className="pill">
+            Explore Careers
+          </Link>
+          <Link href="/about" className="pill ghost">
+            How it works
+          </Link>
+        </div>
+      </section>
 
-      <p className="lede">
-        Welding, robotics, quality, maintenance, CNC—great jobs without a 4-year degree.
-        Explore roles, pay, training, and apprenticeships with a guided AI coach.
-      </p>
-
-      <div className="chips" style={{ marginTop: 8, marginBottom: 24 }}>
-        <a className="chip" href="/chat">Explore Careers</a>
-        <a className="chip" href="#how">How it works</a>
-      </div>
-
-      <section className="grid3">
+      <section className="cards">
         <article className="card">
           <h3>Button-First Chat</h3>
-          <p>Pick chips like job types, salary, or training length. Get short answers plus follow-ups.</p>
-          <a className="cta" href="/chat">Open the coach →</a>
+          <p>
+            Pick chips like job types, salary, or training length. Get short
+            answers plus follow-ups.
+          </p>
+          <Link href="/explore" className="cta">
+            Open the coach →
+          </Link>
         </article>
 
         <article className="card">
           <h3>Real Programs</h3>
-          <p>See certificates, community colleges, and apprenticeships near you.</p>
-          <a className="cta" href="/chat?tab=training">Browse training →</a>
+          <p>
+            See certificates, community colleges, and apprenticeships near you.
+          </p>
+          <Link href="/training" className="cta">
+            Browse training →
+          </Link>
         </article>
 
         <article className="card">
           <h3>For Gen Z & Gen Y</h3>
           <p>Minimal clutter, big chips, friendly tone. Built for phones first.</p>
-          <a className="cta" href="/features">See features →</a>
+          <Link href="/features" className="cta">
+            See features →
+          </Link>
         </article>
-      </section>
-
-      <section id="how" style={{ marginTop: 40 }}>
-        <h2>How it works</h2>
-        <ol className="steps">
-          <li>Tap a chip to start (job type, salary band, or training length).</li>
-          <li>Read a concise answer with bullets, images (when helpful), and citations.</li>
-          <li>Follow suggested next steps or ask your own question.</li>
-          <li>Save your session. Share with a counselor, teacher, or parent.</li>
-        </ol>
       </section>
     </main>
   );
