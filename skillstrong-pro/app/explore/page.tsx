@@ -1,6 +1,7 @@
-import { redirect } from 'next/navigation';
+// app/explore/page.tsx
+import { redirect } from "next/navigation";
 
-export default function ExploreAlias() {
-  // keep old links working, but send users to the chat flow
-  redirect('/chat');
+export default function Explore() {
+  // Seamless: /explore now opens the coach (your chat) at /chat
+  redirect("/chat");
 }
