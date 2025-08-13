@@ -1,8 +1,9 @@
 'use client';
-import './chat.css';
+
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { supabase } from '@/lib/supabase'; // if you’re using the shim, '@/lib/supabaseClient'
+// If your client file is named differently, change this import:
+import { supabase } from '@/lib/supabaseClient';
 
 type Guided = {
   answer: string;
@@ -13,11 +14,12 @@ type Guided = {
 
 type Item = { type: 'assistant' | 'user' | 'results'; content: any };
 
+/** Move “facts” and fact-like buttons into the Markdown answer as a bulleted section */
 function normalizeGuided(g: Guided): Guided {
   let answer = g.answer || '';
   const bullets: string[] = [];
 
-  // 1) Move facts into bullets
+  // facts -> bullets
   (g.facts || []).forEach((f) => {
     const line =
       f.k && f.v ? `- **${f.k}**: ${f.v}` :
@@ -26,21 +28,16 @@ function normalizeGuided(g: Guided): Guided {
     if (line) bullets.push(line);
   });
 
-  // 2) Move “facty” buttons into bullets (numbers, $, %, or a colon)
+  // buttons that look like facts (numbers, $, %, or ":") -> bullets
   const remaining: NonNullable<Guided['buttons']> = [];
   (g.buttons || []).forEach((b) => {
     const lbl = (b?.label || '').trim();
     if (!lbl) return;
-    if (/[0-9$%]/.test(lbl) || /:/.test(lbl)) {
-      bullets.push(`- ${lbl}`);
-    } else {
-      remaining.push(b);
-    }
+    if (/[0-9$%]/.test(lbl) || /:/.test(lbl)) bullets.push(`- ${lbl}`);
+    else remaining.push(b);
   });
 
-  if (bullets.length) {
-    answer += `\n\n### Key facts\n\n` + bullets.join('\n');
-  }
+  if (bullets.length) answer += `\n\n### Key facts\n\n${bullets.join('\n')}`;
 
   return { ...g, answer, buttons: remaining, facts: [] };
 }
@@ -52,6 +49,7 @@ export default function ChatPage() {
   const [zip, setZip] = useState('');
   const scRef = useRef<HTMLDivElement>(null);
 
+  // Load user + ZIP (for geo-aware search)
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       const u = data.user;
@@ -68,6 +66,7 @@ export default function ChatPage() {
     });
   }, []);
 
+  // autoscroll on new messages
   useEffect(() => {
     scRef.current?.scrollTo({ top: 9e9 });
   }, [items]);
@@ -87,7 +86,7 @@ export default function ChatPage() {
       body: JSON.stringify({ text, zip }),
     });
     const raw: Guided = await res.json();
-    const guided = normalizeGuided(raw); // fold facts into the answer
+    const guided = normalizeGuided(raw);
     setItems((prev) => [...prev, { type: 'assistant', content: guided }]);
     setBusy(false);
   }
@@ -114,7 +113,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="main">
+    <div className="chat">
       <div className="topbar">Manufacturing Career Explorer</div>
 
       <div className="scroll" ref={scRef}>
@@ -144,7 +143,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Conversation */}
+        {/* Conversation stream */}
         {items.map((it, idx) => (
           <div key={idx} style={{ maxWidth: 900, margin: '14px auto' }}>
             {it.type === 'user' && (
@@ -167,7 +166,7 @@ export default function ChatPage() {
           </div>
         ))}
 
-        {/* typing indicator */}
+        {/* typing dots */}
         {busy && (
           <div className="answer">
             <div className="dots">
@@ -187,11 +186,61 @@ export default function ChatPage() {
           disabled={busy}
         />
       </div>
+
+      {/* Chat-only CSS (scoped by `.chat` so it won't affect the rest of the site) */}
+      <style jsx global>{`
+        .chat{min-height:100vh;display:flex;flex-direction:column}
+        .chat .topbar{position:sticky;top:0;background:#fff;border-bottom:1px solid #e8ecf3;padding:14px 20px;font-weight:700;z-index:10}
+        .chat .scroll{flex:1;overflow:auto;padding:20px 14px}
+        .chat .inputbar{border-top:1px solid #e8ecf3;background:#fff;padding:12px 16px}
+        .chat .input-xl{width:100%;font-size:16px;border:1px solid #e3e8ef;border-radius:24px;padding:14px 16px;outline:none}
+        .chat .input-xl:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(43,100,248,.15)}
+
+        .chat .answer{background:#fff;border:1px solid #edf0f6;border-radius:18px;padding:18px 20px;margin:10px auto}
+        .chat .answer-title{font-weight:700;margin-bottom:8px}
+        .chat .answer-subtitle{margin:12px 0 6px;color:var(--muted);font-weight:600}
+        .chat .answer-body{font-size:16px}
+        .chat .answer-body h3{margin:14px 0 8px}
+        .chat .answer-body ul{padding-left:20px}
+        .chat .fade-in{animation:fade .18s ease-in}
+        @keyframes fade{from{opacity:.3}to{opacity:1}}
+
+        .chat .sources{margin-top:8px}
+        .chat .sources-title{font-weight:700;margin-bottom:4px}
+        .chat .sources ol{margin:6px 0 0 20px}
+        .chat .sources a{color:var(--accent);text-decoration:none}
+        .chat .sources a:hover{text-decoration:underline}
+
+        .chat .chips{display:flex;gap:10px;flex-wrap:wrap}
+        .chat .chips-lg .chip{font-size:16px;padding:12px 18px}
+        .chat .chip{appearance:none;border:none;background:var(--chip);color:var(--ink);border:1px solid var(--chipBorder);padding:10px 14px;border-radius:999px;cursor:pointer;transition:.15s box-shadow,.15s transform}
+        .chat .chip:hover{box-shadow:0 6px 14px rgba(43,100,248,.12);transform:translateY(-1px)}
+        .chat .chip:active{transform:translateY(0)}
+        .chat .chip-user{background:#e8f0fe;border-color:#cfe0ff}
+        .chat .chip-plain{background:#eef2f6;border-color:#e1e7ef;cursor:default}
+
+        .chat .card-col{display:grid;gap:12px}
+        .chat .card{display:block;background:#fff;border:1px solid #edf0f6;border-radius:14px;padding:12px 14px;color:inherit;text-decoration:none}
+        .chat .card:hover{border-color:#dfe6f4}
+        .chat .card-title{font-weight:700;margin-bottom:4px}
+        .chat .card img{width:100%;border-radius:12px}
+        .chat .url{color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+        .chat .small{color:var(--muted);font-size:13px}
+
+        .chat .dots{display:inline-flex;gap:6px;padding:4px 10px}
+        .chat .dots span{width:8px;height:8px;border-radius:999px;background:#cbd5e1;animation:bounce 1.2s infinite}
+        .chat .dots span:nth-child(2){animation-delay:.15s}
+        .chat .dots span:nth-child(3){animation-delay:.3s}
+        @keyframes bounce{0%,80%,100%{opacity:.2;transform:translateY(0)}40%{opacity:1;transform:translateY(-4px)}}
+
+        .chat .image-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:8px 0}
+      `}</style>
     </div>
   );
 }
 
-/** Assistant message with typewriter reveal + better sources & pill buttons */
+/** Assistant message with typewriter reveal + sources + action chips */
 function AssistantBlock({
   guided,
   onChip,
@@ -204,7 +253,7 @@ function AssistantBlock({
   useEffect(() => {
     const full = guided.answer || '';
     let i = 0;
-    const step = Math.max(2, Math.round(full.length / 800)); // ~0.8s–1.5s total
+    const step = Math.max(2, Math.round(full.length / 800)); // ~1s
     const id = setInterval(() => {
       i = Math.min(full.length, i + step);
       setShown(full.slice(0, i));
