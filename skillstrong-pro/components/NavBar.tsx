@@ -1,35 +1,46 @@
-'use client';
+// components/NavBar.tsx
+"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-const tabs = [
-  { href: '/', label: 'Home' },
-  { href: '/features', label: 'Features' },
-  { href: '/interest', label: 'Interest' },
-  { href: '/quiz', label: 'Quiz' },
-  { href: '/about', label: 'About' },
-  // We’ll render /chat directly for Explore Careers
-  { href: '/chat', label: 'Explore Careers' },
-  { href: '/account', label: 'Account' },
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/features", label: "Features" },
+  { href: "/interest", label: "Interest" },
+  { href: "/quiz", label: "Quiz" },
+  { href: "/about", label: "About" },
+  { href: "/explore", label: "Explore Careers" },
+  { href: "/account", label: "Account" },
 ];
 
 export default function NavBar() {
   const pathname = usePathname();
+
   return (
-    <header className="topbar">
-      <Link href="/" className="logo">SkillStrong</Link>
-      <nav>
-        {tabs.map(t => (
-          <Link
-            key={t.href}
-            href={t.href}
-            className={['navlink', pathname === t.href ? 'active' : ''].join(' ')}
-          >
-            {t.label}
-          </Link>
-        ))}
-      </nav>
+    <header className="site-nav">
+      <div className="nav-inner">
+        <Link href="/" className="brand">
+          SkillStrong
+        </Link>
+        <nav className="nav-links">
+          {links.map((l) => {
+            const active =
+              l.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(l.href);
+            return (
+              <Link
+                key={l.href}
+                href={l.href}
+                className={active ? "nav-link active" : "nav-link"}
+              >
+                {l.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
     </header>
   );
 }
