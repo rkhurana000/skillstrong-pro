@@ -14,13 +14,13 @@ export default function ChatLauncher() {
   }
 
   return (
-    <form className="chatbar flex items-center" onSubmit={onSubmit}>
+    <form className="flex items-center" onSubmit={onSubmit}>
       <input
         type="text"
         placeholder="Ask me anything about manufacturing careers…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none ring-0 focus:border-slate-400"
+        className="w-full rounded-2xl border border-slate-300 bg-white px-5 py-4 text-slate-900 outline-none focus:border-slate-400"
       />
       <button
         type="submit"
