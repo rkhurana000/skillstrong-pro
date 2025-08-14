@@ -6,7 +6,6 @@ export default function SiteHeader() {
     <header className="topbar">
       <div className="shell topbar-row">
         <Link href="/" className="brand">SkillStrong</Link>
-
         <nav className="nav">
           <Link href="/">Home</Link>
           <Link href="/features">Features</Link>
