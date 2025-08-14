@@ -1,68 +1,64 @@
-// app/page.tsx  (Server Component)
+// app/page.tsx  (Server Component — do NOT add "use client")
+import Image from 'next/image';
 import Link from 'next/link';
+import ChatLauncher from './components/ChatLauncher';
 
 export const metadata = {
   title: 'SkillStrong — Future-Proof Careers',
-  description: 'Explore careers, training, and apprenticeships with a guided AI coach.',
+  description:
+    'Explore careers, training, and apprenticeships with a guided AI coach.',
 };
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <main>
-      <section className="shell hero">
-        <div className="hero-copy">
-          <p className="overline">MANUFACTURING CAREERS</p>
-          <h1 className="display">Build Your Manufacturing Career</h1>
-          <p className="lede">
+    <main className="home">
+      <section className="hero">
+        <div className="hero-left">
+          <p className="eyebrow">MANUFACTURING CAREERS</p>
+          <h1 className="hero-title">
+            Build Your
+            <br />
+            Manufacturing
+            <br />
+            Career
+          </h1>
+
+          <p className="hero-sub">
             Explore careers in manufacturing and learn how to get started.
           </p>
 
-          <div className="feature-cards">
+          <div className="feature-grid">
             <Link href="/explore" className="feature-card">
               <h3>Job Opportunities</h3>
               <p>Discover different roles within manufacturing.</p>
             </Link>
+
             <Link href="/explore" className="feature-card">
               <h3>Required Training</h3>
               <p>Find out what skills & certifications you need.</p>
             </Link>
+
             <Link href="/quiz" className="feature-card">
               <h3>Take an Interest Quiz</h3>
               <p>Find your best match in manufacturing.</p>
             </Link>
           </div>
+
+          {/* Chat launcher — DO NOT pass onSubmit/action/etc */}
+          <ChatLauncher />
         </div>
 
-        <div className="hero-media">
-          {/* File must exist at /public/hero.jpg (you already confirmed it does) */}
-          <img
+        <aside className="hero-art">
+          <Image
             src="/hero.jpg"
             alt="Students exploring manufacturing lab"
+            width={960}
+            height={720}
+            priority
             className="hero-img"
-            width="1100"
-            height="820"
-            loading="eager"
-            decoding="async"
           />
-        </div>
+        </aside>
       </section>
-
-      {/* Send to chat on /explore (keeps behavior you wanted) */}
-      <div className="shell">
-        <form
-          className="chatbar"
-          action="/explore#coach"
-          onSubmit={(e) => {
-            // This handler is ignored on the server; fine on the client.
-            const form = e.currentTarget as HTMLFormElement;
-            const input = form.querySelector('input[name="prompt"]') as HTMLInputElement | null;
-            if (!input || !input.value.trim()) e.preventDefault();
-          }}
-        >
-          <input name="prompt" placeholder="Ask me anything about manufacturing careers…" />
-          <button className="btn" type="submit">→</button>
-        </form>
-      </div>
     </main>
   );
 }
