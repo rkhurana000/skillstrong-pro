@@ -1,346 +1,103 @@
-/* =========================================================
-   Base
-   ========================================================= */
-:root{
-  --bg:#ffffff;
-  --fg:#0f172a;          /* slate-900 */
-  --muted:#475569;       /* slate-600 */
-  --muted-2:#64748b;     /* slate-500 */
-  --border:#e5e7eb;      /* gray-200 */
-  --card:#f8fafc;        /* slate-50 */
-  --shadow: 0 10px 30px rgba(2,6,23,.06);
-  --accent:#2563eb;      /* blue-600 */
+/* app/globals.css — minimal design system for SkillStrong */
+
+:root {
+  --bg: #ffffff;
+  --text: #0f172a;        /* slate-900 */
+  --muted: #64748b;       /* slate-500 */
+  --line: #e9eef5;
+  --card: #ffffff;
+  --shadow: 0 10px 30px rgba(2, 8, 23, 0.06);
+  --brand: #0f172a;
+  --blue: #2563eb;
 }
 
-*{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0; background:var(--bg); color:var(--fg);
-  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
-  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; background: var(--bg); color: var(--text); }
+body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+/* ---------- Header ---------- */
+.site-header { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid var(--line); }
+.site-header__inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+.brand { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: var(--brand); text-decoration: none; }
+.site-nav a { margin-left: 28px; color: #4b5563; text-decoration: none; font-weight: 500; }
+.site-nav a:hover { color: var(--text); }
+
+/* ---------- Hero ---------- */
+.hero { padding: 40px 0 56px; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+.display-1 { font-size: clamp(40px, 6vw, 68px); line-height: 1.05; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 16px; }
+.lede { font-size: 18px; color: var(--muted); margin: 0 0 28px; }
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 520px;
+  gap: 28px;
+  align-items: start;
 }
 
-/* =========================================================
-   Header
-   ========================================================= */
-.site-nav{
-  position:sticky; top:0; z-index:40;
-  border-bottom:1px solid var(--border); background:#fff;
-}
-.nav-wrap{
-  max-width:1200px; margin:0 auto; padding:14px 24px;
-  display:flex; gap:24px; align-items:center;
-}
-.brand{font-weight:800; letter-spacing:-.01em}
-.nav-links{margin-left:auto; display:flex; gap:22px}
-.nav-links a{color:var(--muted); text-decoration:none}
-.nav-links a:hover{color:var(--accent)}
+.hero-image-wrap { position: relative; }
+.hero-image { width: 100%; height: auto; border-radius: 22px; box-shadow: var(--shadow); }
 
-/* =========================================================
-   Layout utilities
-   ========================================================= */
-main{max-width:1200px; margin:0 auto; padding:40px 24px}
-.eyebrow{
-  font-size:12px; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--muted-2); font-weight:700; margin:0 0 10px;
+/* ---------- Cards ---------- */
+.cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
 }
 
-/* =========================================================
-   Hero
-   ========================================================= */
-.hero{
-  display:grid; grid-template-columns: 1fr 560px; gap:40px; align-items:center;
-  margin-top:24px;
-}
-@media (max-width: 1024px){
-  .hero{grid-template-columns:1fr; gap:24px}
-}
-.hero-title{
-  font-size: clamp(42px, 6vw, 64px);
-  line-height:1.02; letter-spacing:-.02em; margin:0 0 14px;
-  font-weight:800;
-}
-.lead{color:var(--muted); margin:0 0 22px}
-
-/* Cards */
-.cards{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px}
-@media (max-width:720px){ .cards{grid-template-columns:1fr} }
-.card{
-  background:#fff; border:1px solid var(--border); border-radius:16px;
-  padding:16px; box-shadow:var(--shadow); display:flex; gap:12px;
-  align-items:flex-start; text-decoration:none; color:inherit;
-  transition: transform .12s ease, box-shadow .12s ease;
-}
-.card:hover{ transform: translateY(-2px); box-shadow: 0 14px 40px rgba(2,6,23,.08); }
-.card-icon{font-size:20px; line-height:28px; width:28px; height:28px}
-.card-title{font-weight:700; margin-bottom:4px}
-.card-sub{color:var(--muted); font-size:14px}
-
-/* Image pane */
-.hero-media{
-  position:relative; width:100%; height:520px;
-  background: var(--card); border:1px solid var(--border);
-  border-radius:16px; box-shadow: var(--shadow);
-  overflow:hidden;
-}
-
-/* Chatbar */
-.chatbar{
-  position:sticky; bottom:18px; margin:64px auto 0; display:flex; gap:8px;
-  max-width:1200px; padding:0 24px;
-}
-.chatbar-input{
-  flex:1; height:56px; border-radius:999px; border:1px solid var(--border);
-  padding:0 20px; background:#fff; box-shadow: var(--shadow);
-  font-size:16px; outline:none;
-}
-.chatbar-input:focus{ border-color: var(--accent) }
-.chatbar-go{
-  height:56px; min-width:56px; border-radius:999px; border:0;
-  background: var(--accent); color:#fff; font-size:22px; cursor:pointer;
-  box-shadow: 0 8px 20px rgba(37,99,235,.35);
-}
-.chatbar-go:hover{ filter:brightness(0.96) }
-/* --- Header / Brand tweaks --- */
-.site-header { position: sticky; top: 0; z-index: 30; background: #fff; border-bottom: 1px solid #eef0f3; }
-.site-header .wrap { max-width: 1200px; margin: 0 auto; padding: 14px 24px; display:flex; align-items:center; gap: 24px; }
-.brand { font-weight: 900; letter-spacing: -0.02em; font-size: 28px; color: #0f172a; text-decoration:none; display:inline-flex; align-items: baseline; gap: 2px; }
-.brand-strong { color: #0b63f6; }
-@media (min-width: 960px) { .brand { font-size: 32px; } }
-
-.main-nav { margin-left: auto; display:flex; gap: 20px; flex-wrap: wrap; }
-.nav-link { color:#4b5563; text-decoration:none; font-weight:500; padding: 6px 8px; border-radius:8px; }
-.nav-link:hover { color:#111827; background: #f3f4f6; }
-.nav-link.is-active { color:#0b63f6; background:#e8f1ff; }
-/* --- Generic layout helpers --- */
-.page .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
-.h1 { font-size: 40px; line-height: 1.15; letter-spacing: -0.02em; margin: 8px 0 10px; }
-.h2 { font-size: 24px; margin: 0 0 8px; }
-.muted { color:#6b7280; }
-.card { background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:20px; box-shadow: 0 6px 28px rgba(20,35,70,0.05); }
-.stack > * + * { margin-top: 18px; }
-.row { display:flex; align-items:center; }
-.row.between { justify-content:space-between; }
-.row.gap { gap:12px; }
-
-.btn { padding:10px 14px; border:1px solid #d1d5db; border-radius:12px; background:#fff; color:#111827; text-decoration:none; font-weight:600; }
-.btn:hover { background:#f9fafb; }
-.btn-primary { border-color:#0b63f6; background:#0b63f6; color:#fff; }
-.btn-primary:hover { background:#0954cc; }
-
-.badge { background:#eaf2ff; color:#0b63f6; border:1px solid #cfe1ff; border-radius:999px; padding:4px 10px; font-weight:700; }
-
-/* --- Quiz UI --- */
-.quiz-row { display:grid; grid-template-columns: 1fr auto; gap:16px; padding:8px 0; }
-.quiz-q { font-weight:600; }
-.chip-group { display:flex; gap:8px; }
-.chip { display:inline-flex; align-items:center; justify-content:center; border:1px solid #d1d5db; background:#fff; border-radius:999px; height:36px; min-width:36px; padding:0 10px; cursor:pointer; font-weight:700; color:#374151; }
-.chip input { display:none; }
-.chip:hover { background:#f3f4f6; }
-.chip.is-selected { border-color:#0b63f6; background:#eaf2ff; color:#0b63f6; }
-
-.list.two-col { columns: 2; column-gap: 24px; }
-@media (max-width: 720px) {
-  .h1 { font-size: 32px; }
-  .quiz-row { grid-template-columns: 1fr; }
-  .list.two-col { columns: 1; }
-}
-
-/* inputs */
-.input {
-  height: 42px; padding: 10px 12px; border-radius: 10px;
-  border:1px solid #d1d5db; outline: none; background:#fff; color:#111827;
-}
-.input:focus { border-color:#0b63f6; box-shadow: 0 0 0 3px rgba(11,99,246,0.12); }
-/* ——— Header ——— */
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  backdrop-filter: saturate(180%) blur(6px);
-  background: rgba(255, 255, 255, 0.85);
-  border-bottom: 1px solid #eef2f7;
-}
-.topbar .brand {
-  font-weight: 800;
-  font-size: 22px;
-  letter-spacing: -0.02em;
-  color: #0f172a;
-}
-.topbar .nav {
-  display: flex;
-  gap: 22px;
-}
-.topbar .nav a {
-  color: #475569;
-  font-weight: 500;
-}
-.topbar .nav a:hover {
-  color: #0f172a;
-}
-
-/* ——— Hero ——— */
-.eyebrow {
-  font-size: 12px;
-  letter-spacing: 0.12em;
-  font-weight: 700;
-  color: #64748b;
-  margin-bottom: 10px;
-}
-.hero-title {
-  font-weight: 900;
-  font-size: clamp(40px, 7vw, 72px);
-  line-height: 0.98;
-  letter-spacing: -0.02em;
-  color: #0f172a;
-}
-.hero-image {
-  border-radius: 22px;
-  overflow: hidden;
-  background: #f4f7fb;
-  box-shadow:
-    0 10px 25px rgba(2, 6, 23, 0.06),
-    inset 0 0 0 1px rgba(2, 6, 23, 0.04);
-}
-
-/* ——— Cards ——— */
-.card-link { text-decoration: none; }
 .card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px 18px;
   display: grid;
-  gap: 6px;
-  border-radius: 16px;
-  padding: 18px 20px;
-  background: #fff;
-  border: 1px solid #e9eef5;
-  box-shadow: 0 4px 18px rgba(2, 6, 23, 0.04);
+  grid-template-columns: 40px 1fr;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: var(--shadow);
 }
-.card:hover { border-color: #d9e3ef; box-shadow: 0 6px 22px rgba(2,6,23,.06); }
-.card-title {
-  font-weight: 700;
-  color: #0f172a;
-}
-.card-sub {
-  color: #64748b;
-  font-size: 15px;
-}
+.card:hover { transform: translateY(-1px); transition: transform .15s ease; }
 
-/* ——— Buttons ——— */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 42px;
-  padding: 0 16px;
-  border-radius: 12px;
-  font-weight: 700;
-  border: 1px solid #e5ecf6;
-  background: #fff;
-  color: #0f172a;
-}
-.btn:hover { border-color: #cfe0f6; }
-.btn-primary {
-  background: #1d4ed8;
-  color: #fff;
-  border-color: #1d4ed8;
-}
-.btn-primary:hover { background: #1840b3; border-color: #1840b3; }
+.card-icon { font-size: 22px; line-height: 40px; text-align: center; }
+.card-body h3 { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
+.card-body p { margin: 0; color: var(--muted); font-size: 15px; }
+.card-wide { grid-column: 1 / -1; }
 
-/* ——— Chat bar ——— */
+/* ---------- Chat bar ---------- */
+.chatbar-wrap { margin-top: 26px; }
 .chatbar {
+  width: 100%;
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: 1fr 52px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  padding: 6px;
 }
 .chatbar input {
-  height: 56px;
-  border-radius: 16px;
-  border: 1px solid #e9eef5;
-  padding: 0 16px;
+  width: 100%;
+  border: 0;
+  outline: 0;
   font-size: 16px;
-  background: #fff;
-  box-shadow: 0 6px 22px rgba(2,6,23,.04);
+  padding: 16px 16px 16px 18px;
+  background: transparent;
 }
-.chatbar input:focus { outline: none; border-color: #cfe0f6; }
-/* ---------- Layout shell & typography ---------- */
-.shell{max-width:1200px;margin:0 auto;padding:0 24px}
-.display{font-size:64px;line-height:1.05;letter-spacing:-.02em;margin:0 0 12px;font-weight:900;color:#0f172a}
-.overline{font-size:13px;letter-spacing:.12em;font-weight:700;color:#64748b;margin:0 0 12px}
-.lede{font-size:18px;color:#374151;margin:8px 0 24px}
+.chatbar button {
+  height: 40px;
+  width: 40px;
+  border-radius: 999px;
+  border: 0;
+  cursor: pointer;
+  background: var(--blue);
+  color: #fff;
+  font-size: 18px;
+}
 
-/* ---------- Topbar ---------- */
-.topbar{position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid #eef2f7}
-.topbar-row{display:flex;align-items:center;justify-content:space-between;height:64px}
-.brand{font-weight:900;font-size:28px;letter-spacing:-.02em;color:#0f172a;text-decoration:none}
-.nav{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
-.nav a{color:#4b5563;text-decoration:none;font-weight:500}
-.nav a:hover{color:#111827}
-
-/* ---------- Hero grid ---------- */
-.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;padding:40px 0 24px}
-@media (max-width: 980px){.hero{grid-template-columns:1fr;gap:28px}}
-.hero-media{min-height:320px}
-.hero-img-wrap{border-radius:24px;overflow:hidden;background:#f6f9ff;
-  box-shadow:0 14px 48px rgba(2,6,23,.10)}
-.hero-img{width:100%;height:auto;display:block}
-
-/* ---------- Feature cards ---------- */
-.feature-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0 4px}
-@media (max-width: 720px){.feature-cards{grid-template-columns:1fr}}
-.feature-card{display:block;background:#fff;border:1px solid #eef2f7;border-radius:16px;
-  padding:20px 22px;text-decoration:none;color:#0f172a;
-  box-shadow:0 10px 30px rgba(2,6,23,.04)}
-.feature-card h3{margin:0 0 6px;font-size:18px}
-.feature-card p{margin:0;color:#4b5563}
-.feature-card:hover{border-color:#dbe5ff;box-shadow:0 12px 36px rgba(56,97,251,.12)}
-
-/* ---------- Chat launcher ---------- */
-.chatbar{display:flex;gap:10px;align-items:center;border:1px solid #e5e7eb;
-  padding:10px 12px;border-radius:999px;margin:28px 0 56px;background:#fff;
-  box-shadow:0 8px 24px rgba(2,6,23,.06)}
-.chatbar input{flex:1;border:0;outline:0;font-size:16px;background:transparent}
-.btn{user-select:none;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;
-  padding:12px 16px;border:1px solid #dbeafe;background:#1d4ed8;color:#fff;font-weight:700}
-.btn:hover{background:#1e40af}
-
-/* --- Fix header alignment --- */
-.topbar { background:#fff; border-bottom:1px solid #eef2f7 }
-.topbar-row { display:flex; align-items:center; gap:16px; height:64px }
-.topbar .brand { font-weight:900; font-size:28px; letter-spacing:-.02em; color:#0f172a; text-decoration:none }
-.topbar .nav { margin-left:auto !important; display:flex; gap:24px; align-items:center }
-.topbar .nav a { color:#4b5563; text-decoration:none; font-weight:500 }
-.topbar .nav a:hover { color:#111827 }
-
-/* --- Layout container & type --- */
-.shell { max-width:1200px; margin:0 auto; padding:0 24px }
-.display{font-size:64px; line-height:1.05; letter-spacing:-.02em; margin:0 0 12px; font-weight:900; color:#0f172a}
-.overline{font-size:13px; letter-spacing:.12em; font-weight:700; color:#64748b; margin:0 0 12px}
-.lede{font-size:18px; color:#374151; margin:8px 0 24px}
-
-/* --- Two-column hero --- */
-.hero { display:grid !important; grid-template-columns:1.05fr .95fr; gap:56px; align-items:center; padding:40px 0 24px }
-@media (max-width:980px){ .hero{ grid-template-columns:1fr; gap:28px } }
-
-/* --- Cards --- */
-.feature-cards { display:grid !important; grid-template-columns:1fr 1fr; gap:16px; margin:12px 0 4px }
-@media (max-width:720px){ .feature-cards{ grid-template-columns:1fr } }
-.feature-card { display:block !important; background:#fff; border:1px solid #eef2f7; border-radius:16px;
-  padding:20px 22px; text-decoration:none; color:#0f172a; box-shadow:0 10px 30px rgba(2,6,23,.04) }
-.feature-card h3{ margin:0 0 6px; font-size:18px }
-.feature-card p{ margin:0; color:#4b5563 }
-.feature-card:hover{ border-color:#dbe5ff; box-shadow:0 12px 36px rgba(56,97,251,.12) }
-
-/* --- Hero image --- */
-.hero-media { min-height:320px }
-.hero-img { display:block !important; width:100% !important; height:auto !important; border-radius:24px;
-  box-shadow:0 14px 48px rgba(2,6,23,.10); background:#f6f9ff }
-
-/* --- Chat bar --- */
-.chatbar{ display:flex; gap:10px; align-items:center; border:1px solid #e5e7eb;
-  padding:10px 12px; border-radius:999px; margin:28px 0 56px; background:#fff;
-  box-shadow:0 8px 24px rgba(2,6,23,.06) }
-.chatbar input{ flex:1; border:0; outline:0; font-size:16px; background:transparent }
-.btn{ user-select:none; display:inline-flex; align-items:center; justify-content:center; border-radius:12px;
-  padding:12px 16px; border:1px solid #dbeafe; background:#1d4ed8; color:#fff; font-weight:700 }
-.btn:hover{ background:#1e40af }
-
+@media (max-width: 1024px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .cards { grid-template-columns: 1fr; }
+}
