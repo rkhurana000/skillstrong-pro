@@ -1,42 +1,30 @@
 import './globals.css';
-import React from 'react';
+import Link from 'next/link';
 
 export const metadata = {
-  title: 'SkillStrong — Future-Proof Careers',
-  description:
-    'Explore manufacturing roles, training, apprenticeships and pay with a guided AI coach.',
+  title: 'SkillStrong — Manufacturing Careers',
+  description: 'Explore careers, training & apprenticeships',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {/* Site header expects the .site-header class for spacing/hover styles */}
-        <header className="site-header">
-          <div className="container">
-            <div className="brand">
-              <a href="/">SkillStrong</a>
-            </div>
-            <nav>
-              <a href="/">Home</a>
-              <a href="/features">Features</a>
-              <a href="/interest">Interest</a>
-              <a href="/quiz">Quiz</a>
-              <a href="/about">About</a>
-              <a href="/explore">Explore Careers</a>
-              <a href="/account">Account</a>
+        <header className="site-nav">
+          <div className="nav-wrap">
+            <Link href="/" className="brand">SkillStrong</Link>
+            <nav className="nav-links">
+              <Link href="/">Home</Link>
+              <Link href="/features">Features</Link>
+              <Link href="/interest">Interest</Link>
+              <Link href="/quiz">Quiz</Link>
+              <Link href="/about">About</Link>
+              <Link href="/explore">Explore Careers</Link>
+              <Link href="/account">Account</Link>
             </nav>
           </div>
         </header>
-
-        {/* Main content wrapper */}
-        <main className="container" style={{ paddingTop: 20, paddingBottom: 60 }}>
-          {children}
-        </main>
+        {children}
       </body>
     </html>
   );
