@@ -152,3 +152,113 @@ main{max-width:1200px; margin:0 auto; padding:40px 24px}
   border:1px solid #d1d5db; outline: none; background:#fff; color:#111827;
 }
 .input:focus { border-color:#0b63f6; box-shadow: 0 0 0 3px rgba(11,99,246,0.12); }
+/* ——— Header ——— */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  backdrop-filter: saturate(180%) blur(6px);
+  background: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid #eef2f7;
+}
+.topbar .brand {
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+.topbar .nav {
+  display: flex;
+  gap: 22px;
+}
+.topbar .nav a {
+  color: #475569;
+  font-weight: 500;
+}
+.topbar .nav a:hover {
+  color: #0f172a;
+}
+
+/* ——— Hero ——— */
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+.hero-title {
+  font-weight: 900;
+  font-size: clamp(40px, 7vw, 72px);
+  line-height: 0.98;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+.hero-image {
+  border-radius: 22px;
+  overflow: hidden;
+  background: #f4f7fb;
+  box-shadow:
+    0 10px 25px rgba(2, 6, 23, 0.06),
+    inset 0 0 0 1px rgba(2, 6, 23, 0.04);
+}
+
+/* ——— Cards ——— */
+.card-link { text-decoration: none; }
+.card {
+  display: grid;
+  gap: 6px;
+  border-radius: 16px;
+  padding: 18px 20px;
+  background: #fff;
+  border: 1px solid #e9eef5;
+  box-shadow: 0 4px 18px rgba(2, 6, 23, 0.04);
+}
+.card:hover { border-color: #d9e3ef; box-shadow: 0 6px 22px rgba(2,6,23,.06); }
+.card-title {
+  font-weight: 700;
+  color: #0f172a;
+}
+.card-sub {
+  color: #64748b;
+  font-size: 15px;
+}
+
+/* ——— Buttons ——— */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  border: 1px solid #e5ecf6;
+  background: #fff;
+  color: #0f172a;
+}
+.btn:hover { border-color: #cfe0f6; }
+.btn-primary {
+  background: #1d4ed8;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+.btn-primary:hover { background: #1840b3; border-color: #1840b3; }
+
+/* ——— Chat bar ——— */
+.chatbar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.chatbar input {
+  height: 56px;
+  border-radius: 16px;
+  border: 1px solid #e9eef5;
+  padding: 0 16px;
+  font-size: 16px;
+  background: #fff;
+  box-shadow: 0 6px 22px rgba(2,6,23,.04);
+}
+.chatbar input:focus { outline: none; border-color: #cfe0f6; }
