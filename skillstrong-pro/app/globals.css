@@ -113,3 +113,14 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, H
 @media (max-width: 1024px) {
   .hero-image-wrap { margin-top: 0; }
 }
+/* ---- TEMP OVERRIDES to unstick chat bar and ensure hero is visible ---- */
+.chatbar {
+  position: static !important;   /* was sticky/absolute in an earlier version */
+  top: auto !important;
+}
+
+/* If you previously added any custom .hero-wrap rules, null them out */
+.hero-wrap, .hero-wrap img {
+  margin: 0 !important;
+  padding: 0 !important;
+}
