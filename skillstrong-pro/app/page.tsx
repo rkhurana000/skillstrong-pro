@@ -1,4 +1,4 @@
-// app/page.tsx
+// app/page.tsx (Server Component)
 import Image from "next/image";
 import Link from "next/link";
 import ChatLauncher from "./components/ChatLauncher";
@@ -9,105 +9,70 @@ export const metadata = {
     "Explore careers, training, and apprenticeships with a guided AI coach.",
 };
 
-export default function Home() {
+export default function HomePage() {
   return (
-    <main>
-      <div className="mx-auto max-w-7xl px-6 lg:px-10 py-8 lg:py-12">
-        <div className="grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
-          {/* LEFT: title + cards */}
-          <section>
-            <p className="text-sm font-semibold tracking-widest text-slate-500 uppercase">
-              Manufacturing Careers
-            </p>
+    <div className="container">
+      <section className="hero">
+        <div className="eyebrow">MANUFACTURING CAREERS</div>
 
-            <h1 className="mt-3 text-5xl sm:text-6xl font-extrabold leading-tight text-slate-900">
-              Build Your
-              <br />
-              Manufacturing
-              <br />
-              Career
-            </h1>
+        <h1 className="display-1">
+          Build Your
+          <br />
+          Manufacturing
+          <br />
+          Career
+        </h1>
 
-            <p className="mt-4 text-slate-600 text-lg">
-              Explore careers in manufacturing and learn how to get started.
-            </p>
+        <p className="lede">
+          Explore careers in manufacturing and learn how to get started.
+        </p>
 
-            {/* 3 cards */}
-            <div className="mt-8 grid sm:grid-cols-2 gap-5">
-              {/* Card 1 */}
-              <Link
-                href="/explore"
-                className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm hover:shadow-md transition"
-              >
-                <div className="mt-1 h-8 w-8 rounded-xl bg-slate-100 grid place-items-center">
-                  <span className="text-slate-700">⚙️</span>
-                </div>
-                <div>
-                  <div className="font-semibold text-slate-900">
-                    Job Opportunities
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    Discover different roles within manufacturing.
-                  </div>
-                </div>
-              </Link>
+        <div className="hero-grid">
+          {/* Left: cards */}
+          <div className="cards">
+            <Link href="/explore" className="card">
+              <div className="card-icon">🔧</div>
+              <div className="card-body">
+                <h3>Job Opportunities</h3>
+                <p>Discover different roles within manufacturing.</p>
+              </div>
+            </Link>
 
-              {/* Card 2 */}
-              <Link
-                href="/explore?tab=training"
-                className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm hover:shadow-md transition"
-              >
-                <div className="mt-1 h-8 w-8 rounded-xl bg-slate-100 grid place-items-center">
-                  <span className="text-slate-700">📚</span>
-                </div>
-                <div>
-                  <div className="font-semibold text-slate-900">
-                    Required Training
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    Find out what skills & certifications you need.
-                  </div>
-                </div>
-              </Link>
+            <Link href="/explore" className="card">
+              <div className="card-icon">📘</div>
+              <div className="card-body">
+                <h3>Required Training</h3>
+                <p>Find out what skills & certifications you need.</p>
+              </div>
+            </Link>
 
-              {/* Card 3 (full width) */}
-              <Link
-                href="/quiz"
-                className="sm:col-span-2 flex items-start gap-4 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm hover:shadow-md transition"
-              >
-                <div className="mt-1 h-8 w-8 rounded-xl bg-slate-100 grid place-items-center">
-                  <span className="text-slate-700">✅</span>
-                </div>
-                <div>
-                  <div className="font-semibold text-slate-900">
-                    Take an Interest Quiz
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    Find your best match in manufacturing.
-                  </div>
-                </div>
-              </Link>
-            </div>
-          </section>
+            <Link href="/quiz" className="card card-wide">
+              <div className="card-icon">✅</div>
+              <div className="card-body">
+                <h3>Take an Interest Quiz</h3>
+                <p>Find your best match in manufacturing.</p>
+              </div>
+            </Link>
+          </div>
 
-          {/* RIGHT: hero image */}
-          <aside>
+          {/* Right: hero image */}
+          <div className="hero-image-wrap">
             <Image
               src="/hero.jpg"
-              alt="Students exploring a manufacturing lab"
-              width={1100}
-              height={820}
+              alt="Students exploring manufacturing lab"
+              width={940}
+              height={680}
+              className="hero-image"
               priority
-              className="w-full h-auto rounded-3xl shadow-xl ring-1 ring-black/5"
             />
-          </aside>
+          </div>
         </div>
 
-        {/* Chat bar at the bottom of the page */}
-        <div className="mt-10 lg:mt-12">
-          <ChatLauncher placeholder="Ask me anything about manufacturing careers…" />
+        {/* Chat bar at bottom */}
+        <div className="chatbar-wrap">
+          <ChatLauncher />
         </div>
-      </div>
-    </main>
+      </section>
+    </div>
   );
 }
