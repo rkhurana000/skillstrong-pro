@@ -4,10 +4,8 @@ import Link from 'next/link';
 export default function SiteHeader() {
   return (
     <header className="topbar">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
-        <Link href="/" className="brand">
-          SkillStrong
-        </Link>
+      <div className="shell topbar-row">
+        <Link href="/" className="brand">SkillStrong</Link>
 
         <nav className="nav">
           <Link href="/">Home</Link>
