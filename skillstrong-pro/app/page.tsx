@@ -2,107 +2,104 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, FormEvent } from 'react';
 
 export default function Home() {
   const router = useRouter();
-  const [q, setQ] = useState('');
+  const [prompt, setPrompt] = useState('');
 
-  const goExplore = (preset?: string) => {
-    const query = preset ?? q;
-    const dest = query ? `/explore?q=${encodeURIComponent(query)}` : '/explore';
-    router.push(dest);
-  };
+  function goExplore(withQuery?: string) {
+    const url = withQuery?.trim()
+      ? `/explore?q=${encodeURIComponent(withQuery.trim())}`
+      : '/explore';
+    router.push(url);
+  }
 
-  const onAsk = (e: FormEvent) => {
+  function onSubmit(e: FormEvent) {
     e.preventDefault();
-    goExplore();
-  };
+    goExplore(prompt);
+  }
 
   return (
-    <main className="home">
-      <nav className="home-topbar">
-        <Link href="/" className="brand">MANUFACTURING CAREERS</Link>
-        <div className="links">
-          <Link href="/explore">Careers</Link>
-          <Link href="/explore?q=training">Training</Link>
-          <Link href="/about">About</Link>
-          <Link href="/account" className="signin">Sign In</Link>
-        </div>
-      </nav>
-
-      <section className="home-hero">
-        <div className="col left">
-          <h1 className="title">
+    <main className="container">
+      <section className="hero">
+        {/* LEFT: copy */}
+        <div className="hero-copy">
+          <p className="hero-kicker">MANUFACTURING CAREERS</p>
+          <h1 className="hero-title">
             Build Your
             <br />
             Manufacturing
             <br />
             Career
           </h1>
-          <p className="kicker">
+
+          <p className="hero-sub">
             Explore careers in manufacturing and learn how to get started.
           </p>
 
-          <div className="card-grid">
-            <button
-              className="info-card"
-              onClick={() => goExplore('Explore by job types')}
-              aria-label="Job Opportunities"
-            >
-              <div className="icn">⚙️</div>
+          {/* feature tiles */}
+          <div className="tiles">
+            <Link href="/explore?mode=jobs" className="tile card card--link">
+              <div className="tile-icon" aria-hidden>⚙️</div>
               <div>
-                <div className="card-h">Job Opportunities</div>
-                <div className="card-p">Discover different roles within manufacturing.</div>
+                <div className="tile-title">Job Opportunities</div>
+                <div className="tile-sub">
+                  Discover different roles within manufacturing.
+                </div>
               </div>
-            </button>
+            </Link>
 
-            <button
-              className="info-card"
-              onClick={() => goExplore('Explore by training length')}
-              aria-label="Required Training"
-            >
-              <div className="icn">📚</div>
+            <Link href="/explore?mode=training" className="tile card card--link">
+              <div className="tile-icon" aria-hidden>📚</div>
               <div>
-                <div className="card-h">Required Training</div>
-                <div className="card-p">Find out what skills & certifications you need.</div>
+                <div className="tile-title">Required Training</div>
+                <div className="tile-sub">
+                  Find out what skills &amp; certifications you need.
+                </div>
               </div>
-            </button>
+            </Link>
 
-            <Link href="/quiz" className="info-card linklike" aria-label="Take an Interest Quiz">
-              <div className="icn">✅</div>
+            <Link href="/quiz" className="tile card card--link">
+              <div className="tile-icon" aria-hidden>✅</div>
               <div>
-                <div className="card-h">Take an Interest Quiz</div>
-                <div className="card-p">Find your best match in manufacturing.</div>
+                <div className="tile-title">Take an Interest Quiz</div>
+                <div className="tile-sub">
+                  Find your best match in manufacturing.
+                </div>
               </div>
             </Link>
           </div>
         </div>
 
-        <div className="col right">
-          <div className="hero-img">
-            <Image
-              src="/hero.jpg"
-              alt="Students in a manufacturing lab"
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 600px"
-            />
-          </div>
+        {/* RIGHT: hero image */}
+        <div className="hero-media card">
+          {/* If public/hero.jpg exists, this renders. If not, the soft bg still looks fine. */}
+          <Image
+            src="/hero.jpg"
+            alt="Students exploring manufacturing lab"
+            fill
+            priority
+            sizes="(max-width: 960px) 100vw, 560px"
+            style={{ objectFit: 'cover', borderRadius: 16 }}
+          />
         </div>
-      </section>
 
-      {/* bottom chat bar -> routes into /explore with the text as a query */}
-      <form className="home-ask" onSubmit={onAsk}>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Ask me anything about manufacturing careers…"
-          aria-label="Ask a question"
-        />
-        <button type="submit" aria-label="Open coach with question">➤</button>
-      </form>
+        {/* chat bar */}
+        <form className="chatbar" onSubmit={onSubmit}>
+          <input
+            type="text"
+            placeholder="Ask me anything about manufacturing careers…"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            aria-label="Ask a question"
+          />
+          <button type="submit" aria-label="Open the coach">
+            <span>→</span>
+          </button>
+        </form>
+      </section>
     </main>
   );
 }
