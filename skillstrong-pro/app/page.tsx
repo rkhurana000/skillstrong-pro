@@ -1,32 +1,14 @@
-'use client';
+import Image from "next/image";
+import Link from "next/link";
 
-import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, FormEvent } from 'react';
+export const dynamic = "force-static"; // static page, but new deploys update it
 
-export default function Home() {
-  const router = useRouter();
-  const [prompt, setPrompt] = useState('');
-
-  function goExplore(withQuery?: string) {
-    const url = withQuery?.trim()
-      ? `/explore?q=${encodeURIComponent(withQuery.trim())}`
-      : '/explore';
-    router.push(url);
-  }
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    goExplore(prompt);
-  }
-
+export default function HomePage() {
   return (
-    <main className="container">
+    <main>
       <section className="hero">
-        {/* LEFT: copy */}
-        <div className="hero-copy">
-          <p className="hero-kicker">MANUFACTURING CAREERS</p>
+        <div className="hero-content">
+          <p className="eyebrow">MANUFACTURING CAREERS</p>
           <h1 className="hero-title">
             Build Your
             <br />
@@ -35,71 +17,66 @@ export default function Home() {
             Career
           </h1>
 
-          <p className="hero-sub">
+          <p className="lead">
             Explore careers in manufacturing and learn how to get started.
           </p>
 
-          {/* feature tiles */}
-          <div className="tiles">
-            <Link href="/explore?mode=jobs" className="tile card card--link">
-              <div className="tile-icon" aria-hidden>⚙️</div>
+          <div className="cards">
+            <Link href="/explore" className="card">
+              <div className="card-icon">⚙️</div>
               <div>
-                <div className="tile-title">Job Opportunities</div>
-                <div className="tile-sub">
-                  Discover different roles within manufacturing.
-                </div>
+                <div className="card-title">Job Opportunities</div>
+                <div className="card-sub">Discover different roles within manufacturing.</div>
               </div>
             </Link>
 
-            <Link href="/explore?mode=training" className="tile card card--link">
-              <div className="tile-icon" aria-hidden>📚</div>
+            <Link href="/explore?tab=training" className="card">
+              <div className="card-icon">📚</div>
               <div>
-                <div className="tile-title">Required Training</div>
-                <div className="tile-sub">
-                  Find out what skills &amp; certifications you need.
-                </div>
+                <div className="card-title">Required Training</div>
+                <div className="card-sub">Find out what skills & certifications you need.</div>
               </div>
             </Link>
 
-            <Link href="/quiz" className="tile card card--link">
-              <div className="tile-icon" aria-hidden>✅</div>
+            <Link href="/quiz" className="card">
+              <div className="card-icon">✅</div>
               <div>
-                <div className="tile-title">Take an Interest Quiz</div>
-                <div className="tile-sub">
-                  Find your best match in manufacturing.
-                </div>
+                <div className="card-title">Take an Interest Quiz</div>
+                <div className="card-sub">Find your best match in manufacturing.</div>
               </div>
             </Link>
           </div>
         </div>
 
-        {/* RIGHT: hero image */}
-        <div className="hero-media card">
-          {/* If public/hero.jpg exists, this renders. If not, the soft bg still looks fine. */}
+        <div className="hero-media">
           <Image
             src="/hero.jpg"
             alt="Students exploring manufacturing lab"
             fill
+            sizes="(min-width: 1024px) 560px, 100vw"
             priority
-            sizes="(max-width: 960px) 100vw, 560px"
-            style={{ objectFit: 'cover', borderRadius: 16 }}
+            style={{ objectFit: "cover", borderRadius: 16 }}
           />
         </div>
-
-        {/* chat bar */}
-        <form className="chatbar" onSubmit={onSubmit}>
-          <input
-            type="text"
-            placeholder="Ask me anything about manufacturing careers…"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            aria-label="Ask a question"
-          />
-          <button type="submit" aria-label="Open the coach">
-            <span>→</span>
-          </button>
-        </form>
       </section>
+
+      <form
+        action="/explore"
+        className="chatbar"
+        onSubmit={(e) => {
+          // let the native navigation happen, we only need a quick guard
+          const input = (e.currentTarget.elements.namedItem("q") as HTMLInputElement);
+          if (!input.value.trim()) input.value = "Explore careers";
+        }}
+      >
+        <input
+          name="q"
+          className="chatbar-input"
+          placeholder="Ask me anything about manufacturing careers…"
+          autoComplete="off"
+        />
+        <button className="chatbar-go" aria-label="Go">→</button>
+      </form>
     </main>
   );
 }
