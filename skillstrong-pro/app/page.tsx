@@ -1,7 +1,5 @@
-// app/page.tsx  — server component
-import Image from 'next/image';
+// app/page.tsx  (Server Component)
 import Link from 'next/link';
-import ChatLauncher from './components/ChatLauncher';
 
 export const metadata = {
   title: 'SkillStrong — Future-Proof Careers',
@@ -24,12 +22,10 @@ export default function Home() {
               <h3>Job Opportunities</h3>
               <p>Discover different roles within manufacturing.</p>
             </Link>
-
             <Link href="/explore" className="feature-card">
               <h3>Required Training</h3>
               <p>Find out what skills & certifications you need.</p>
             </Link>
-
             <Link href="/quiz" className="feature-card">
               <h3>Take an Interest Quiz</h3>
               <p>Find your best match in manufacturing.</p>
@@ -38,23 +34,34 @@ export default function Home() {
         </div>
 
         <div className="hero-media">
-          <div className="hero-img-wrap">
-            {/* Keep /public/hero.jpg in the repo: public/hero.jpg */}
-            <Image
-              src="/hero.jpg"
-              alt="Students exploring manufacturing lab"
-              width={1100}
-              height={820}
-              priority
-              className="hero-img"
-            />
-          </div>
+          {/* File must exist at /public/hero.jpg (you already confirmed it does) */}
+          <img
+            src="/hero.jpg"
+            alt="Students exploring manufacturing lab"
+            className="hero-img"
+            width="1100"
+            height="820"
+            loading="eager"
+            decoding="async"
+          />
         </div>
       </section>
 
-      {/* Launcher routes to /explore#coach and passes the prompt in the URL */}
+      {/* Send to chat on /explore (keeps behavior you wanted) */}
       <div className="shell">
-        <ChatLauncher />
+        <form
+          className="chatbar"
+          action="/explore#coach"
+          onSubmit={(e) => {
+            // This handler is ignored on the server; fine on the client.
+            const form = e.currentTarget as HTMLFormElement;
+            const input = form.querySelector('input[name="prompt"]') as HTMLInputElement | null;
+            if (!input || !input.value.trim()) e.preventDefault();
+          }}
+        >
+          <input name="prompt" placeholder="Ask me anything about manufacturing careers…" />
+          <button className="btn" type="submit">→</button>
+        </form>
       </div>
     </main>
   );
