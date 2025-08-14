@@ -2,28 +2,36 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { useState, FormEvent } from 'react';
 
-export default function ChatLauncher() {
+export default function ChatLauncher({
+  placeholder = 'Ask me anything about manufacturing careers…',
+  buttonLabel = '→',
+}: {
+  placeholder?: string;
+  buttonLabel?: string;
+}) {
   const router = useRouter();
   const [q, setQ] = useState('');
 
-  function onSubmit(e: FormEvent) {
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const next = `/explore?prompt=${encodeURIComponent(q.trim())}#coach`;
-    router.push(next);
+    const query = q.trim();
+    router.push(query ? `/explore?chat=${encodeURIComponent(query)}` : '/explore`);
   }
 
   return (
     <form className="chatbar" onSubmit={onSubmit}>
       <input
-        aria-label="Ask me anything about manufacturing careers"
-        placeholder="Ask me anything about manufacturing careers…"
+        className="chatbar-input"
+        type="text"
         value={q}
         onChange={(e) => setQ(e.target.value)}
+        placeholder={placeholder}
+        aria-label="Ask me anything"
       />
-      <button type="submit" className="btn btn-primary" aria-label="Go to chat">
-        →
+      <button className="chatbar-send" type="submit" aria-label="Open chat">
+        {buttonLabel}
       </button>
     </form>
   );
