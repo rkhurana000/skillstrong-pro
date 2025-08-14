@@ -1,12 +1,12 @@
 // app/components/SiteHeader.tsx
-import Link from 'next/link';
+import Link from "next/link";
 
 export default function SiteHeader() {
   return (
-    <header className="topbar">
-      <div className="shell topbar-row">
+    <header className="site-header">
+      <div className="site-header__inner container">
         <Link href="/" className="brand">SkillStrong</Link>
-        <nav className="nav">
+        <nav className="site-nav">
           <Link href="/">Home</Link>
           <Link href="/features">Features</Link>
           <Link href="/interest">Interest</Link>
