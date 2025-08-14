@@ -101,3 +101,15 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, H
   .hero-grid { grid-template-columns: 1fr; }
   .cards { grid-template-columns: 1fr; }
 }
+
+/* Nudge hero image up on desktop */
+.hero-grid { align-items: start; }            /* ensure top alignment */
+.hero-image-wrap { 
+  align-self: start; 
+  margin-top: -56px;                           /* adjust this number to taste: -40 ~ -80 */
+}
+
+/* Reset on smaller screens */
+@media (max-width: 1024px) {
+  .hero-image-wrap { margin-top: 0; }
+}
