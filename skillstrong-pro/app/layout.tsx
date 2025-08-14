@@ -1,9 +1,9 @@
-import './globals.css';
-import Link from 'next/link';
+import "./globals.css";
+import Link from "next/link";
 
 export const metadata = {
-  title: 'SkillStrong — Manufacturing Careers',
-  description: 'Explore careers, training & apprenticeships',
+  title: "SkillStrong — Manufacturing Careers",
+  description: "Explore careers, training & apprenticeships with a guided AI coach.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
