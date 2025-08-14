@@ -146,3 +146,9 @@ main{max-width:1200px; margin:0 auto; padding:40px 24px}
   .list.two-col { columns: 1; }
 }
 
+/* inputs */
+.input {
+  height: 42px; padding: 10px 12px; border-radius: 10px;
+  border:1px solid #d1d5db; outline: none; background:#fff; color:#111827;
+}
+.input:focus { border-color:#0b63f6; box-shadow: 0 0 0 3px rgba(11,99,246,0.12); }
