@@ -17,7 +17,8 @@ export default function ChatLauncher({
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const query = q.trim();
-    router.push(query ? `/explore?chat=${encodeURIComponent(query)}` : '/explore`);
+    // ✅ Fixed: correct quotes around '/explore'
+    router.push(query ? `/explore?chat=${encodeURIComponent(query)}` : '/explore');
   }
 
   return (
