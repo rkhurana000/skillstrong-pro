@@ -1,58 +1,108 @@
-// app/page.tsx
-import Link from "next/link";
+'use client';
+
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, useState } from 'react';
 
 export default function Home() {
-  return (
-    <main className="marketing">
-      <section className="hero">
-        <p className="kicker">Future-Proof Careers</p>
-        <h1>Find your path in today’s manufacturing economy</h1>
-        <p className="lead">
-          Welding, robotics, quality, maintenance, CNC—great jobs without a
-          4-year degree. Explore roles, pay, training, and apprenticeships with
-          a guided AI coach.
-        </p>
+  const router = useRouter();
+  const [q, setQ] = useState('');
 
-        <div className="hero-actions">
-          <Link href="/explore" className="pill">
-            Explore Careers
-          </Link>
-          <Link href="/about" className="pill ghost">
-            How it works
-          </Link>
+  const goExplore = (preset?: string) => {
+    const query = preset ?? q;
+    const dest = query ? `/explore?q=${encodeURIComponent(query)}` : '/explore';
+    router.push(dest);
+  };
+
+  const onAsk = (e: FormEvent) => {
+    e.preventDefault();
+    goExplore();
+  };
+
+  return (
+    <main className="home">
+      <nav className="home-topbar">
+        <Link href="/" className="brand">MANUFACTURING CAREERS</Link>
+        <div className="links">
+          <Link href="/explore">Careers</Link>
+          <Link href="/explore?q=training">Training</Link>
+          <Link href="/about">About</Link>
+          <Link href="/account" className="signin">Sign In</Link>
+        </div>
+      </nav>
+
+      <section className="home-hero">
+        <div className="col left">
+          <h1 className="title">
+            Build Your
+            <br />
+            Manufacturing
+            <br />
+            Career
+          </h1>
+          <p className="kicker">
+            Explore careers in manufacturing and learn how to get started.
+          </p>
+
+          <div className="card-grid">
+            <button
+              className="info-card"
+              onClick={() => goExplore('Explore by job types')}
+              aria-label="Job Opportunities"
+            >
+              <div className="icn">⚙️</div>
+              <div>
+                <div className="card-h">Job Opportunities</div>
+                <div className="card-p">Discover different roles within manufacturing.</div>
+              </div>
+            </button>
+
+            <button
+              className="info-card"
+              onClick={() => goExplore('Explore by training length')}
+              aria-label="Required Training"
+            >
+              <div className="icn">📚</div>
+              <div>
+                <div className="card-h">Required Training</div>
+                <div className="card-p">Find out what skills & certifications you need.</div>
+              </div>
+            </button>
+
+            <Link href="/quiz" className="info-card linklike" aria-label="Take an Interest Quiz">
+              <div className="icn">✅</div>
+              <div>
+                <div className="card-h">Take an Interest Quiz</div>
+                <div className="card-p">Find your best match in manufacturing.</div>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        <div className="col right">
+          <div className="hero-img">
+            <Image
+              src="/hero.jpg"
+              alt="Students in a manufacturing lab"
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 600px"
+            />
+          </div>
         </div>
       </section>
 
-      <section className="cards">
-        <article className="card">
-          <h3>Button-First Chat</h3>
-          <p>
-            Pick chips like job types, salary, or training length. Get short
-            answers plus follow-ups.
-          </p>
-          <Link href="/explore" className="cta">
-            Open the coach →
-          </Link>
-        </article>
-
-        <article className="card">
-          <h3>Real Programs</h3>
-          <p>
-            See certificates, community colleges, and apprenticeships near you.
-          </p>
-          <Link href="/training" className="cta">
-            Browse training →
-          </Link>
-        </article>
-
-        <article className="card">
-          <h3>For Gen Z & Gen Y</h3>
-          <p>Minimal clutter, big chips, friendly tone. Built for phones first.</p>
-          <Link href="/features" className="cta">
-            See features →
-          </Link>
-        </article>
-      </section>
+      {/* bottom chat bar -> routes into /explore with the text as a query */}
+      <form className="home-ask" onSubmit={onAsk}>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Ask me anything about manufacturing careers…"
+          aria-label="Ask a question"
+        />
+        <button type="submit" aria-label="Open coach with question">➤</button>
+      </form>
     </main>
   );
 }
