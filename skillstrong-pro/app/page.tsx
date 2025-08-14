@@ -1,82 +1,79 @@
-import Image from "next/image";
-import Link from "next/link";
+import Image from 'next/image';
+import Link from 'next/link';
+import ChatBar from '@/components/ChatBar';
 
-export const dynamic = "force-static"; // static page, but new deploys update it
+export const metadata = {
+  title: 'SkillStrong — Future-Proof Careers',
+  description: 'Explore careers, training, and apprenticeships with a guided AI coach.',
+};
 
-export default function HomePage() {
+// Keep this a Server Component (no "use client")
+export default function Home() {
   return (
-    <main>
-      <section className="hero">
-        <div className="hero-content">
-          <p className="eyebrow">MANUFACTURING CAREERS</p>
-          <h1 className="hero-title">
-            Build Your
-            <br />
-            Manufacturing
-            <br />
-            Career
-          </h1>
+    <main className="page">
+      <div className="container" style={{ paddingTop: 24 }}>
+        <p className="muted" style={{ letterSpacing: '0.06em' }}>MANUFACTURING CAREERS</p>
 
-          <p className="lead">
-            Explore careers in manufacturing and learn how to get started.
-          </p>
+        <h1 className="h1" style={{ marginTop: 8 }}>
+          Build Your
+          <br />
+          Manufacturing
+          <br />
+          Career
+        </h1>
 
-          <div className="cards">
-            <Link href="/explore" className="card">
-              <div className="card-icon">⚙️</div>
-              <div>
-                <div className="card-title">Job Opportunities</div>
-                <div className="card-sub">Discover different roles within manufacturing.</div>
-              </div>
-            </Link>
+        <p className="muted" style={{ maxWidth: 720, marginTop: 10 }}>
+          Explore careers in manufacturing and learn how to get started.
+        </p>
 
-            <Link href="/explore?tab=training" className="card">
-              <div className="card-icon">📚</div>
-              <div>
-                <div className="card-title">Required Training</div>
-                <div className="card-sub">Find out what skills & certifications you need.</div>
-              </div>
-            </Link>
+        {/* 3 feature cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, maxWidth: 760, marginTop: 20 }}>
+          <Link href="/explore" className="card" style={{ display: 'block' }}>
+            <div style={{ fontWeight: 800 }}>Job Opportunities</div>
+            <div className="muted">Discover different roles within manufacturing.</div>
+          </Link>
 
-            <Link href="/quiz" className="card">
-              <div className="card-icon">✅</div>
-              <div>
-                <div className="card-title">Take an Interest Quiz</div>
-                <div className="card-sub">Find your best match in manufacturing.</div>
-              </div>
-            </Link>
+          <Link href="/explore?tab=training" className="card" style={{ display: 'block' }}>
+            <div style={{ fontWeight: 800 }}>Required Training</div>
+            <div className="muted">Find out what skills & certifications you need.</div>
+          </Link>
+
+          <Link href="/quiz" className="card" style={{ display: 'block', gridColumn: '1 / -1' }}>
+            <div style={{ fontWeight: 800 }}>Take an Interest Quiz</div>
+            <div className="muted">Find your best match in manufacturing.</div>
+          </Link>
+        </div>
+
+        {/* hero image */}
+        <div style={{ position: 'relative', marginTop: 24 }}>
+          <div
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: -290,
+              width: '48%',
+              maxWidth: 620,
+              minWidth: 320,
+            }}
+          >
+            <div className="card" style={{ padding: 0 }}>
+              <Image
+                src="/hero.jpg"
+                alt="Students exploring manufacturing lab"
+                width={1200}
+                height={900}
+                style={{ width: '100%', height: 'auto', borderRadius: 16 }}
+                priority
+              />
+            </div>
           </div>
         </div>
 
-        <div className="hero-media">
-          <Image
-            src="/hero.jpg"
-            alt="Students exploring manufacturing lab"
-            fill
-            sizes="(min-width: 1024px) 560px, 100vw"
-            priority
-            style={{ objectFit: "cover", borderRadius: 16 }}
-          />
+        {/* chat bar (Client) – no handlers passed from server */}
+        <div style={{ marginTop: 28 }}>
+          <ChatBar />
         </div>
-      </section>
-
-      <form
-        action="/explore"
-        className="chatbar"
-        onSubmit={(e) => {
-          // let the native navigation happen, we only need a quick guard
-          const input = (e.currentTarget.elements.namedItem("q") as HTMLInputElement);
-          if (!input.value.trim()) input.value = "Explore careers";
-        }}
-      >
-        <input
-          name="q"
-          className="chatbar-input"
-          placeholder="Ask me anything about manufacturing careers…"
-          autoComplete="off"
-        />
-        <button className="chatbar-go" aria-label="Go">→</button>
-      </form>
+      </div>
     </main>
   );
 }
