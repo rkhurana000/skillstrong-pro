@@ -1,14 +1,9 @@
+// app/page.tsx
 'use client';
 
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-
-export const metadata = {
-  title: 'SkillStrong — Future-Proof Careers',
-  description:
-    'Explore careers, training, and apprenticeships with a guided AI coach.',
-};
 
 export default function Home() {
   const router = useRouter();
@@ -65,9 +60,7 @@ export default function Home() {
 
           <Link href="/quiz" className="card" style={{ gridColumn: '1 / -1' }}>
             <div style={{ fontWeight: 800 }}>Take an Interest Quiz</div>
-            <div className="muted">
-              Find your best match in manufacturing.
-            </div>
+            <div className="muted">Find your best match in manufacturing.</div>
           </Link>
         </div>
 
