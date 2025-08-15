@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
-type Profile = { id: string; zip: string | null };
+type ProfileRow = { id: string; zip: string | null };
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,26 +24,28 @@ export default function AccountPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
+    let active = true;
 
     async function load() {
       setLoading(true);
+
       const { data: auth } = await supabase.auth.getUser();
       const user = auth?.user ?? null;
-      if (!mounted) return;
+      if (!active) return;
 
       setEmail(user?.email ?? null);
       setUserId(user?.id ?? null);
 
       if (user?.id) {
-        // Try to load a profile row with a 'zip' column. If not present, we just ignore.
+        // No generics on `.from(...)` to avoid build errors across versions
         const { data } = await supabase
-          .from<Profile>("profiles")
+          .from("profiles")
           .select("id, zip")
           .eq("id", user.id)
           .maybeSingle();
 
-        if (data?.zip) setZip(data.zip);
+        const row = data as ProfileRow | null;
+        if (row?.zip) setZip(row.zip);
       }
 
       setLoading(false);
@@ -51,7 +53,7 @@ export default function AccountPage() {
 
     load();
     return () => {
-      mounted = false;
+      active = false;
     };
   }, []);
 
@@ -63,11 +65,10 @@ export default function AccountPage() {
       setSaving(true);
       setMessage(null);
 
-      // Upsert into profiles (expects a 'zip' column).
       await supabase.from("profiles").upsert({ id: userId, zip: zip || null });
 
       setMessage("Saved ✔");
-    } catch (err) {
+    } catch {
       setMessage("Could not save ZIP.");
     } finally {
       setSaving(false);
@@ -76,7 +77,7 @@ export default function AccountPage() {
 
   async function onSignOut() {
     await supabase.auth.signOut();
-    router.push("/"); // back to home after signout
+    router.push("/");
   }
 
   return (
@@ -124,9 +125,7 @@ export default function AccountPage() {
               </button>
 
               {message && (
-                <span className="text-sm text-slate-600">
-                  {message}
-                </span>
+                <span className="text-sm text-slate-600">{message}</span>
               )}
             </div>
           </form>
