@@ -14,6 +14,7 @@ type Msg = {
   followUps?: string[];
 };
 
+// Cast plugins to any to avoid TS type friction between react-markdown/remark-gfm versions
 const REMARK_PLUGINS: any[] = [remarkGfm as any];
 
 const SKILL_CHIPS = [
@@ -91,7 +92,8 @@ export default function ExplorePage() {
   const [provider, setProvider] = useState<Provider>("auto"); // "openai" | "gemini" | "auto"
   const [providerUsed, setProviderUsed] = useState<"openai" | "gemini" | null>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Sentinel element at the bottom of the list for auto-scroll
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   // Persist provider choice
   useEffect(() => {
@@ -102,13 +104,10 @@ export default function ExplorePage() {
     localStorage.setItem("llmProvider", provider);
   }, [provider]);
 
-  // Scroll to bottom on new messages
+  // Always scroll newest message into view
   useEffect(() => {
-    containerRef.current?.scrollTo({
-      top: containerRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [messages]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, loading]);
 
   // Seed from ?chat=...
   useEffect(() => {
@@ -126,7 +125,7 @@ export default function ExplorePage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, provider }), // body override as well
+          body: JSON.stringify({ question, provider }),
         }
       );
 
@@ -293,10 +292,7 @@ export default function ExplorePage() {
     <div className="w-full">
       {header}
 
-      <div
-        ref={containerRef}
-        className="mx-auto mt-6 max-w-[1200px] px-4 sm:px-6 lg:px-8 pb-24"
-      >
+      <div className="mx-auto mt-6 max-w-[1200px] px-4 sm:px-6 lg:px-8 pb-24">
         <div className="flex flex-col gap-4">
           {messages.map((m, i) => (
             <Bubble key={i} role={m.role}>
@@ -347,6 +343,9 @@ export default function ExplorePage() {
           {loading && (
             <div className="text-sm text-slate-500">Thinking…</div>
           )}
+
+          {/* Auto-scroll sentinel */}
+          <div ref={bottomRef} />
         </div>
       </div>
     </div>
