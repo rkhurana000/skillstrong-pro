@@ -8,13 +8,17 @@ import remarkGfm from "remark-gfm";
 export const dynamic = "force-dynamic";
 
 type Provider = "openai" | "gemini" | "auto";
+type ChipFU = { label: string; type?: "chip"; options?: never };
+type ChoiceFU = { label: string; type: "single-choice"; options: string[] };
+type FollowUp = ChipFU | ChoiceFU;
+
 type Msg = {
   role: "user" | "assistant";
   text: string;
-  followUps?: string[];
+  followUps?: FollowUp[];
 };
 
-// Avoid TS frictions between versions
+// avoid TS peer/version mismatches
 const REMARK_PLUGINS: any[] = [remarkGfm as any];
 
 const SKILL_CHIPS = [
@@ -27,7 +31,7 @@ const SKILL_CHIPS = [
   "Supply Chain Management",
   "Design & Engineering",
 ];
-const SALARY_CHIPS = ["<$40k", "$40–60k", "$60–80k+", "$80–100k+"];
+const SALARY_CHIPS = ["<$40k", "$40–60k", "$60–80k+", "$80–100k+" ];
 const TRAINING_CHIPS = ["< 6 months", "6–12 months", "1–2 years", "2–4 years", "Apprenticeship paths"];
 
 function Bubble({ role, children }: { role: "user" | "assistant"; children: React.ReactNode }) {
@@ -48,19 +52,68 @@ function Bubble({ role, children }: { role: "user" | "assistant"; children: Reac
   );
 }
 
-function FollowUps({ items, onPick }: { items?: string[]; onPick: (q: string) => void }) {
+function FollowUps({
+  items,
+  onChip,
+  onChoice,
+}: {
+  items?: FollowUp[];
+  onChip: (label: string) => void;
+  onChoice: (label: string, option: string) => void;
+}) {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
   if (!items?.length) return null;
+
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      {items.slice(0, 6).map((q, i) => (
-        <button
-          key={i}
-          onClick={() => onPick(q)}
-          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
-        >
-          {q}
-        </button>
-      ))}
+      {items.slice(0, 6).map((fu, idx) => {
+        const isChoice = fu.type === "single-choice" && Array.isArray((fu as ChoiceFU).options);
+        const isOpen = openIndex === idx;
+
+        if (isChoice) {
+          const choice = fu as ChoiceFU;
+          return (
+            <div key={idx} className="inline-flex flex-col gap-2">
+              <button
+                className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+                onClick={() => setOpenIndex(isOpen ? null : idx)}
+                aria-expanded={isOpen}
+              >
+                {choice.label}
+              </button>
+              {isOpen && (
+                <div className="flex flex-wrap gap-2">
+                  {choice.options.slice(0, 8).map((opt, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setOpenIndex(null);
+                        onChoice(choice.label, opt);
+                      }}
+                      className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // simple chip
+        const chip = fu as ChipFU;
+        return (
+          <button
+            key={idx}
+            onClick={() => onChip(chip.label)}
+            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
+          >
+            {chip.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -74,6 +127,7 @@ export default function ExplorePage() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // restore provider preference
   useEffect(() => {
     const saved = localStorage.getItem("llmProvider") as Provider | null;
     if (saved) setProvider(saved);
@@ -82,57 +136,53 @@ export default function ExplorePage() {
     localStorage.setItem("llmProvider", provider);
   }, [provider]);
 
+  // auto-scroll to latest
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
 
-  // Seed from ?chat=...
+  // seed from ?chat=
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("chat");
     if (q && q.trim()) ask(q.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function ask(question: string) {
-    // snapshot history BEFORE adding the new user message
-    const historyForServer = [...messages];
+  async function callLLM(question: string, historyForServer: Msg[]) {
+    const res = await fetch(
+      `/api/explore${provider === "auto" ? "" : `?provider=${provider}`}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, provider, history: historyForServer }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "LLM error");
+    const answerMarkdown = String(data?.answerMarkdown || "");
+    const rawFU = Array.isArray(data?.followUps) ? data.followUps : [];
+    // Defensive cast
+    const followUps: FollowUp[] = rawFU.map((f: any) =>
+      typeof f === "object" ? f : { label: String(f || ""), type: "chip" }
+    );
+    setProviderUsed(
+      data?.providerUsed === "openai" || data?.providerUsed === "gemini"
+        ? data.providerUsed
+        : null
+    );
+    return { answerMarkdown, followUps };
+  }
 
-    // update UI immediately
+  async function ask(question: string) {
+    const historyForServer = [...messages]; // full prior context
+
+    // show user's message immediately
     setMessages((m) => [...m, { role: "user", text: question }]);
     setLoading(true);
 
     try {
-      const res = await fetch(
-        `/api/explore${provider === "auto" ? "" : `?provider=${provider}`}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            provider,
-            history: historyForServer, // send prior turns as context
-          }),
-        }
-      );
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "LLM error");
-
-      const answerMarkdown = String(data?.answerMarkdown || "");
-      const followUps: string[] = Array.isArray(data?.followUps)
-        ? data.followUps.slice(0, 6)
-        : [];
-
-      setProviderUsed(
-        data?.providerUsed === "openai" || data?.providerUsed === "gemini"
-          ? data.providerUsed
-          : null
-      );
-
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", text: answerMarkdown, followUps },
-      ]);
+      const { answerMarkdown, followUps } = await callLLM(question, historyForServer);
+      setMessages((m) => [...m, { role: "assistant", text: answerMarkdown, followUps }]);
     } catch (err: any) {
       setMessages((m) => [
         ...m,
@@ -147,6 +197,16 @@ export default function ExplorePage() {
     }
   }
 
+  // Follow-up handlers
+  function onChip(label: string) {
+    ask(label);
+  }
+  function onChoice(label: string, option: string) {
+    // Create a concise selection message so the model sees the choice in context
+    const selection = `Selection — ${label}: ${option}`;
+    ask(selection);
+  }
+
   const header = useMemo(
     () => (
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -156,11 +216,11 @@ export default function ExplorePage() {
               Manufacturing Career Explorer
             </h1>
             <p className="mt-2 text-slate-600">
-              Welcome! How would you like to explore career paths in manufacturing?
+              Click a topic, choose an option, or ask anything about careers, training, and apprenticeships in manufacturing.
             </p>
           </div>
 
-          {/* Provider selector */}
+          {/* Provider selector (no redeploy needed) */}
           <div className="mt-2 flex items-center gap-2">
             <span className="text-sm text-slate-500">Model:</span>
             <div className="inline-flex rounded-full border border-slate-300 bg-white p-1">
@@ -216,13 +276,13 @@ export default function ExplorePage() {
             </button>
           </div>
 
-          {/* Chips for selected mode */}
+          {/* Chips per mode */}
           {mode === "skills" && (
             <div className="mt-4 flex flex-wrap gap-3">
               {SKILL_CHIPS.map((s) => (
                 <button
                   key={s}
-                  onClick={() => ask(`Explain the skill area: ${s}`)}
+                  onClick={() => ask(`Explore skill area: ${s}`)}
                   className="rounded-full border border-slate-300 bg-white px-4 py-2 hover:bg-slate-50"
                 >
                   {s}
@@ -230,7 +290,6 @@ export default function ExplorePage() {
               ))}
             </div>
           )}
-
           {mode === "salary" && (
             <div className="mt-4 flex flex-wrap gap-3">
               {SALARY_CHIPS.map((s) => (
@@ -244,7 +303,6 @@ export default function ExplorePage() {
               ))}
             </div>
           )}
-
           {mode === "training" && (
             <div className="mt-4 flex flex-wrap gap-3">
               {TRAINING_CHIPS.map((s) => (
@@ -283,20 +341,24 @@ export default function ExplorePage() {
                   <ReactMarkdown
                     remarkPlugins={REMARK_PLUGINS}
                     components={{
-                      h2: (props) => <h2 className="text-xl sm:text-2xl font-semibold mt-4 mb-2" {...props} />,
-                      h3: (props) => <h3 className="text-lg font-semibold mt-3 mb-1" {...props} />,
-                      p: (props) => <p className="mt-2 leading-relaxed" {...props} />,
-                      ul: (props) => <ul className="list-disc ml-6 space-y-1 mt-2" {...props} />,
-                      ol: (props) => <ol className="list-decimal ml-6 space-y-1 mt-2" {...props} />,
-                      li: (props) => <li className="ml-1" {...props} />,
+                      h2: (p) => <h2 className="text-xl sm:text-2xl font-semibold mt-4 mb-2" {...p} />,
+                      h3: (p) => <h3 className="text-lg font-semibold mt-3 mb-1" {...p} />,
+                      p: (p) => <p className="mt-2 leading-relaxed" {...p} />,
+                      ul: (p) => <ul className="list-disc ml-6 space-y-1 mt-2" {...p} />,
+                      ol: (p) => <ol className="list-decimal ml-6 space-y-1 mt-2" {...p} />,
+                      li: (p) => <li className="ml-1" {...p} />,
                       hr: () => <hr className="my-4 border-slate-200" />,
-                      strong: (props) => <strong className="font-semibold" {...props} />,
+                      strong: (p) => <strong className="font-semibold" {...p} />,
                     }}
                   >
                     {m.text}
                   </ReactMarkdown>
 
-                  <FollowUps items={m.followUps} onPick={(q) => ask(q)} />
+                  <FollowUps
+                    items={m.followUps}
+                    onChip={(label) => onChip(label)}
+                    onChoice={(label, option) => onChoice(label, option)}
+                  />
                 </>
               ) : (
                 <div className="whitespace-pre-wrap">{m.text}</div>
