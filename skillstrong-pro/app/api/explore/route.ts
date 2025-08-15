@@ -2,7 +2,12 @@
 
 import { NextResponse } from "next/server";
 
-// Lazy imports so the wrong SDK isn’t bundled if not used
+type ExploreBody = {
+  question?: string;
+  provider?: "openai" | "gemini" | "auto";
+};
+
+// Lazy imports so we don’t bundle unused SDKs
 async function withOpenAI() {
   const { default: OpenAI } = await import("openai");
   return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -13,20 +18,25 @@ async function withGemini() {
   return new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 }
 
-type ExploreBody = { question?: string };
+function pickProviderExplicit(p?: string | null) {
+  if (!p) return null;
+  const v = p.toLowerCase();
+  if (v === "openai" || v === "gemini") return v as "openai" | "gemini";
+  return null;
+}
 
-// Choose provider from env
-function pickProvider() {
+function pickProviderFallback() {
+  const configuredOpenAI = !!process.env.OPENAI_API_KEY;
+  const configuredGemini = !!process.env.GEMINI_API_KEY;
+
+  // If PROVIDER is set, honor it (but still only if that key exists)
   const wanted = (process.env.PROVIDER || "").toLowerCase();
-  const hasOpenAI = !!process.env.OPENAI_API_KEY;
-  const hasGemini = !!process.env.GEMINI_API_KEY;
+  if (wanted === "openai" && configuredOpenAI) return "openai" as const;
+  if (wanted === "gemini" && configuredGemini) return "gemini" as const;
 
-  if (wanted === "openai" && hasOpenAI) return "openai" as const;
-  if (wanted === "gemini" && hasGemini) return "gemini" as const;
-
-  // Fallbacks
-  if (hasOpenAI) return "openai" as const;
-  if (hasGemini) return "gemini" as const;
+  // Otherwise, prefer OpenAI if present, else Gemini
+  if (configuredOpenAI) return "openai" as const;
+  if (configuredGemini) return "gemini" as const;
 
   return null;
 }
@@ -35,50 +45,45 @@ const SYSTEM_STYLE = `
 You are a friendly manufacturing career guide for the U.S.
 
 Return your answer as Markdown that is EASY TO SCAN:
-- Use short sections with **H2 headings** (##).
-- Use bulleted lists with blank lines between sections.
-- For each role, prefer the format:
+- Use **H2 headings** (##) for sections like “CNC Machinist”, “Quality Technician”, etc.
+- For each role, include a compact bullet list with blank lines between sections:
+  - **Duties:** …
+  - **Training:** …
+  - **Career Outlook:** …
+  - **Common Employers:** …
+  - **Salary:** …
 
-### Role Name
-- **Duties:** …
-- **Training:** …
-- **Career Outlook:** …
-- **Common Employers:** …
-- **Salary:** …
-
-Keep answers concise and practical. Avoid filler and apologies.
+Keep answers practical and concise.
 `;
 
 const JSON_INSTRUCTIONS = `
 RESPONSE FORMAT (IMPORTANT):
-Return **only** a JSON object in a triple-backtick \`json\` code fence:
+Return **only** a JSON object inside a triple-backtick \`json\` code fence:
 
 \`\`\`json
 {
   "markdown": "<your Markdown answer>",
-  "followUps": ["<clickable follow-up 1>", "... up to 6 total"]
+  "followUps": ["<short clickable follow-up>", "... up to 6"]
 }
 \`\`\`
 
 Rules:
-- "markdown": the full answer in Markdown, using headings and bullet lists with blank lines between sections.
-- "followUps": 3–6 short, specific questions the user might ask next (no more than 6).
-- Nothing outside the JSON code fence.
+- "markdown": full Markdown with headings and bulleted sections, add blank lines between sections for readability.
+- "followUps": 3–6 short, specific questions the user might ask next (max 6).
+- No text outside the JSON code fence.
 `;
 
 function extractFirstJSONBlock(text: string): { markdown?: string; followUps?: string[] } | null {
-  // Prefer fenced JSON
   const fenced = text.match(/```json\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : text;
 
-  // Try to parse the first {...} block
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
     try {
       return JSON.parse(candidate.slice(start, end + 1));
     } catch {
-      // fallthrough
+      return null;
     }
   }
   return null;
@@ -86,22 +91,43 @@ function extractFirstJSONBlock(text: string): { markdown?: string; followUps?: s
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as ExploreBody;
-    const question = (body?.question || "").trim();
-
-    if (!question) {
-      return NextResponse.json(
-        { error: "Missing 'question'." },
-        { status: 400 }
-      );
+    let body: ExploreBody = {};
+    try {
+      body = (await req.json()) as ExploreBody;
+    } catch {
+      // ignore (e.g., empty body)
     }
 
-    const provider = pickProvider();
+    const url = new URL(req.url);
+    const qsProvider = url.searchParams.get("provider");
+    const explicit =
+      pickProviderExplicit(body.provider) || pickProviderExplicit(qsProvider);
+
+    // If explicit provider requested, use it (only if its key exists)
+    let provider: "openai" | "gemini" | null = null;
+    if (explicit) {
+      if (explicit === "openai" && process.env.OPENAI_API_KEY) provider = "openai";
+      if (explicit === "gemini" && process.env.GEMINI_API_KEY) provider = "gemini";
+      if (!provider) {
+        return NextResponse.json(
+          { error: `Provider "${explicit}" selected but no API key configured.` },
+          { status: 400 },
+        );
+      }
+    } else {
+      provider = pickProviderFallback();
+    }
+
     if (!provider) {
       return NextResponse.json(
         { error: "No AI provider configured. Add OPENAI_API_KEY or GEMINI_API_KEY." },
-        { status: 500 }
+        { status: 500 },
       );
+    }
+
+    const question = (body.question || "").trim();
+    if (!question) {
+      return NextResponse.json({ error: "Missing 'question'." }, { status: 400 });
     }
 
     let raw = "";
@@ -128,7 +154,7 @@ export async function POST(req: Request) {
       const model = genAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
-          maxOutputTokens: 900, // must be >= 16 to satisfy their minimum
+          maxOutputTokens: 900, // must be >= 16
           temperature: 0.6,
         },
       });
@@ -142,12 +168,12 @@ export async function POST(req: Request) {
 
     const parsed = extractFirstJSONBlock(raw);
     if (!parsed?.markdown) {
-      // soft fallback: send whatever we got as plain markdown
       return NextResponse.json({
         answerMarkdown:
           raw ||
           "Sorry — I couldn’t parse the model response. Please try another option.",
         followUps: [],
+        providerUsed: provider,
       });
     }
 
@@ -156,15 +182,11 @@ export async function POST(req: Request) {
       ? parsed.followUps.filter((s) => typeof s === "string").slice(0, 6)
       : [];
 
-    return NextResponse.json({ answerMarkdown, followUps });
+    return NextResponse.json({ answerMarkdown, followUps, providerUsed: provider });
   } catch (err: any) {
     return NextResponse.json(
-      {
-        error:
-          err?.message ||
-          "Unexpected error generating the response. Please try again.",
-      },
-      { status: 500 }
+      { error: err?.message || "Unexpected error. Please try again." },
+      { status: 500 },
     );
   }
 }
