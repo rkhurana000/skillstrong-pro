@@ -88,3 +88,31 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica
 /* Explore page: headline spacing */
 .explore-page h1{ margin-bottom: 8px; }
 .explore-page p.lead{ color:#475569; /* slate-600 */ margin-bottom: 16px; }
+
+/* --- Chat Markdown (spacing + indents) --- */
+.md :where(h2,h3){
+  margin-top: 1rem;
+  margin-bottom: .5rem;
+  font-weight: 700;
+}
+.md p{
+  margin: .5rem 0;
+  line-height: 1.7;
+}
+.md ul{
+  margin: .5rem 0 .75rem 1.25rem;
+  list-style: disc;
+}
+.md ol{
+  margin: .5rem 0 .75rem 1.25rem;
+  list-style: decimal;
+}
+.md li{ margin: .25rem 0; }
+.md strong{ font-weight: 600; }
+.md blockquote{
+  border-left: 4px solid rgba(0,0,0,.1);
+  padding-left: .75rem;
+  color: #475569; /* slate-600 */
+  font-style: italic;
+  margin: .75rem 0;
+}
