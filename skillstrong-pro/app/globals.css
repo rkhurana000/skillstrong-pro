@@ -4,127 +4,44 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: #ffffff;
-  --text: #0f172a;        /* slate-900 */
-  --muted: #64748b;       /* slate-500 */
-  --line: #e9eef5;
-  --card: #ffffff;
-  --shadow: 0 10px 30px rgba(2, 8, 23, 0.06);
-  --brand: #0f172a;
-  --blue: #2563eb;
+:root{
+  --bg:#fff;--text:#0f172a;--muted:#64748b;--line:#e9eef5;--card:#fff;
+  --shadow:0 10px 30px rgba(2,8,23,.06);--blue:#2563eb;--brand:#0f172a;
 }
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);}
+*{box-sizing:border-box}
+body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
 
-* { box-sizing: border-box; }
-html, body { padding: 0; margin: 0; background: var(--bg); color: var(--text); }
-body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+.container{max-width:1200px;margin:0 auto;padding:0 24px}
 
-.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+/* Header */
+.site-header{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--line)}
+.site-header__inner{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{font-weight:800;font-size:22px;letter-spacing:-.02em;color:var(--brand);text-decoration:none}
+.site-nav a{margin-left:28px;color:#4b5563;text-decoration:none;font-weight:500}
+.site-nav a:hover{color:var(--text)}
 
-/* ---------- Header ---------- */
-.site-header { position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid var(--line); }
-.site-header__inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-.brand { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: var(--brand); text-decoration: none; }
-.site-nav a { margin-left: 28px; color: #4b5563; text-decoration: none; font-weight: 500; }
-.site-nav a:hover { color: var(--text); }
+/* Hero */
+.hero{padding:40px 0 56px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.display-1{font-size:clamp(40px,6vw,68px);line-height:1.05;font-weight:800;letter-spacing:-.02em;margin:0 0 16px}
+.lede{font-size:18px;color:var(--muted);margin:0 0 28px}
 
-/* ---------- Hero ---------- */
-.hero { padding: 40px 0 56px; }
-.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
-.display-1 { font-size: clamp(40px, 6vw, 68px); line-height: 1.05; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 16px; }
-.lede { font-size: 18px; color: var(--muted); margin: 0 0 28px; }
+/* Cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 18px;
+  display:grid;grid-template-columns:40px 1fr;gap:12px;text-decoration:none;color:inherit;box-shadow:var(--shadow)}
+.card:hover{transform:translateY(-1px);transition:transform .15s ease}
+.card-icon{font-size:22px;line-height:40px;text-align:center}
+.card-body h3{margin:0 0 6px;font-size:18px;font-weight:700}
+.card-body p{margin:0;color:var(--muted);font-size:15px}
 
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1fr 520px;
-  gap: 28px;
-  align-items: start;
-}
+/* Chat bar */
+.chatbar{width:100%;display:grid;grid-template-columns:1fr 52px;background:#fff;border:1px solid var(--line);
+  border-radius:999px;box-shadow:var(--shadow);padding:6px}
+.chatbar input{width:100%;border:0;outline:0;font-size:16px;padding:16px 16px 16px 18px;background:transparent}
+.chatbar button{height:40px;width:40px;border-radius:999px;border:0;cursor:pointer;background:var(--blue);color:#fff;font-size:18px}
 
-.hero-image-wrap { position: relative; }
-.hero-image { width: 100%; height: auto; border-radius: 22px; box-shadow: var(--shadow); }
-
-/* ---------- Cards ---------- */
-.cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
-}
-
-.card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 16px 18px;
-  display: grid;
-  grid-template-columns: 40px 1fr;
-  gap: 12px;
-  text-decoration: none;
-  color: inherit;
-  box-shadow: var(--shadow);
-}
-.card:hover { transform: translateY(-1px); transition: transform .15s ease; }
-
-.card-icon { font-size: 22px; line-height: 40px; text-align: center; }
-.card-body h3 { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
-.card-body p { margin: 0; color: var(--muted); font-size: 15px; }
-.card-wide { grid-column: 1 / -1; }
-
-/* ---------- Chat bar ---------- */
-.chatbar-wrap { margin-top: 26px; }
-.chatbar {
-  width: 100%;
-  display: grid;
-  grid-template-columns: 1fr 52px;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-  padding: 6px;
-}
-.chatbar input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  font-size: 16px;
-  padding: 16px 16px 16px 18px;
-  background: transparent;
-}
-.chatbar button {
-  height: 40px;
-  width: 40px;
-  border-radius: 999px;
-  border: 0;
-  cursor: pointer;
-  background: var(--blue);
-  color: #fff;
-  font-size: 18px;
-}
-
-@media (max-width: 1024px) {
-  .hero-grid { grid-template-columns: 1fr; }
-  .cards { grid-template-columns: 1fr; }
-}
-
-/* Nudge hero image up on desktop */
-.hero-grid { align-items: start; }            /* ensure top alignment */
-.hero-image-wrap { 
-  align-self: start; 
-  margin-top: -56px;                           /* adjust this number to taste: -40 ~ -80 */
-}
-
-/* Reset on smaller screens */
-@media (max-width: 1024px) {
-  .hero-image-wrap { margin-top: 0; }
-}
-/* ---- TEMP OVERRIDES to unstick chat bar and ensure hero is visible ---- */
-.chatbar {
-  position: static !important;   /* was sticky/absolute in an earlier version */
-  top: auto !important;
-}
-
-/* If you previously added any custom .hero-wrap rules, null them out */
-.hero-wrap, .hero-wrap img {
-  margin: 0 !important;
-  padding: 0 !important;
+/* Nudge hero image up on large screens only (no effect on phones) */
+@media (min-width:1024px){
+  .hero-image-wrap{margin-top:-56px}
 }
