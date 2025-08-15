@@ -2,8 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-// NOTE: Vercel sometimes has a vfile type mismatch with remark-gfm.
-// Casting to any avoids the build-time type error while keeping GFM features.
+// Vercel sometimes has a vfile type mismatch with remark-gfm; cast to any.
 import remarkGfm from 'remark-gfm';
 
 type ModelProvider = 'gemini' | 'openai';
@@ -80,6 +79,66 @@ function FollowUps({
   );
 }
 
+// Safely pull a readable answer out of whatever shape the API returns
+function pickContent(raw: any): string {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+
+  // common keys we might use
+  const candidates: any[] = [
+    raw.content,
+    raw.answer,
+    raw.text,
+    raw.message,
+    raw.markdown,
+    raw.output_text,
+    raw.output,
+    raw.result?.text,
+    raw.result?.output,
+    raw.choices?.[0]?.message?.content, // OpenAI classic
+    Array.isArray(raw.candidates)
+      ? raw.candidates
+          ?.map((c: any) =>
+            Array.isArray(c?.content?.parts)
+              ? c.content.parts.map((p: any) => p?.text || '').join('\n\n')
+              : c?.content?.parts?.text || ''
+          )
+          .join('\n\n')
+      : undefined, // Gemini
+  ].filter(Boolean);
+
+  const first = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
+  if (typeof first === 'string') return first;
+
+  // as a last resort, show nothing (UI will print a polite apology)
+  return '';
+}
+
+function pickFollowups(raw: any): string[] {
+  if (!raw) return [];
+  const direct =
+    raw.followups ??
+    raw.followUps ??
+    raw.suggestions ??
+    raw.next ??
+    raw.nextSteps ??
+    raw.suggested_questions;
+  if (Array.isArray(direct)) return direct.filter(Boolean).slice(0, 6);
+
+  // If the API passes a single text blob that includes "FOLLOWUPS: [...]"
+  const fromText = pickContent(raw);
+  const m = fromText.match(/FOLLOWUPS:\s*(\[[\s\S]*?\])/i);
+  if (m) {
+    try {
+      const arr = JSON.parse(m[1]);
+      if (Array.isArray(arr)) return arr.filter(Boolean).slice(0, 6);
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
+
 export default function ExplorePage() {
   // —— UI state
   const [mode, setMode] = useState<'skills' | 'salary' | 'training'>('skills');
@@ -95,13 +154,17 @@ export default function ExplorePage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, loading]);
 
-  // example seed chips
+  // seeds
   const salaryBuckets = ['$40–60k', '$60–80k+', '$80–100k+'];
   const skillBuckets = [
     'Welding',
     'CNC Machining',
     'Quality Control',
     'Automation & Robotics',
+    'Supply Chain Management',
+    'Maintenance & Repair',
+    'Data Analysis',
+    'Design & Engineering',
   ];
   const trainingBuckets = ['< 3 months', '3–12 months', '1–2 years'];
 
@@ -111,69 +174,59 @@ export default function ExplorePage() {
     return 'Explore by training length';
   }, [mode]);
 
-// ⬇︎ replace your current send() with this one
-async function send(userText: string) {
-  if (!userText.trim()) return;
+  async function send(userText: string) {
+    if (!userText.trim()) return;
 
-  const next = [...messages, { role: 'user' as const, content: userText }];
-  setMessages(next);
-  setLoading(true);
+    const next = [...messages, { role: 'user' as const, content: userText }];
+    setMessages(next);
+    setLoading(true);
 
-  try {
-    const res = await fetch('/api/explore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider,       // pick Gemini/OpenAI without redeploy
-        messages: next, // full context so follow-ups are contextual
-        intent: mode,   // hint to the server (skills/salary/training)
-      }),
-    });
+    try {
+      const res = await fetch('/api/explore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,       // Gemini/OpenAI without redeploy
+          messages: next, // full context
+          intent: mode,   // skills/salary/training
+        }),
+      });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => 'Request failed');
-      throw new Error(errText || `HTTP ${res.status}`);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Request failed');
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+
+      const raw = await res.json();
+
+      const content = pickContent(raw);
+      const followups = pickFollowups(raw);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            typeof content === 'string' && content.trim().length > 0
+              ? content
+              : 'Sorry — I didn’t get a readable answer. Please try again.',
+          followups: Array.isArray(followups) ? followups.slice(0, 6) : [],
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'Sorry — I hit a snag generating that. Please try again, or pick a different option.',
+          followups: [],
+        },
+      ]);
+    } finally {
+      setLoading(false);
     }
-
-    const raw = await res.json();
-
-    // 🔑 normalize server keys so the UI always has something to show
-    const content: string =
-      raw?.content ??
-      raw?.answer ??
-      raw?.text ??
-      raw?.message ??
-      raw?.markdown ??
-      (typeof raw === 'string' ? raw : '');
-
-    const followups: string[] =
-      raw?.followups ?? raw?.suggestions ?? raw?.next ?? [];
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'assistant',
-        content:
-          (typeof content === 'string' && content.trim().length > 0)
-            ? content
-            : 'Sorry — I didn’t get a readable answer. Please try again.',
-        followups: Array.isArray(followups) ? followups.slice(0, 6) : [],
-      },
-    ]);
-  } catch (e) {
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'assistant',
-        content:
-          'Sorry — I hit a snag generating that. Please try again, or pick a different option.',
-        followups: [],
-      },
-    ]);
-  } finally {
-    setLoading(false);
   }
-}
 
   const handleSeed = (label: string) => {
     // Turn a chip into a natural prompt
@@ -238,18 +291,19 @@ async function send(userText: string) {
             </Chip>
           </div>
 
-          <div className="mt-4 text-slate-600 font-medium">
-            {headerText}
-          </div>
+          <div className="mt-4 text-slate-600 font-medium">{headerText}</div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {(mode === 'salary' ? salaryBuckets : mode === 'skills' ? skillBuckets : trainingBuckets).map(
-              (label) => (
-                <Chip key={label} onClick={() => handleSeed(label)}>
-                  {label}
-                </Chip>
-              ),
-            )}
+            {(mode === 'salary'
+              ? salaryBuckets
+              : mode === 'skills'
+              ? skillBuckets
+              : trainingBuckets
+            ).map((label) => (
+              <Chip key={label} onClick={() => handleSeed(label)}>
+                {label}
+              </Chip>
+            ))}
           </div>
         </SectionCard>
       </div>
@@ -268,42 +322,54 @@ async function send(userText: string) {
               <div className="max-w-[95%] w-full">
                 <AnswerCard>
                   <ReactMarkdown
-                    // fix Vercel type clash by passing any-typed plugins
                     remarkPlugins={MARKDOWN_PLUGINS}
                     components={{
                       h1: (p) => (
-                        <h1 className="text-xl md:text-2xl font-semibold mt-1 mb-3" {...p} />
+                        <h1
+                          className="text-xl md:text-2xl font-semibold mt-1 mb-3"
+                          {...p}
+                        />
                       ),
                       h2: (p) => (
-                        <h2 className="text-lg md:text-xl font-semibold mt-2 mb-2" {...p} />
+                        <h2
+                          className="text-lg md:text-xl font-semibold mt-2 mb-2"
+                          {...p}
+                        />
                       ),
                       p: (p) => <p className="leading-7 mb-3" {...p} />,
                       li: (p) => <li className="mb-1" {...p} />,
                       ul: (p) => <ul className="list-disc pl-5 mb-3" {...p} />,
-                      ol: (p) => <ol className="list-decimal pl-5 mb-3" {...p} />,
+                      ol: (p) => (
+                        <ol className="list-decimal pl-5 mb-3" {...p} />
+                      ),
                       table: (p) => (
                         <div className="overflow-x-auto">
-                          <table className="min-w-full text-sm border border-slate-200 my-3" {...p} />
+                          <table
+                            className="min-w-full text-sm border border-slate-200 my-3"
+                            {...p}
+                          />
                         </div>
                       ),
-                      th: (p) => <th className="border px-3 py-2 bg-slate-100" {...p} />,
+                      th: (p) => (
+                        <th className="border px-3 py-2 bg-slate-100" {...p} />
+                      ),
                       td: (p) => <td className="border px-3 py-2" {...p} />,
                       code: (p) => (
-                        <code className="rounded bg-slate-100 px-1 py-0.5" {...p} />
+                        <code
+                          className="rounded bg-slate-100 px-1 py-0.5"
+                          {...p}
+                        />
                       ),
                     }}
                   >
                     {m.content}
                   </ReactMarkdown>
 
-                  <FollowUps
-                    items={m.followups}
-                    onPick={(q) => send(q)}
-                  />
+                  <FollowUps items={m.followups} onPick={(q) => send(q)} />
                 </AnswerCard>
               </div>
             </div>
-          ),
+          )
         )}
 
         {loading && (
