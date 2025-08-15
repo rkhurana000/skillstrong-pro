@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -48,12 +48,17 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
+  // always scroll to latest
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
 
   const send = async (userText: string) => {
-    const newMsgs = [...messages, { role: "user", content: userText }];
+    // *** typing fix: make sure role is a literal and array is typed as Msg[] ***
+    const newMsgs: Msg[] = [
+      ...messages,
+      { role: "user" as const, content: userText },
+    ];
     setMessages(newMsgs);
     setLoading(true);
     try {
@@ -66,16 +71,17 @@ export default function ExplorePage() {
         answerMarkdown: string;
         followUps: Follow[];
       };
+      // *** typing fix here as well ***
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.answerMarkdown || "…" },
+        { role: "assistant" as const, content: data.answerMarkdown || "…" },
       ]);
       setFollowUps(Array.isArray(data.followUps) ? data.followUps : []);
     } catch {
       setMessages((prev) => [
         ...prev,
         {
-          role: "assistant",
+          role: "assistant" as const,
           content:
             "Sorry — I hit a snag generating that. Please try again or switch models.",
         },
@@ -242,7 +248,7 @@ export default function ExplorePage() {
         )}
       </div>
 
-      {/* Dynamic follow-ups: always from the newest assistant turn */}
+      {/* Dynamic follow-ups */}
       {followUps.length > 0 && (
         <div className="rounded-2xl bg-slate-100/60 p-4 ring-1 ring-black/5">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -259,9 +265,7 @@ export default function ExplorePage() {
         </div>
       )}
 
-      {loading && (
-        <div className="text-sm text-slate-500">Generating…</div>
-      )}
+      {loading && <div className="text-sm text-slate-500">Generating…</div>}
 
       <div ref={bottomRef} className="h-px" />
     </div>
