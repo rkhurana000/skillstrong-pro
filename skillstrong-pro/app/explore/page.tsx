@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 
 export const dynamic = "force-dynamic";
 
+type Provider = "openai" | "gemini" | "auto";
 type Msg = {
   role: "user" | "assistant";
   text: string;
@@ -85,11 +86,21 @@ function FollowUps({
 
 export default function ExplorePage() {
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [mode, setMode] = useState<"skills" | "salary" | "training" | null>(
-    null
-  );
+  const [mode, setMode] = useState<"skills" | "salary" | "training" | null>(null);
   const [loading, setLoading] = useState(false);
+  const [provider, setProvider] = useState<Provider>("auto"); // "openai" | "gemini" | "auto"
+  const [providerUsed, setProviderUsed] = useState<"openai" | "gemini" | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Persist provider choice
+  useEffect(() => {
+    const saved = localStorage.getItem("llmProvider") as Provider | null;
+    if (saved) setProvider(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("llmProvider", provider);
+  }, [provider]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -102,9 +113,7 @@ export default function ExplorePage() {
   // Seed from ?chat=...
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get("chat");
-    if (q && q.trim()) {
-      ask(q.trim());
-    }
+    if (q && q.trim()) ask(q.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -112,19 +121,28 @@ export default function ExplorePage() {
     setMessages((m) => [...m, { role: "user", text: question }]);
     setLoading(true);
     try {
-      const res = await fetch("/api/explore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
-      });
-      const data = await res.json();
+      const res = await fetch(
+        `/api/explore${provider === "auto" ? "" : `?provider=${provider}`}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question, provider }), // body override as well
+        }
+      );
 
+      const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "LLM error");
 
       const answerMarkdown = String(data?.answerMarkdown || "");
       const followUps: string[] = Array.isArray(data?.followUps)
         ? data.followUps.slice(0, 6)
         : [];
+
+      setProviderUsed(
+        data?.providerUsed === "openai" || data?.providerUsed === "gemini"
+          ? data.providerUsed
+          : null
+      );
 
       setMessages((m) => [
         ...m,
@@ -147,12 +165,37 @@ export default function ExplorePage() {
   const header = useMemo(
     () => (
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="mt-6 text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-          Manufacturing Career Explorer
-        </h1>
-        <p className="mt-3 text-slate-600">
-          Welcome! How would you like to explore career paths in manufacturing?
-        </p>
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+              Manufacturing Career Explorer
+            </h1>
+            <p className="mt-2 text-slate-600">
+              Welcome! How would you like to explore career paths in manufacturing?
+            </p>
+          </div>
+
+          {/* Provider selector */}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-sm text-slate-500">Model:</span>
+            <div className="inline-flex rounded-full border border-slate-300 bg-white p-1">
+              {(["auto", "openai", "gemini"] as Provider[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setProvider(p)}
+                  className={[
+                    "px-3 py-1 text-sm rounded-full transition",
+                    provider === p
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-700 hover:bg-slate-50",
+                  ].join(" ")}
+                >
+                  {p === "auto" ? "Auto" : p === "openai" ? "OpenAI" : "Gemini"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
           <div className="flex flex-wrap gap-3">
@@ -235,9 +278,15 @@ export default function ExplorePage() {
             </div>
           )}
         </div>
+
+        {providerUsed && (
+          <div className="mt-2 text-xs text-slate-500">
+            Last response from: <span className="font-semibold">{providerUsed}</span>
+          </div>
+        )}
       </div>
     ),
-    [mode]
+    [mode, provider, providerUsed]
   );
 
   return (
@@ -272,20 +321,12 @@ export default function ExplorePage() {
                         <p className="mt-2 leading-relaxed" {...props} />
                       ),
                       ul: ({ node, ...props }) => (
-                        <ul
-                          className="list-disc ml-6 space-y-1 mt-2"
-                          {...props}
-                        />
+                        <ul className="list-disc ml-6 space-y-1 mt-2" {...props} />
                       ),
                       ol: ({ node, ...props }) => (
-                        <ol
-                          className="list-decimal ml-6 space-y-1 mt-2"
-                          {...props}
-                        />
+                        <ol className="list-decimal ml-6 space-y-1 mt-2" {...props} />
                       ),
-                      li: ({ node, ...props }) => (
-                        <li className="ml-1" {...props} />
-                      ),
+                      li: ({ node, ...props }) => <li className="ml-1" {...props} />,
                       strong: ({ node, ...props }) => (
                         <strong className="font-semibold" {...props} />
                       ),
