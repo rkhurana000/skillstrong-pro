@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   try {
     if (provider === "openai") {
-      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+      const model = process.env.OPENAI_MODEL || "gpt-4o";
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           model,
           temperature: 0.2,
+          max_output_tokens: 4096,
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             ...history,
