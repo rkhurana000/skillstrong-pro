@@ -1,385 +1,291 @@
-'use client';
+"use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-// Vercel sometimes has a vfile type mismatch with remark-gfm; cast to any.
-import remarkGfm from 'remark-gfm';
+import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
-type ModelProvider = 'gemini' | 'openai';
-type Role = 'user' | 'assistant';
+// --- Types must match the server ---
+type Role = "user" | "assistant";
+type Msg = { role: Role; content: string };
+type FollowUp = { label: string; payload: string; choices?: string[] };
+type ExploreResponse = { markdown: string; followUps: FollowUp[] };
 
-type ChatMessage = {
-  role: Role;
-  content: string;
-  followups?: string[];
-};
-
-const MARKDOWN_PLUGINS = [remarkGfm as unknown as any];
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white/70 shadow-sm backdrop-blur p-4 md:p-6">
-      {children}
-    </div>
-  );
-}
-
-function AnswerCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-6 shadow-sm">
-      {children}
-    </div>
-  );
-}
-
+// UI chips
 function Chip({
   children,
   onClick,
-  active = false,
+  selected,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
-  active?: boolean;
+  selected?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={[
-        'px-4 py-2 rounded-full border text-sm md:text-base transition',
-        active
-          ? 'bg-slate-900 text-white border-slate-900'
-          : 'bg-white hover:bg-slate-50 border-slate-200',
-      ].join(' ')}
+      className={`rounded-full px-4 py-2 text-sm border transition ${
+        selected
+          ? "bg-blue-600 text-white border-blue-600"
+          : "bg-white hover:bg-blue-50 border-neutral-300"
+      }`}
     >
       {children}
     </button>
   );
 }
 
-function FollowUps({
-  items,
-  onPick,
-}: {
-  items?: string[];
-  onPick: (text: string) => void;
-}) {
-  if (!items || items.length === 0) return null;
+// Pretty card for assistant answers
+function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
-      {items.slice(0, 6).map((q, i) => (
-        <button
-          key={`${q}-${i}`}
-          onClick={() => onPick(q)}
-          className="px-4 py-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-sm"
-        >
-          {q}
-        </button>
-      ))}
+    <div className="rounded-2xl bg-neutral-50/70 shadow-sm border border-neutral-200 p-4 md:p-6">
+      {children}
     </div>
   );
 }
 
-// Safely pull a readable answer out of whatever shape the API returns
-function pickContent(raw: any): string {
-  if (!raw) return '';
-  if (typeof raw === 'string') return raw;
+const SKILLS = [
+  "Welding",
+  "CNC Machining",
+  "Quality Control",
+  "Automation & Robotics",
+  "Supply Chain Management",
+  "Maintenance & Repair",
+  "Data Analysis",
+  "Design & Engineering",
+];
 
-  // common keys we might use
-  const candidates: any[] = [
-    raw.content,
-    raw.answer,
-    raw.text,
-    raw.message,
-    raw.markdown,
-    raw.output_text,
-    raw.output,
-    raw.result?.text,
-    raw.result?.output,
-    raw.choices?.[0]?.message?.content, // OpenAI classic
-    Array.isArray(raw.candidates)
-      ? raw.candidates
-          ?.map((c: any) =>
-            Array.isArray(c?.content?.parts)
-              ? c.content.parts.map((p: any) => p?.text || '').join('\n\n')
-              : c?.content?.parts?.text || ''
-          )
-          .join('\n\n')
-      : undefined, // Gemini
-  ].filter(Boolean);
+type Tab = "skills" | "salary" | "training";
 
-  const first = candidates.find((v) => typeof v === 'string' && v.trim().length > 0);
-  if (typeof first === 'string') return first;
+/** Safely parse JSON from API with a tiny fallback (never throws) */
+function coerceExploreJson(data: any): ExploreResponse | null {
+  if (!data) return null;
+  if (typeof data === "object" && data.markdown && data.followUps) return data;
 
-  // as a last resort, show nothing (UI will print a polite apology)
-  return '';
-}
-
-function pickFollowups(raw: any): string[] {
-  if (!raw) return [];
-  const direct =
-    raw.followups ??
-    raw.followUps ??
-    raw.suggestions ??
-    raw.next ??
-    raw.nextSteps ??
-    raw.suggested_questions;
-  if (Array.isArray(direct)) return direct.filter(Boolean).slice(0, 6);
-
-  // If the API passes a single text blob that includes "FOLLOWUPS: [...]"
-  const fromText = pickContent(raw);
-  const m = fromText.match(/FOLLOWUPS:\s*(\[[\s\S]*?\])/i);
-  if (m) {
+  if (typeof data === "string") {
     try {
-      const arr = JSON.parse(m[1]);
-      if (Array.isArray(arr)) return arr.filter(Boolean).slice(0, 6);
+      return JSON.parse(data);
     } catch {
-      /* ignore */
+      const m = data.match(/\{[\s\S]*\}$/m);
+      if (m)
+        try {
+          return JSON.parse(m[0]);
+        } catch {}
     }
   }
-  return [];
+  return null;
 }
 
 export default function ExplorePage() {
-  // —— UI state
-  const [mode, setMode] = useState<'skills' | 'salary' | 'training'>('skills');
-  const [provider, setProvider] = useState<ModelProvider>('gemini');
-
-  // —— chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [tab, setTab] = useState<Tab>("skills");
+  const [provider, setProvider] = useState<"gemini" | "openai">("gemini");
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // auto-scroll to the latest message
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  // scroll to latest
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), [
+    messages.length,
+    loading,
+  ]);
+
+  // initial greeting
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, loading]);
+    if (messages.length) return;
+    setMessages([
+      {
+        role: "assistant",
+        content:
+          "Welcome! Pick a way to explore manufacturing careers, or select a chip to start.",
+      },
+    ]);
+  }, [messages.length]);
 
-  // seeds
-  const salaryBuckets = ['$40–60k', '$60–80k+', '$80–100k+'];
-  const skillBuckets = [
-    'Welding',
-    'CNC Machining',
-    'Quality Control',
-    'Automation & Robotics',
-    'Supply Chain Management',
-    'Maintenance & Repair',
-    'Data Analysis',
-    'Design & Engineering',
-  ];
-  const trainingBuckets = ['< 3 months', '3–12 months', '1–2 years'];
-
-  const headerText = useMemo(() => {
-    if (mode === 'skills') return 'Explore by skills';
-    if (mode === 'salary') return 'Explore by salary range';
-    return 'Explore by training length';
-  }, [mode]);
-
-  async function send(userText: string) {
-    if (!userText.trim()) return;
-
-    const next = [...messages, { role: 'user' as const, content: userText }];
-    setMessages(next);
+  // Send a new turn to the API
+  const send = async (userText: string) => {
+    const newMsgs = [...messages, { role: "user" as Role, content: userText }];
+    setMessages(newMsgs);
     setLoading(true);
 
     try {
-      const res = await fetch('/api/explore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/explore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider,       // Gemini/OpenAI without redeploy
-          messages: next, // full context
-          intent: mode,   // skills/salary/training
+          provider,
+          messages: newMsgs,
         }),
       });
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => 'Request failed');
-        throw new Error(errText || `HTTP ${res.status}`);
-      }
-
       const raw = await res.json();
+      const parsed = coerceExploreJson(raw);
 
-      const content = pickContent(raw);
-      const followups = pickFollowups(raw);
+      if (!parsed) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              "Sorry — I didn’t get a readable answer. Please try again.",
+          },
+        ]);
+      } else {
+        const md = parsed.markdown;
+        const fu = parsed.followUps ?? [];
 
+        // Append the assistant turn as markdown, then a synthetic “followUps” message
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: md },
+          { role: "assistant", content: JSON.stringify({ followUps: fu }) },
+        ]);
+      }
+    } catch (e) {
       setMessages((prev) => [
         ...prev,
         {
-          role: 'assistant',
-          content:
-            typeof content === 'string' && content.trim().length > 0
-              ? content
-              : 'Sorry — I didn’t get a readable answer. Please try again.',
-          followups: Array.isArray(followups) ? followups.slice(0, 6) : [],
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content:
-            'Sorry — I hit a snag generating that. Please try again, or pick a different option.',
-          followups: [],
+          role: "assistant",
+          content: "Network error — please try again.",
         },
       ]);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  const handleSeed = (label: string) => {
-    // Turn a chip into a natural prompt
-    if (mode === 'salary') {
-      send(`What manufacturing roles fit the salary range ${label}?`);
-    } else if (mode === 'skills') {
-      send(`Show me manufacturing career paths related to ${label}.`);
-    } else {
-      send(`Manufacturing careers with training length ${label}.`);
+  // Quick builders for the three tabs
+  const primaryChips = useMemo(() => {
+    if (tab === "skills")
+      return SKILLS.map((s) => (
+        <Chip key={s} onClick={() => send(`Explore by skill: ${s}`)}>
+          {s}
+        </Chip>
+      ));
+
+    if (tab === "salary")
+      return ["<$40k", "$40–60k", "$60–80k+", "$80–100k+"].map((s) => (
+        <Chip key={s} onClick={() => send(`Explore by salary: ${s}`)}>
+          {s}
+        </Chip>
+      ));
+
+    // training
+    return ["< 3 months", "3–12 months", "1–2 years", "2+ years"].map((s) => (
+      <Chip key={s} onClick={() => send(`Explore by training length: ${s}`)}>
+        {s}
+      </Chip>
+    ));
+  }, [tab]);
+
+  // Render assistant follow-up bubbles (we stored them as a JSON string message)
+  const renderFollowUps = (m: Msg, idx: number) => {
+    if (m.role !== "assistant") return null;
+    let payload: { followUps?: FollowUp[] } | null = null;
+    try {
+      payload = JSON.parse(m.content);
+    } catch {
+      return null;
     }
+    if (!payload?.followUps?.length) return null;
+
+    return (
+      <div className="flex flex-wrap gap-3">
+        {payload.followUps.map((f, i) => (
+          <div key={`${idx}-${i}`} className="flex items-center gap-2">
+            <Chip onClick={() => send(f.payload)}>{f.label}</Chip>
+            {f.choices?.length ? (
+              <div className="flex gap-2">
+                {f.choices.map((c) => (
+                  <Chip key={c} onClick={() => send(`${f.payload}: ${c}`)}>
+                    {c}
+                  </Chip>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 md:px-6 py-6 md:py-8">
-      {/* Top bar */}
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl md:text-3xl font-semibold">
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl md:text-3xl font-bold">
           Manufacturing Career Explorer
         </h1>
 
-        {/* Model switcher */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Model</span>
-          <div className="inline-flex rounded-full border border-slate-200 overflow-hidden">
-            <button
-              className={[
-                'px-3 py-1 text-sm',
-                provider === 'gemini' ? 'bg-slate-900 text-white' : 'bg-white',
-              ].join(' ')}
-              onClick={() => setProvider('gemini')}
-            >
-              Gemini
-            </button>
-            <button
-              className={[
-                'px-3 py-1 text-sm border-l border-slate-200',
-                provider === 'openai' ? 'bg-slate-900 text-white' : 'bg-white',
-              ].join(' ')}
-              onClick={() => setProvider('openai')}
-            >
-              OpenAI
-            </button>
-          </div>
+        {/* quick provider toggle (no redeploy) */}
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-neutral-500">Model</span>
+          <Chip
+            selected={provider === "gemini"}
+            onClick={() => setProvider("gemini")}
+          >
+            Gemini
+          </Chip>
+          <Chip
+            selected={provider === "openai"}
+            onClick={() => setProvider("openai")}
+          >
+            OpenAI
+          </Chip>
         </div>
       </div>
 
-      {/* Mode + seeds */}
-      <div className="mt-6">
-        <SectionCard>
-          <div className="flex flex-wrap gap-2">
-            <Chip active={mode === 'skills'} onClick={() => setMode('skills')}>
-              Explore by skills
-            </Chip>
-            <Chip active={mode === 'salary'} onClick={() => setMode('salary')}>
-              Explore by salary range
-            </Chip>
-            <Chip
-              active={mode === 'training'}
-              onClick={() => setMode('training')}
-            >
-              Explore by training length
-            </Chip>
-          </div>
-
-          <div className="mt-4 text-slate-600 font-medium">{headerText}</div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(mode === 'salary'
-              ? salaryBuckets
-              : mode === 'skills'
-              ? skillBuckets
-              : trainingBuckets
-            ).map((label) => (
-              <Chip key={label} onClick={() => handleSeed(label)}>
-                {label}
-              </Chip>
-            ))}
-          </div>
-        </SectionCard>
+      {/* mode tabs */}
+      <div className="mt-6 border rounded-2xl p-4">
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Chip selected={tab === "skills"} onClick={() => setTab("skills")}>
+            Explore by skills
+          </Chip>
+          <Chip selected={tab === "salary"} onClick={() => setTab("salary")}>
+            Explore by salary range
+          </Chip>
+          <Chip selected={tab === "training"} onClick={() => setTab("training")}>
+            Explore by training length
+          </Chip>
+        </div>
+        <div className="flex flex-wrap gap-2">{primaryChips}</div>
       </div>
 
       {/* Conversation */}
       <div className="mt-6 space-y-4">
-        {messages.map((m, idx) =>
-          m.role === 'user' ? (
-            <div key={idx} className="flex justify-end">
-              <div className="max-w-[85%] rounded-2xl bg-blue-50 text-slate-900 px-4 py-3">
-                {m.content}
-              </div>
-            </div>
-          ) : (
-            <div key={idx} className="flex justify-start">
-              <div className="max-w-[95%] w-full">
-                <AnswerCard>
-                  <ReactMarkdown
-                    remarkPlugins={MARKDOWN_PLUGINS}
-                    components={{
-                      h1: (p) => (
-                        <h1
-                          className="text-xl md:text-2xl font-semibold mt-1 mb-3"
-                          {...p}
-                        />
-                      ),
-                      h2: (p) => (
-                        <h2
-                          className="text-lg md:text-xl font-semibold mt-2 mb-2"
-                          {...p}
-                        />
-                      ),
-                      p: (p) => <p className="leading-7 mb-3" {...p} />,
-                      li: (p) => <li className="mb-1" {...p} />,
-                      ul: (p) => <ul className="list-disc pl-5 mb-3" {...p} />,
-                      ol: (p) => (
-                        <ol className="list-decimal pl-5 mb-3" {...p} />
-                      ),
-                      table: (p) => (
-                        <div className="overflow-x-auto">
-                          <table
-                            className="min-w-full text-sm border border-slate-200 my-3"
-                            {...p}
-                          />
-                        </div>
-                      ),
-                      th: (p) => (
-                        <th className="border px-3 py-2 bg-slate-100" {...p} />
-                      ),
-                      td: (p) => <td className="border px-3 py-2" {...p} />,
-                      code: (p) => (
-                        <code
-                          className="rounded bg-slate-100 px-1 py-0.5"
-                          {...p}
-                        />
-                      ),
-                    }}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
+        {messages.map((m, idx) => {
+          // Follow-up bubble block we injected
+          try {
+            const maybeFU = JSON.parse(m.content);
+            if (m.role === "assistant" && maybeFU?.followUps) {
+              return (
+                <div key={idx} className="flex justify-start">
+                  {renderFollowUps(m, idx)}
+                </div>
+              );
+            }
+          } catch {}
 
-                  <FollowUps items={m.followups} onPick={(q) => send(q)} />
-                </AnswerCard>
+          if (m.role === "user") {
+            return (
+              <div key={idx} className="flex justify-end">
+                <div className="rounded-2xl bg-blue-100 px-4 py-3 text-sm">
+                  {m.content}
+                </div>
               </div>
+            );
+          }
+
+          // assistant markdown
+          return (
+            <div key={idx} className="flex justify-start">
+              <Card>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+              </Card>
             </div>
-          )
-        )}
+          );
+        })}
 
         {loading && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-slate-500">
-              Thinking…
-            </div>
-          </div>
+          <div className="text-sm text-neutral-500">Thinking…</div>
         )}
-
         <div ref={bottomRef} />
       </div>
     </div>
