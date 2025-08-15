@@ -4,194 +4,211 @@ import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-type Provider = "openai" | "gemini" | "auto";
-type Msg = { role: "user" | "assistant"; text: string };
+type Msg = { role: "user" | "assistant"; content: string };
 
+const PROVIDER_ENV = (process.env.PROVIDER || "gemini").toLowerCase() as
+  | "openai"
+  | "gemini";
+
+const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
-/**
- * System directions:
- * - Manufacturing-only scope
- * - Output strict JSON with answer + structured follow_ups
- * - Use single-choice follow-ups when you need user input
- */
+// Single system prompt that enforces JSON shape + depth for *every* turn
 const SYSTEM = `
-You are SkillStrong, an expert manufacturing career guide for students.
+You are SkillStrong, a friendly manufacturing career guide for students.
+Always answer **only** about manufacturing, training, certifications,
+apprenticeships, jobs, safety, and related topics.
 
-SCOPE & TONE:
-- Only advise within manufacturing careers, training/certifications, schools/program types (no specific school names), apprenticeships, jobs, safety, soft skills, and readiness.
-- Be practical, encouraging, concise. Use clean Markdown with short sections, bullets, and clear next steps.
+Output must be a **strict JSON object**:
 
-FOLLOW-UPS:
-- If you want user input, do NOT ask open-ended questions. Instead, propose a single-choice follow-up with options the user can click.
-- Keep at most 6 follow-ups, tailored to the conversation.
-- Examples of single-choice follow-ups:
-  - {"label":"Do you have prior welding experience?","type":"single-choice","options":["Yes","No"]}
-  - {"label":"Which welding type interests you?","type":"single-choice","options":["MIG (GMAW)","TIG (GTAW)","Stick (SMAW)","Flux-Cored (FCAW)"]}
-  - {"label":"Preferred training length?","type":"single-choice","options":["< 6 months","6–12 months","1–2 years","2–4 years","Apprenticeship"]}
-- You can also include simple suggestion chips that don't need an answer:
-  - {"label":"Show entry-level quality control paths","type":"chip"}
-  - {"label":"Explain CNC operator vs. machinist","type":"chip"}
-
-OUTPUT FORMAT:
-Return STRICT JSON (no prose) in this exact shape:
 {
-  "answer_markdown": "string, Markdown answer for the student",
-  "follow_ups": [
-    // EITHER simple chips:
-    { "label": "string", "type": "chip" },
-    // OR single-choice follow-ups:
-    { "label": "string", "type": "single-choice", "options": ["A","B","C"] }
+  "answerMarkdown": string,      // concise, skimmable Markdown:
+                                 // - short sentences
+                                 // - emoji section headers (e.g., "🛠️ Duties")
+                                 // - bullet lists
+                                 // - optional small tables
+  "followUps": [                 // ALWAYS provide 3–6 fresh follow-ups for the NEXT turn
+    { "label": string, "userQuery": string }
   ]
 }
-`.trim();
 
-function buildOpenAIMessages(history: Msg[], question: string) {
-  const h = history.map((m) => ({
-    role: m.role as "user" | "assistant",
-    content: m.text,
-  }));
-  return [
-    { role: "system", content: SYSTEM },
-    ...h,
-    { role: "user", content: question },
-  ] as Array<{ role: "system" | "user" | "assistant"; content: string }>;
+Rules for followUps:
+- 3 to 6 items, every turn (even if the user clicked a follow-up).
+- Keep them context-aware (deeper next steps, not repeats).
+- Labels must be tap-friendly, not questions to fill in. If a step needs input,
+  encode common selections in the label: e.g., "Yes (I have welding experience)",
+  "No (I’m brand new)", "Show MIG/TIG/Stick options", etc.
+- userQuery must be a clear question/command we can send back to you.
+
+Style rules for answerMarkdown:
+- Use emoji section headers like "🧰 Overview", "🎓 Training", "💼 Jobs".
+- Prefer bullets over paragraphs; keep it scannable for Gen Z.
+- For lists of options, show them as bullets.
+- If helpful, include a small 2–4 column Markdown table.
+`;
+
+function okFollowUps(raw: any): { label: string; userQuery: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((f) => ({
+      label: String(f?.label || "").slice(0, 140),
+      userQuery: String(f?.userQuery || "").slice(0, 280),
+    }))
+    .filter((f) => f.label && f.userQuery)
+    .slice(0, 6);
 }
 
-function buildGeminiContents(history: Msg[], question: string) {
-  const contents = history.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.text }],
-  }));
-  contents.unshift({
-    role: "user",
-    parts: [{ text: `SYSTEM INSTRUCTION:\n${SYSTEM}` }],
-  });
-  contents.push({ role: "user", parts: [{ text: question }] });
-  return contents;
-}
-
-type APIOut = {
-  providerUsed: "openai" | "gemini";
-  answerMarkdown: string;
-  followUps: Array<
-    | { label: string; type?: "chip"; options?: never }
-    | { label: string; type: "single-choice"; options: string[] }
-  >;
-};
-
-// robust JSON extractor (survives accidental code fences)
-function safeParseJSON(text: string): any {
+function safeJson(text: string) {
   try {
     return JSON.parse(text);
   } catch {
-    const match = text.match(/\{[\s\S]*\}$/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        /* ignore */
-      }
-    }
-    return {};
+    return null;
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const { question, history = [], provider = "auto" } = (await req.json()) as {
-      question: string;
-      history?: Msg[];
-      provider?: Provider;
-    };
+    const body = await req.json();
+    const messages: Msg[] = Array.isArray(body?.messages) ? body.messages : [];
+    const providerOverride = (body?.provider || "").toLowerCase() as
+      | "openai"
+      | "gemini"
+      | "";
 
-    if (!question || typeof question !== "string") {
-      return NextResponse.json({ error: "Missing 'question' string." }, { status: 400 });
-    }
+    const provider = (providerOverride || PROVIDER_ENV) as "openai" | "gemini";
 
-    const tryOpenAI = async (): Promise<APIOut> => {
-      const key = process.env.OPENAI_API_KEY;
-      if (!key) throw new Error("OPENAI_API_KEY missing");
-      const openai = new OpenAI({ apiKey: key });
+    // Clamp history to last ~10 exchanges to keep payload small
+    const history = messages.slice(-20);
 
-      const messages = buildOpenAIMessages(history, question);
-      const resp = await openai.chat.completions.create({
-        model: OPENAI_MODEL,
-        messages,
-        temperature: 0.6,
-        response_format: { type: "json_object" },
-        max_tokens: 900,
-      });
-
-      const raw = resp.choices?.[0]?.message?.content || "{}";
-      const data = safeParseJSON(raw) || {};
-      let followUps = Array.isArray(data.follow_ups) ? data.follow_ups : [];
-
-      // Normalize: allow plain strings => chip objects
-      followUps = followUps.map((f: any) =>
-        typeof f === "string" ? { label: f, type: "chip" } : f
-      );
-
-      return {
-        providerUsed: "openai",
-        answerMarkdown: data.answer_markdown || "Sorry, I couldn't format the answer.",
-        followUps,
-      };
-    };
-
-    const tryGemini = async (): Promise<APIOut> => {
-      const key = process.env.GEMINI_API_KEY;
-      if (!key) throw new Error("GEMINI_API_KEY missing");
-      const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({
-        model: GEMINI_MODEL,
-        systemInstruction: SYSTEM,
-      });
-
-      const contents = buildGeminiContents(history, question);
-      const result = await model.generateContent({
-        contents,
-        generationConfig: {
-          temperature: 0.6,
-          maxOutputTokens: 900,
-          responseMimeType: "application/json",
-        },
-      });
-      const text = result.response.text() || "{}";
-      const data = safeParseJSON(text) || {};
-      let followUps = Array.isArray(data.follow_ups) ? data.follow_ups : [];
-
-      followUps = followUps.map((f: any) =>
-        typeof f === "string" ? { label: f, type: "chip" } : f
-      );
-
-      return {
-        providerUsed: "gemini",
-        answerMarkdown: data.answer_markdown || "Sorry, I couldn't format the answer.",
-        followUps,
-      };
-    };
-
-    let out: APIOut | null = null;
-
-    if (provider === "openai") out = await tryOpenAI();
-    else if (provider === "gemini") out = await tryGemini();
-    else {
-      try {
-        out = await tryOpenAI();
-      } catch {
-        out = await tryGemini();
+    if (provider === "openai") {
+      if (!OPENAI_KEY) {
+        return NextResponse.json(
+          {
+            error: "Missing OPENAI_API_KEY",
+          },
+          { status: 500 }
+        );
       }
+
+      const client = new OpenAI({ apiKey: OPENAI_KEY });
+
+      // Use chat.completions with JSON mode for broad SDK compatibility
+      const completion = await client.chat.completions.create({
+        model: OPENAI_MODEL,
+        temperature: 0.6,
+        max_tokens: 900,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM },
+          ...history.map((m) => ({ role: m.role, content: m.content })),
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content || "{}";
+      const parsed = safeJson(raw) || {};
+      const answerMarkdown = String(parsed.answerMarkdown || "").trim();
+      const followUps = okFollowUps(parsed.followUps);
+
+      if (!answerMarkdown) {
+        return NextResponse.json(
+          {
+            answerMarkdown:
+              "Sorry — I hit a snag generating that. Please try again or switch models.",
+            followUps: [
+              {
+                label: "Try again",
+                userQuery:
+                  "Please regenerate that answer about manufacturing careers.",
+              },
+              {
+                label: "Switch to Gemini",
+                userQuery:
+                  "Use the Gemini model and show me the same information.",
+              },
+            ],
+            providerUsed: "openai",
+          },
+          { status: 200 }
+        );
+      }
+
+      return NextResponse.json(
+        { answerMarkdown, followUps, providerUsed: "openai" },
+        { status: 200 }
+      );
     }
 
-    return NextResponse.json(out, { status: 200 });
-  } catch (err: any) {
+    // ---------- Gemini ----------
+    if (!GEMINI_KEY) {
+      return NextResponse.json(
+        { error: "Missing GEMINI_API_KEY" },
+        { status: 500 }
+      );
+    }
+
+    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+
+    // System instruction supported via safety/system field on the model:
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_MODEL,
+      systemInstruction: SYSTEM,
+    });
+
+    const contents = history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
+
+    const result = await model.generateContent({
+      contents,
+      generationConfig: {
+        temperature: 0.6,
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text = result.response.text();
+    const parsed = safeJson(text) || {};
+    const answerMarkdown = String(parsed.answerMarkdown || "").trim();
+    const followUps = okFollowUps(parsed.followUps);
+
+    if (!answerMarkdown) {
+      return NextResponse.json(
+        {
+          answerMarkdown:
+            "Sorry — I hit a snag generating that. Please try again or switch models.",
+          followUps: [
+            { label: "Try again", userQuery: "Regenerate that answer." },
+            {
+              label: "Switch to OpenAI",
+              userQuery:
+                "Use the OpenAI model and show me the same information.",
+            },
+          ],
+          providerUsed: "gemini",
+        },
+        { status: 200 }
+      );
+    }
+
     return NextResponse.json(
-      { error: err?.message || "LLM call failed" },
-      { status: 500 }
+      { answerMarkdown, followUps, providerUsed: "gemini" },
+      { status: 200 }
+    );
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      {
+        answerMarkdown:
+          "Sorry — an unexpected error occurred. Please try again.",
+        followUps: [{ label: "Try again", userQuery: "Please try again." }],
+      },
+      { status: 200 }
     );
   }
 }
