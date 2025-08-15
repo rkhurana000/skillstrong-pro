@@ -14,7 +14,7 @@ type Msg = {
   followUps?: string[];
 };
 
-// Cast plugins to any to avoid TS type friction between react-markdown/remark-gfm versions
+// Avoid TS frictions between versions
 const REMARK_PLUGINS: any[] = [remarkGfm as any];
 
 const SKILL_CHIPS = [
@@ -27,24 +27,10 @@ const SKILL_CHIPS = [
   "Supply Chain Management",
   "Design & Engineering",
 ];
-
 const SALARY_CHIPS = ["<$40k", "$40–60k", "$60–80k+", "$80–100k+"];
+const TRAINING_CHIPS = ["< 6 months", "6–12 months", "1–2 years", "2–4 years", "Apprenticeship paths"];
 
-const TRAINING_CHIPS = [
-  "< 6 months",
-  "6–12 months",
-  "1–2 years",
-  "2–4 years",
-  "Apprenticeship paths",
-];
-
-function Bubble({
-  role,
-  children,
-}: {
-  role: "user" | "assistant";
-  children: React.ReactNode;
-}) {
+function Bubble({ role, children }: { role: "user" | "assistant"; children: React.ReactNode }) {
   const isUser = role === "user";
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} w-full`}>
@@ -62,13 +48,7 @@ function Bubble({
   );
 }
 
-function FollowUps({
-  items,
-  onPick,
-}: {
-  items?: string[];
-  onPick: (q: string) => void;
-}) {
+function FollowUps({ items, onPick }: { items?: string[]; onPick: (q: string) => void }) {
   if (!items?.length) return null;
   return (
     <div className="mt-4 flex flex-wrap gap-2">
@@ -89,13 +69,11 @@ export default function ExplorePage() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [mode, setMode] = useState<"skills" | "salary" | "training" | null>(null);
   const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState<Provider>("auto"); // "openai" | "gemini" | "auto"
+  const [provider, setProvider] = useState<Provider>("auto");
   const [providerUsed, setProviderUsed] = useState<"openai" | "gemini" | null>(null);
 
-  // Sentinel element at the bottom of the list for auto-scroll
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Persist provider choice
   useEffect(() => {
     const saved = localStorage.getItem("llmProvider") as Provider | null;
     if (saved) setProvider(saved);
@@ -104,7 +82,6 @@ export default function ExplorePage() {
     localStorage.setItem("llmProvider", provider);
   }, [provider]);
 
-  // Always scroll newest message into view
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, loading]);
@@ -117,15 +94,24 @@ export default function ExplorePage() {
   }, []);
 
   async function ask(question: string) {
+    // snapshot history BEFORE adding the new user message
+    const historyForServer = [...messages];
+
+    // update UI immediately
     setMessages((m) => [...m, { role: "user", text: question }]);
     setLoading(true);
+
     try {
       const res = await fetch(
         `/api/explore${provider === "auto" ? "" : `?provider=${provider}`}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question, provider }),
+          body: JSON.stringify({
+            question,
+            provider,
+            history: historyForServer, // send prior turns as context
+          }),
         }
       );
 
@@ -230,7 +216,7 @@ export default function ExplorePage() {
             </button>
           </div>
 
-          {/* Chips for the selected mode */}
+          {/* Chips for selected mode */}
           {mode === "skills" && (
             <div className="mt-4 flex flex-wrap gap-3">
               {SKILL_CHIPS.map((s) => (
@@ -250,9 +236,7 @@ export default function ExplorePage() {
               {SALARY_CHIPS.map((s) => (
                 <button
                   key={s}
-                  onClick={() =>
-                    ask(`What manufacturing roles fit the salary range ${s}?`)
-                  }
+                  onClick={() => ask(`What manufacturing roles fit the salary range ${s}?`)}
                   className="rounded-full border border-slate-300 bg-white px-4 py-2 hover:bg-slate-50"
                 >
                   {s}
@@ -266,9 +250,7 @@ export default function ExplorePage() {
               {TRAINING_CHIPS.map((s) => (
                 <button
                   key={s}
-                  onClick={() =>
-                    ask(`What manufacturing paths match training length ${s}?`)
-                  }
+                  onClick={() => ask(`What manufacturing paths match training length ${s}?`)}
                   className="rounded-full border border-slate-300 bg-white px-4 py-2 hover:bg-slate-50"
                 >
                   {s}
@@ -285,7 +267,7 @@ export default function ExplorePage() {
         )}
       </div>
     ),
-    [mode, provider, providerUsed]
+    [mode, provider, providerUsed, messages]
   );
 
   return (
@@ -301,32 +283,14 @@ export default function ExplorePage() {
                   <ReactMarkdown
                     remarkPlugins={REMARK_PLUGINS}
                     components={{
-                      h2: ({ node, ...props }) => (
-                        <h2
-                          className="text-xl sm:text-2xl font-semibold mt-4 mb-2"
-                          {...props}
-                        />
-                      ),
-                      h3: ({ node, ...props }) => (
-                        <h3
-                          className="text-lg font-semibold mt-3 mb-1"
-                          {...props}
-                        />
-                      ),
-                      p: ({ node, ...props }) => (
-                        <p className="mt-2 leading-relaxed" {...props} />
-                      ),
-                      ul: ({ node, ...props }) => (
-                        <ul className="list-disc ml-6 space-y-1 mt-2" {...props} />
-                      ),
-                      ol: ({ node, ...props }) => (
-                        <ol className="list-decimal ml-6 space-y-1 mt-2" {...props} />
-                      ),
-                      li: ({ node, ...props }) => <li className="ml-1" {...props} />,
-                      strong: ({ node, ...props }) => (
-                        <strong className="font-semibold" {...props} />
-                      ),
+                      h2: (props) => <h2 className="text-xl sm:text-2xl font-semibold mt-4 mb-2" {...props} />,
+                      h3: (props) => <h3 className="text-lg font-semibold mt-3 mb-1" {...props} />,
+                      p: (props) => <p className="mt-2 leading-relaxed" {...props} />,
+                      ul: (props) => <ul className="list-disc ml-6 space-y-1 mt-2" {...props} />,
+                      ol: (props) => <ol className="list-decimal ml-6 space-y-1 mt-2" {...props} />,
+                      li: (props) => <li className="ml-1" {...props} />,
                       hr: () => <hr className="my-4 border-slate-200" />,
+                      strong: (props) => <strong className="font-semibold" {...props} />,
                     }}
                   >
                     {m.text}
@@ -340,9 +304,7 @@ export default function ExplorePage() {
             </Bubble>
           ))}
 
-          {loading && (
-            <div className="text-sm text-slate-500">Thinking…</div>
-          )}
+          {loading && <div className="text-sm text-slate-500">Thinking…</div>}
 
           {/* Auto-scroll sentinel */}
           <div ref={bottomRef} />
