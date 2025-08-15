@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const REMARK_PLUGINS: any[] = [remarkGfm as any];
+
+
 export const dynamic = "force-dynamic";
 
 type Msg = {
@@ -251,9 +254,9 @@ export default function ExplorePage() {
             <Bubble key={i} role={m.role}>
               {m.role === "assistant" ? (
                 <>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {m.text}
-                  </ReactMarkdown>
+<ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
+  {m.text}
+</ReactMarkdown>
                   <FollowUps
                     items={m.followUps}
                     onPick={(q) => ask(q)}
