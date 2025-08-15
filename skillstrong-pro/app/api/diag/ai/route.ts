@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   const verbose = url.searchParams.get("verbose") === "1";
 
   const openaiKey = process.env.OPENAI_API_KEY || "";
-  const openaiModel = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const openaiModel = process.env.OPENAI_MODEL || "gpt-4o";
 
   // Try a few common env var names for Gemini
   const geminiKey =
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
         body: JSON.stringify({
           model: openaiModel,
           input: [{ role: "user", content: "ping" }],
-          max_output_tokens: 1,
+          max_output_tokens: 512,
         }),
       });
 
