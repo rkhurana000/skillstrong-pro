@@ -111,58 +111,69 @@ export default function ExplorePage() {
     return 'Explore by training length';
   }, [mode]);
 
-  async function send(userText: string) {
-    if (!userText.trim()) return;
+// ⬇︎ replace your current send() with this one
+async function send(userText: string) {
+  if (!userText.trim()) return;
 
-    const next = [...messages, { role: 'user', content: userText } as ChatMessage];
-    setMessages(next);
-    setLoading(true);
+  const next = [...messages, { role: 'user' as const, content: userText }];
+  setMessages(next);
+  setLoading(true);
 
-    try {
-      const res = await fetch('/api/explore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider,            // lets you flip between Gemini/OpenAI without redeploys
-          messages: next,      // full context so follow-ups are contextual
-          intent: mode,        // lightweight hint for the server
-        }),
-      });
+  try {
+    const res = await fetch('/api/explore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,       // pick Gemini/OpenAI without redeploy
+        messages: next, // full context so follow-ups are contextual
+        intent: mode,   // hint to the server (skills/salary/training)
+      }),
+    });
 
-      if (!res.ok) {
-        const errText = await res.text().catch(() => 'Request failed');
-        throw new Error(errText || `HTTP ${res.status}`);
-      }
-
-      const data = (await res.json()) as {
-        content: string;
-        followups?: string[];
-      };
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: data.content,
-          followups: data.followups ?? [],
-        },
-      ]);
-    } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content:
-            'Sorry — I hit a snag generating that. Please try again, or pick a different option.',
-          followups: [],
-        },
-      ]);
-      // no console noise in prod, but keep this for local debugging if needed
-      // console.error(e);
-    } finally {
-      setLoading(false);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => 'Request failed');
+      throw new Error(errText || `HTTP ${res.status}`);
     }
+
+    const raw = await res.json();
+
+    // 🔑 normalize server keys so the UI always has something to show
+    const content: string =
+      raw?.content ??
+      raw?.answer ??
+      raw?.text ??
+      raw?.message ??
+      raw?.markdown ??
+      (typeof raw === 'string' ? raw : '');
+
+    const followups: string[] =
+      raw?.followups ?? raw?.suggestions ?? raw?.next ?? [];
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'assistant',
+        content:
+          (typeof content === 'string' && content.trim().length > 0)
+            ? content
+            : 'Sorry — I didn’t get a readable answer. Please try again.',
+        followups: Array.isArray(followups) ? followups.slice(0, 6) : [],
+      },
+    ]);
+  } catch (e) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'assistant',
+        content:
+          'Sorry — I hit a snag generating that. Please try again, or pick a different option.',
+        followups: [],
+      },
+    ]);
+  } finally {
+    setLoading(false);
   }
+}
 
   const handleSeed = (label: string) => {
     // Turn a chip into a natural prompt
