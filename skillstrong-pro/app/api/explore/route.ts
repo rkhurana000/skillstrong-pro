@@ -1,212 +1,186 @@
 // app/api/explore/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
+// --- Helpers ---------------------------------------------------------------
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant" | "system"; content: string };
 
-const PROVIDER_ENV = (process.env.PROVIDER || "gemini").toLowerCase() as
-  | "openai"
-  | "gemini";
+function buildSystemPrompt() {
+  return `
+You are SkillStrong's Manufacturing Career Guide for students. 
+Answer ONLY about manufacturing careers, training, certifications, apprenticeships, and related topics.
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-const GEMINI_KEY = process.env.GEMINI_API_KEY || "";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-
-// Single system prompt that enforces JSON shape + depth for *every* turn
-const SYSTEM = `
-You are SkillStrong, a friendly manufacturing career guide for students.
-Always answer **only** about manufacturing, training, certifications,
-apprenticeships, jobs, safety, and related topics.
-
-Output must be a **strict JSON object**:
-
+Return JSON ONLY (no prose outside JSON).
+Shape:
 {
-  "answerMarkdown": string,      // concise, skimmable Markdown:
-                                 // - short sentences
-                                 // - emoji section headers (e.g., "🛠️ Duties")
-                                 // - bullet lists
-                                 // - optional small tables
-  "followUps": [                 // ALWAYS provide 3–6 fresh follow-ups for the NEXT turn
-    { "label": string, "userQuery": string }
-  ]
+  "markdown": string,     // well-formatted Markdown answer with headings and bullets
+  "followups": string[]   // 3–6 short, clickable follow-up questions
 }
 
-Rules for followUps:
-- 3 to 6 items, every turn (even if the user clicked a follow-up).
-- Keep them context-aware (deeper next steps, not repeats).
-- Labels must be tap-friendly, not questions to fill in. If a step needs input,
-  encode common selections in the label: e.g., "Yes (I have welding experience)",
-  "No (I’m brand new)", "Show MIG/TIG/Stick options", etc.
-- userQuery must be a clear question/command we can send back to you.
-
-Style rules for answerMarkdown:
-- Use emoji section headers like "🧰 Overview", "🎓 Training", "💼 Jobs".
-- Prefer bullets over paragraphs; keep it scannable for Gen Z.
-- For lists of options, show them as bullets.
-- If helpful, include a small 2–4 column Markdown table.
-`;
-
-function okFollowUps(raw: any): { label: string; userQuery: string }[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((f) => ({
-      label: String(f?.label || "").slice(0, 140),
-      userQuery: String(f?.userQuery || "").slice(0, 280),
-    }))
-    .filter((f) => f.label && f.userQuery)
-    .slice(0, 6);
+Rules:
+- Keep tone friendly and concise.
+- Use headings (###) and bullet lists where helpful.
+- Include **no more than 6** follow-up questions.
+- If the user asks for local results or schools/jobs, include a short note like:
+  "_Tip: add your ZIP in Account for nearby results._"
+`.trim();
 }
 
-function safeJson(text: string) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+function messagesToOpenAI(messages: Msg[]) {
+  return messages.map((m) => ({ role: m.role, content: m.content }));
+}
+
+function messagesToGeminiText(messages: Msg[]) {
+  // Gemini REST works great with one big prompt
+  // Keep last few turns for brevity.
+  const last = messages.slice(-8);
+  const lines = last.map((m) => {
+    const tag = m.role === "user" ? "User" : m.role === "assistant" ? "Assistant" : "System";
+    return `${tag}: ${m.content}`;
+  });
+  return lines.join("\n\n");
+}
+
+function stripCodeFences(text: string) {
+  return text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```/i, "")
+    .replace(/```$/i, "")
+    .trim();
+}
+
+function coerceToAnswer(obj: any) {
+  // Ensure we always have a usable shape
+  const markdown =
+    typeof obj?.markdown === "string"
+      ? obj.markdown
+      : typeof obj === "string"
+      ? obj
+      : "Sorry — I couldn’t format that answer.";
+  const followups = Array.isArray(obj?.followups)
+    ? obj.followups.filter((x: any) => typeof x === "string").slice(0, 6)
+    : [];
+  return { markdown, followups };
+}
+
+// --- Providers -------------------------------------------------------------
+
+async function callOpenAI(messages: Msg[]) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
+  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const sys = buildSystemPrompt();
+
+  // Use the chat.completions endpoint with json_object forcing.
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+      messages: [{ role: "system", content: sys }, ...messagesToOpenAI(messages)],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`OpenAI error ${res.status}: ${err}`);
   }
+
+  const data = await res.json();
+  const raw =
+    data?.choices?.[0]?.message?.content ??
+    data?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments ??
+    "";
+
+  // Try to parse JSON
+  let parsed: any;
+  try {
+    parsed = JSON.parse(stripCodeFences(raw));
+  } catch {
+    parsed = { markdown: String(raw || ""), followups: [] };
+  }
+  return coerceToAnswer(parsed);
 }
 
-export async function POST(req: NextRequest) {
+async function callGemini(messages: Msg[]) {
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Missing GOOGLE_API_KEY / GEMINI_API_KEY");
+
+  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const sys = buildSystemPrompt();
+  const userText = messagesToGeminiText(messages);
+
+  const body = {
+    contents: [
+      { role: "user", parts: [{ text: `${sys}\n\n${userText}\n\nReturn JSON only.` }] },
+    ],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2048,
+      // This tells Gemini to return JSON as plain text (no code fences)
+      responseMimeType: "application/json",
+    },
+  };
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => "");
+    throw new Error(`Gemini error ${res.status}: ${err}`);
+  }
+
+  const data = await res.json();
+  const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+  let parsed: any;
   try {
-    const body = await req.json();
+    parsed = JSON.parse(stripCodeFences(raw));
+  } catch {
+    parsed = { markdown: String(raw || ""), followups: [] };
+  }
+  return coerceToAnswer(parsed);
+}
+
+// --- Route -----------------------------------------------------------------
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json().catch(() => ({}));
     const messages: Msg[] = Array.isArray(body?.messages) ? body.messages : [];
-    const providerOverride = (body?.provider || "").toLowerCase() as
-      | "openai"
-      | "gemini"
-      | "";
+    const providerInReq = (body?.provider || "").toString().toLowerCase();
+    const providerEnv = (process.env.PROVIDER || "").toLowerCase();
+    const provider: "openai" | "gemini" =
+      providerInReq === "openai" || providerEnv === "openai" ? "openai" : "gemini";
 
-    const provider = (providerOverride || PROVIDER_ENV) as "openai" | "gemini";
+    const answer =
+      provider === "openai" ? await callOpenAI(messages) : await callGemini(messages);
 
-    // Clamp history to last ~10 exchanges to keep payload small
-    const history = messages.slice(-20);
-
-    if (provider === "openai") {
-      if (!OPENAI_KEY) {
-        return NextResponse.json(
-          {
-            error: "Missing OPENAI_API_KEY",
-          },
-          { status: 500 }
-        );
-      }
-
-      const client = new OpenAI({ apiKey: OPENAI_KEY });
-
-      // Use chat.completions with JSON mode for broad SDK compatibility
-      const completion = await client.chat.completions.create({
-        model: OPENAI_MODEL,
-        temperature: 0.6,
-        max_tokens: 900,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          ...history.map((m) => ({ role: m.role, content: m.content })),
-        ],
-      });
-
-      const raw = completion.choices[0]?.message?.content || "{}";
-      const parsed = safeJson(raw) || {};
-      const answerMarkdown = String(parsed.answerMarkdown || "").trim();
-      const followUps = okFollowUps(parsed.followUps);
-
-      if (!answerMarkdown) {
-        return NextResponse.json(
-          {
-            answerMarkdown:
-              "Sorry — I hit a snag generating that. Please try again or switch models.",
-            followUps: [
-              {
-                label: "Try again",
-                userQuery:
-                  "Please regenerate that answer about manufacturing careers.",
-              },
-              {
-                label: "Switch to Gemini",
-                userQuery:
-                  "Use the Gemini model and show me the same information.",
-              },
-            ],
-            providerUsed: "openai",
-          },
-          { status: 200 }
-        );
-      }
-
-      return NextResponse.json(
-        { answerMarkdown, followUps, providerUsed: "openai" },
-        { status: 200 }
-      );
-    }
-
-    // ---------- Gemini ----------
-    if (!GEMINI_KEY) {
-      return NextResponse.json(
-        { error: "Missing GEMINI_API_KEY" },
-        { status: 500 }
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-
-    // System instruction supported via safety/system field on the model:
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: SYSTEM,
-    });
-
-    const contents = history.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
-
-    const result = await model.generateContent({
-      contents,
-      generationConfig: {
-        temperature: 0.6,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json",
-      },
-    });
-
-    const text = result.response.text();
-    const parsed = safeJson(text) || {};
-    const answerMarkdown = String(parsed.answerMarkdown || "").trim();
-    const followUps = okFollowUps(parsed.followUps);
-
-    if (!answerMarkdown) {
-      return NextResponse.json(
-        {
-          answerMarkdown:
-            "Sorry — I hit a snag generating that. Please try again or switch models.",
-          followUps: [
-            { label: "Try again", userQuery: "Regenerate that answer." },
-            {
-              label: "Switch to OpenAI",
-              userQuery:
-                "Use the OpenAI model and show me the same information.",
-            },
-          ],
-          providerUsed: "gemini",
-        },
-        { status: 200 }
-      );
-    }
-
-    return NextResponse.json(
-      { answerMarkdown, followUps, providerUsed: "gemini" },
-      { status: 200 }
-    );
-  } catch (err) {
-    console.error(err);
+    return NextResponse.json({ ok: true, answer }, { status: 200 });
+  } catch (err: any) {
+    console.error("EXPLORE API ERROR:", err?.message || err);
     return NextResponse.json(
       {
-        answerMarkdown:
-          "Sorry — an unexpected error occurred. Please try again.",
-        followUps: [{ label: "Try again", userQuery: "Please try again." }],
+        ok: false,
+        error: err?.message || "Failed to generate.",
+        // fallback object so UI can still render something
+        answer: {
+          markdown:
+            "Sorry — I couldn’t generate a readable answer. Please try again or switch the model.",
+          followups: ["Try again", "Switch to a different model"],
+        },
       },
       { status: 200 }
     );
