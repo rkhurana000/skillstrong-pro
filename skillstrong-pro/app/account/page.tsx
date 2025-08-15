@@ -1,90 +1,137 @@
-'use client';
+// app/account/page.tsx
+"use client";
 
-import React, { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
+
+type Profile = { id: string; zip: string | null };
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function AccountPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState<string | null>(null);
-  const [zip, setZip] = useState('');
+  const [userId, setUserId] = useState<string | null>(null);
+  const [zip, setZip] = useState<string>("");
+
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setEmail(null);
-        return;
+    let mounted = true;
+
+    async function load() {
+      setLoading(true);
+      const { data: auth } = await supabase.auth.getUser();
+      const user = auth?.user ?? null;
+      if (!mounted) return;
+
+      setEmail(user?.email ?? null);
+      setUserId(user?.id ?? null);
+
+      if (user?.id) {
+        // Try to load a profile row with a 'zip' column. If not present, we just ignore.
+        const { data } = await supabase
+          .from<Profile>("profiles")
+          .select("id, zip")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (data?.zip) setZip(data.zip);
       }
-      setEmail(user.email ?? null);
 
-      // load profile
-      const { data } = await supabase
-        .from('profiles')
-        .select('zip')
-        .eq('id', user.id)
-        .maybeSingle();
+      setLoading(false);
+    }
 
-      if (data?.zip) setZip(data.zip);
-    })();
+    load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  async function save() {
-    setSaving(true);
-    setStatus(null);
+  async function onSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!userId) return;
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setStatus('Please sign in.'); return; }
+      setSaving(true);
+      setMessage(null);
 
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ id: user.id, email: user.email, zip });
+      // Upsert into profiles (expects a 'zip' column).
+      await supabase.from("profiles").upsert({ id: userId, zip: zip || null });
 
-      if (error) throw error;
-      setStatus('Saved!');
-    } catch (err: any) {
-      setStatus(err.message ?? 'Save failed.');
+      setMessage("Saved ✔");
+    } catch (err) {
+      setMessage("Could not save ZIP.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function signOut() {
+  async function onSignOut() {
     await supabase.auth.signOut();
-    window.location.assign('/'); // back to home
+    router.push("/"); // back to home after signout
   }
 
   return (
-    <div className="page">
-      <div className="container">
-        <h1 className="h1">Account</h1>
+    <main className="page-shell account-page">
+      <h1 className="text-3xl md:text-4xl font-bold text-slate-900">Account</h1>
 
-        <div className="card stack" style={{ maxWidth: 560 }}>
-          <div>
-            <div className="muted">Signed in as</div>
-            <div style={{ fontWeight: 700 }}>{email ?? 'Not signed in'}</div>
-          </div>
+      <div className="page-card p-6 mt-4">
+        {loading ? (
+          <div className="text-slate-600">Loading…</div>
+        ) : (
+          <form onSubmit={onSave}>
+            <div className="text-slate-600">Signed in as</div>
+            <div className="text-lg font-semibold text-slate-900">
+              {email ?? "—"}
+            </div>
 
-          <label className="stack" style={{ gap: 8 }}>
-            <div style={{ fontWeight: 600 }}>ZIP code (for nearby results)</div>
+            <label htmlFor="zip" className="mt-4 block font-medium text-slate-900">
+              ZIP code (for nearby results)
+            </label>
             <input
-              className="input"
+              id="zip"
+              type="text"
+              inputMode="numeric"
               placeholder="e.g. 94582"
               value={zip}
               onChange={(e) => setZip(e.target.value)}
-              inputMode="numeric"
-              maxLength={10}
-              style={{ width: '240px' }}
+              className="mt-1 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-          </label>
 
-          <div className="row gap">
-            <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-            <button className="btn" onClick={signOut}>Sign out</button>
-            {status && <span className="muted" style={{ marginLeft: 8 }}>{status}</span>}
-          </div>
-        </div>
+            <div className="actions pt-3">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="rounded-xl border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50"
+              >
+                Sign out
+              </button>
+
+              {message && (
+                <span className="text-sm text-slate-600">
+                  {message}
+                </span>
+              )}
+            </div>
+          </form>
+        )}
       </div>
-    </div>
+    </main>
   );
 }
