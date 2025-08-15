@@ -1,11 +1,9 @@
+/* app/explore/page.tsx */
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
-const REMARK_PLUGINS: any[] = [remarkGfm as any];
-
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +12,8 @@ type Msg = {
   text: string;
   followUps?: string[];
 };
+
+const REMARK_PLUGINS: any[] = [remarkGfm as any];
 
 const SKILL_CHIPS = [
   "CNC Machining",
@@ -48,10 +48,10 @@ function Bubble({
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} w-full`}>
       <div
         className={[
-          "max-w-[850px] rounded-2xl px-5 py-4 shadow-sm",
+          "max-w-[900px] rounded-2xl px-5 py-4 shadow-sm",
           isUser
             ? "bg-blue-100 text-slate-900 rounded-tr-md"
-            : "bg-slate-50 text-slate-900 rounded-tl-md",
+            : "bg-slate-50 text-slate-900 rounded-tl-md border border-slate-200",
         ].join(" ")}
       >
         {children}
@@ -91,7 +91,7 @@ export default function ExplorePage() {
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when new messages arrive
+  // Scroll to bottom on new messages
   useEffect(() => {
     containerRef.current?.scrollTo({
       top: containerRef.current.scrollHeight,
@@ -118,13 +118,14 @@ export default function ExplorePage() {
         body: JSON.stringify({ question }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || "LLM error");
-      }
+
+      if (!res.ok) throw new Error(data?.error || "LLM error");
+
       const answerMarkdown = String(data?.answerMarkdown || "");
       const followUps: string[] = Array.isArray(data?.followUps)
         ? data.followUps.slice(0, 6)
         : [];
+
       setMessages((m) => [
         ...m,
         { role: "assistant", text: answerMarkdown, followUps },
@@ -187,7 +188,7 @@ export default function ExplorePage() {
             </button>
           </div>
 
-          {/* Chips for current mode */}
+          {/* Chips for the selected mode */}
           {mode === "skills" && (
             <div className="mt-4 flex flex-wrap gap-3">
               {SKILL_CHIPS.map((s) => (
@@ -224,9 +225,7 @@ export default function ExplorePage() {
                 <button
                   key={s}
                   onClick={() =>
-                    ask(
-                      `What manufacturing paths match training length ${s}?`
-                    )
+                    ask(`What manufacturing paths match training length ${s}?`)
                   }
                   className="rounded-full border border-slate-300 bg-white px-4 py-2 hover:bg-slate-50"
                 >
@@ -254,13 +253,49 @@ export default function ExplorePage() {
             <Bubble key={i} role={m.role}>
               {m.role === "assistant" ? (
                 <>
-<ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
-  {m.text}
-</ReactMarkdown>
-                  <FollowUps
-                    items={m.followUps}
-                    onPick={(q) => ask(q)}
-                  />
+                  <ReactMarkdown
+                    remarkPlugins={REMARK_PLUGINS}
+                    components={{
+                      h2: ({ node, ...props }) => (
+                        <h2
+                          className="text-xl sm:text-2xl font-semibold mt-4 mb-2"
+                          {...props}
+                        />
+                      ),
+                      h3: ({ node, ...props }) => (
+                        <h3
+                          className="text-lg font-semibold mt-3 mb-1"
+                          {...props}
+                        />
+                      ),
+                      p: ({ node, ...props }) => (
+                        <p className="mt-2 leading-relaxed" {...props} />
+                      ),
+                      ul: ({ node, ...props }) => (
+                        <ul
+                          className="list-disc ml-6 space-y-1 mt-2"
+                          {...props}
+                        />
+                      ),
+                      ol: ({ node, ...props }) => (
+                        <ol
+                          className="list-decimal ml-6 space-y-1 mt-2"
+                          {...props}
+                        />
+                      ),
+                      li: ({ node, ...props }) => (
+                        <li className="ml-1" {...props} />
+                      ),
+                      strong: ({ node, ...props }) => (
+                        <strong className="font-semibold" {...props} />
+                      ),
+                      hr: () => <hr className="my-4 border-slate-200" />,
+                    }}
+                  >
+                    {m.text}
+                  </ReactMarkdown>
+
+                  <FollowUps items={m.followUps} onPick={(q) => ask(q)} />
                 </>
               ) : (
                 <div className="whitespace-pre-wrap">{m.text}</div>
