@@ -45,3 +45,46 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica
 @media (min-width:1024px){
   .hero-image-wrap{margin-top:-56px}
 }
+/* --- Consistent page layout shell --- */
+.page-shell{
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 24px 80px; /* comfy sides + bottom breathing room */
+}
+
+/* Make cards look good even if a page already uses a light background */
+.page-card{
+  border: 1px solid rgba(15,23,42,.08);
+  border-radius: 16px;
+  background: linear-gradient(180deg,#fff,rgba(248,250,252,.75));
+  box-shadow: 0 10px 30px -10px rgba(2,6,23,.15);
+}
+
+/* Quiz page: keep prompts wide and scale horizontally */
+.quiz-page fieldset{
+  display: grid;
+  grid-template-columns: minmax(420px,1fr) auto; /* prompt | 1–5 buttons */
+  align-items: center;
+  gap: 16px;
+}
+.quiz-page legend{
+  font-weight: 600;
+  color: #0f172a; /* slate-900 */
+  font-size: 18px;
+  line-height: 1.5;
+}
+.quiz-page .scale{
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Account page: tidy form */
+.account-page .page-card{ max-width: 640px; }
+.account-page form{ display: grid; gap: 16px; }
+.account-page input[type="text"]{ width: 100%; }
+.account-page .actions{ display:flex; gap:12px; align-items:center; }
+
+/* Explore page: headline spacing */
+.explore-page h1{ margin-bottom: 8px; }
+.explore-page p.lead{ color:#475569; /* slate-600 */ margin-bottom: 16px; }
