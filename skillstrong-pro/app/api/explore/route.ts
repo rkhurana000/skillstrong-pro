@@ -12,26 +12,44 @@ type Msg = { role: "user" | "assistant"; text: string };
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
+/**
+ * System directions:
+ * - Manufacturing-only scope
+ * - Output strict JSON with answer + structured follow_ups
+ * - Use single-choice follow-ups when you need user input
+ */
 const SYSTEM = `
-You are SkillStrong, an expert manufacturing career guide.
+You are SkillStrong, an expert manufacturing career guide for students.
 
-GOALS:
-- Give concise, skimmable answers in clean Markdown.
-- Use sections, short paragraphs, and bulleted lists.
-- Include next steps (training, certifications, links-to-types-of-providers—not specific schools).
-- Finish by proposing up to 6 helpful follow-up questions tailored to the conversation so far.
+SCOPE & TONE:
+- Only advise within manufacturing careers, training/certifications, schools/program types (no specific school names), apprenticeships, jobs, safety, soft skills, and readiness.
+- Be practical, encouraging, concise. Use clean Markdown with short sections, bullets, and clear next steps.
+
+FOLLOW-UPS:
+- If you want user input, do NOT ask open-ended questions. Instead, propose a single-choice follow-up with options the user can click.
+- Keep at most 6 follow-ups, tailored to the conversation.
+- Examples of single-choice follow-ups:
+  - {"label":"Do you have prior welding experience?","type":"single-choice","options":["Yes","No"]}
+  - {"label":"Which welding type interests you?","type":"single-choice","options":["MIG (GMAW)","TIG (GTAW)","Stick (SMAW)","Flux-Cored (FCAW)"]}
+  - {"label":"Preferred training length?","type":"single-choice","options":["< 6 months","6–12 months","1–2 years","2–4 years","Apprenticeship"]}
+- You can also include simple suggestion chips that don't need an answer:
+  - {"label":"Show entry-level quality control paths","type":"chip"}
+  - {"label":"Explain CNC operator vs. machinist","type":"chip"}
 
 OUTPUT FORMAT:
-Return ONLY strict JSON in this shape (no extra text):
-
+Return STRICT JSON (no prose) in this exact shape:
 {
-  "answer_markdown": "string with markdown",
-  "follow_ups": ["short question 1", "short question 2", "... up to 6"]
+  "answer_markdown": "string, Markdown answer for the student",
+  "follow_ups": [
+    // EITHER simple chips:
+    { "label": "string", "type": "chip" },
+    // OR single-choice follow-ups:
+    { "label": "string", "type": "single-choice", "options": ["A","B","C"] }
+  ]
 }
 `.trim();
 
 function buildOpenAIMessages(history: Msg[], question: string) {
-  // map history into OpenAI message objects
   const h = history.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.text,
@@ -44,7 +62,6 @@ function buildOpenAIMessages(history: Msg[], question: string) {
 }
 
 function buildGeminiContents(history: Msg[], question: string) {
-  // Gemini takes an array of contents with roles 'user'/'model'
   const contents = history.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.text }],
@@ -57,19 +74,26 @@ function buildGeminiContents(history: Msg[], question: string) {
   return contents;
 }
 
-// robust JSON extractor (works if model adds code fences accidentally)
-function safeParseJSON(text: string): { answer_markdown?: string; follow_ups?: string[] } {
+type APIOut = {
+  providerUsed: "openai" | "gemini";
+  answerMarkdown: string;
+  followUps: Array<
+    | { label: string; type?: "chip"; options?: never }
+    | { label: string; type: "single-choice"; options: string[] }
+  >;
+};
+
+// robust JSON extractor (survives accidental code fences)
+function safeParseJSON(text: string): any {
   try {
-    // try direct
     return JSON.parse(text);
   } catch {
-    // try to find a JSON block
     const match = text.match(/\{[\s\S]*\}$/);
     if (match) {
       try {
         return JSON.parse(match[0]);
       } catch {
-        /* noop */
+        /* ignore */
       }
     }
     return {};
@@ -88,7 +112,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing 'question' string." }, { status: 400 });
     }
 
-    const tryOpenAI = async () => {
+    const tryOpenAI = async (): Promise<APIOut> => {
       const key = process.env.OPENAI_API_KEY;
       if (!key) throw new Error("OPENAI_API_KEY missing");
       const openai = new OpenAI({ apiKey: key });
@@ -102,16 +126,23 @@ export async function POST(req: NextRequest) {
         max_tokens: 900,
       });
 
-      const content = resp.choices?.[0]?.message?.content || "{}";
-      const data = safeParseJSON(content);
+      const raw = resp.choices?.[0]?.message?.content || "{}";
+      const data = safeParseJSON(raw) || {};
+      let followUps = Array.isArray(data.follow_ups) ? data.follow_ups : [];
+
+      // Normalize: allow plain strings => chip objects
+      followUps = followUps.map((f: any) =>
+        typeof f === "string" ? { label: f, type: "chip" } : f
+      );
+
       return {
-        providerUsed: "openai" as const,
+        providerUsed: "openai",
         answerMarkdown: data.answer_markdown || "Sorry, I couldn't format the answer.",
-        followUps: Array.isArray(data.follow_ups) ? data.follow_ups.slice(0, 6) : [],
+        followUps,
       };
     };
 
-    const tryGemini = async () => {
+    const tryGemini = async (): Promise<APIOut> => {
       const key = process.env.GEMINI_API_KEY;
       if (!key) throw new Error("GEMINI_API_KEY missing");
       const genAI = new GoogleGenerativeAI(key);
@@ -130,24 +161,25 @@ export async function POST(req: NextRequest) {
         },
       });
       const text = result.response.text() || "{}";
-      const data = safeParseJSON(text);
+      const data = safeParseJSON(text) || {};
+      let followUps = Array.isArray(data.follow_ups) ? data.follow_ups : [];
+
+      followUps = followUps.map((f: any) =>
+        typeof f === "string" ? { label: f, type: "chip" } : f
+      );
+
       return {
-        providerUsed: "gemini" as const,
+        providerUsed: "gemini",
         answerMarkdown: data.answer_markdown || "Sorry, I couldn't format the answer.",
-        followUps: Array.isArray(data.follow_ups) ? data.follow_ups.slice(0, 6) : [],
+        followUps,
       };
     };
 
-    let out:
-      | { providerUsed: "openai" | "gemini"; answerMarkdown: string; followUps: string[] }
-      | null = null;
+    let out: APIOut | null = null;
 
-    if (provider === "openai") {
-      out = await tryOpenAI();
-    } else if (provider === "gemini") {
-      out = await tryGemini();
-    } else {
-      // auto: prefer OpenAI, then fall back to Gemini
+    if (provider === "openai") out = await tryOpenAI();
+    else if (provider === "gemini") out = await tryGemini();
+    else {
       try {
         out = await tryOpenAI();
       } catch {
