@@ -1,192 +1,165 @@
-/* app/api/explore/route.ts */
+// app/api/explore/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-import { NextResponse } from "next/server";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-type ExploreBody = {
-  question?: string;
-  provider?: "openai" | "gemini" | "auto";
-};
+type Provider = "openai" | "gemini" | "auto";
+type Msg = { role: "user" | "assistant"; text: string };
 
-// Lazy imports so we don’t bundle unused SDKs
-async function withOpenAI() {
-  const { default: OpenAI } = await import("openai");
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-}
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
-async function withGemini() {
-  const { GoogleGenerativeAI } = await import("@google/generative-ai");
-  return new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-}
+const SYSTEM = `
+You are SkillStrong, an expert manufacturing career guide.
 
-function pickProviderExplicit(p?: string | null) {
-  if (!p) return null;
-  const v = p.toLowerCase();
-  if (v === "openai" || v === "gemini") return v as "openai" | "gemini";
-  return null;
-}
+GOALS:
+- Give concise, skimmable answers in clean Markdown.
+- Use sections, short paragraphs, and bulleted lists.
+- Include next steps (training, certifications, links-to-types-of-providers—not specific schools).
+- Finish by proposing up to 6 helpful follow-up questions tailored to the conversation so far.
 
-function pickProviderFallback() {
-  const configuredOpenAI = !!process.env.OPENAI_API_KEY;
-  const configuredGemini = !!process.env.GEMINI_API_KEY;
+OUTPUT FORMAT:
+Return ONLY strict JSON in this shape (no extra text):
 
-  // If PROVIDER is set, honor it (but still only if that key exists)
-  const wanted = (process.env.PROVIDER || "").toLowerCase();
-  if (wanted === "openai" && configuredOpenAI) return "openai" as const;
-  if (wanted === "gemini" && configuredGemini) return "gemini" as const;
-
-  // Otherwise, prefer OpenAI if present, else Gemini
-  if (configuredOpenAI) return "openai" as const;
-  if (configuredGemini) return "gemini" as const;
-
-  return null;
-}
-
-const SYSTEM_STYLE = `
-You are a friendly manufacturing career guide for the U.S.
-
-Return your answer as Markdown that is EASY TO SCAN:
-- Use **H2 headings** (##) for sections like “CNC Machinist”, “Quality Technician”, etc.
-- For each role, include a compact bullet list with blank lines between sections:
-  - **Duties:** …
-  - **Training:** …
-  - **Career Outlook:** …
-  - **Common Employers:** …
-  - **Salary:** …
-
-Keep answers practical and concise.
-`;
-
-const JSON_INSTRUCTIONS = `
-RESPONSE FORMAT (IMPORTANT):
-Return **only** a JSON object inside a triple-backtick \`json\` code fence:
-
-\`\`\`json
 {
-  "markdown": "<your Markdown answer>",
-  "followUps": ["<short clickable follow-up>", "... up to 6"]
+  "answer_markdown": "string with markdown",
+  "follow_ups": ["short question 1", "short question 2", "... up to 6"]
 }
-\`\`\`
+`.trim();
 
-Rules:
-- "markdown": full Markdown with headings and bulleted sections, add blank lines between sections for readability.
-- "followUps": 3–6 short, specific questions the user might ask next (max 6).
-- No text outside the JSON code fence.
-`;
-
-function extractFirstJSONBlock(text: string): { markdown?: string; followUps?: string[] } | null {
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) {
-    try {
-      return JSON.parse(candidate.slice(start, end + 1));
-    } catch {
-      return null;
-    }
-  }
-  return null;
+function buildOpenAIMessages(history: Msg[], question: string) {
+  // map history into OpenAI message objects
+  const h = history.map((m) => ({
+    role: m.role as "user" | "assistant",
+    content: m.text,
+  }));
+  return [
+    { role: "system", content: SYSTEM },
+    ...h,
+    { role: "user", content: question },
+  ] as Array<{ role: "system" | "user" | "assistant"; content: string }>;
 }
 
-export async function POST(req: Request) {
+function buildGeminiContents(history: Msg[], question: string) {
+  // Gemini takes an array of contents with roles 'user'/'model'
+  const contents = history.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.text }],
+  }));
+  contents.unshift({
+    role: "user",
+    parts: [{ text: `SYSTEM INSTRUCTION:\n${SYSTEM}` }],
+  });
+  contents.push({ role: "user", parts: [{ text: question }] });
+  return contents;
+}
+
+// robust JSON extractor (works if model adds code fences accidentally)
+function safeParseJSON(text: string): { answer_markdown?: string; follow_ups?: string[] } {
   try {
-    let body: ExploreBody = {};
-    try {
-      body = (await req.json()) as ExploreBody;
-    } catch {
-      // ignore (e.g., empty body)
-    }
-
-    const url = new URL(req.url);
-    const qsProvider = url.searchParams.get("provider");
-    const explicit =
-      pickProviderExplicit(body.provider) || pickProviderExplicit(qsProvider);
-
-    // If explicit provider requested, use it (only if its key exists)
-    let provider: "openai" | "gemini" | null = null;
-    if (explicit) {
-      if (explicit === "openai" && process.env.OPENAI_API_KEY) provider = "openai";
-      if (explicit === "gemini" && process.env.GEMINI_API_KEY) provider = "gemini";
-      if (!provider) {
-        return NextResponse.json(
-          { error: `Provider "${explicit}" selected but no API key configured.` },
-          { status: 400 },
-        );
+    // try direct
+    return JSON.parse(text);
+  } catch {
+    // try to find a JSON block
+    const match = text.match(/\{[\s\S]*\}$/);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch {
+        /* noop */
       }
-    } else {
-      provider = pickProviderFallback();
+    }
+    return {};
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { question, history = [], provider = "auto" } = (await req.json()) as {
+      question: string;
+      history?: Msg[];
+      provider?: Provider;
+    };
+
+    if (!question || typeof question !== "string") {
+      return NextResponse.json({ error: "Missing 'question' string." }, { status: 400 });
     }
 
-    if (!provider) {
-      return NextResponse.json(
-        { error: "No AI provider configured. Add OPENAI_API_KEY or GEMINI_API_KEY." },
-        { status: 500 },
-      );
-    }
+    const tryOpenAI = async () => {
+      const key = process.env.OPENAI_API_KEY;
+      if (!key) throw new Error("OPENAI_API_KEY missing");
+      const openai = new OpenAI({ apiKey: key });
 
-    const question = (body.question || "").trim();
-    if (!question) {
-      return NextResponse.json({ error: "Missing 'question'." }, { status: 400 });
-    }
-
-    let raw = "";
-
-    if (provider === "openai") {
-      const openai = await withOpenAI();
-      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-      const completion = await openai.chat.completions.create({
-        model,
+      const messages = buildOpenAIMessages(history, question);
+      const resp = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages,
         temperature: 0.6,
+        response_format: { type: "json_object" },
         max_tokens: 900,
-        messages: [
-          { role: "system", content: SYSTEM_STYLE + "\n\n" + JSON_INSTRUCTIONS },
-          { role: "user", content: question },
-        ],
       });
 
-      raw = completion.choices[0]?.message?.content ?? "";
-    } else {
-      // gemini
-      const genAI = await withGemini();
-      const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+      const content = resp.choices?.[0]?.message?.content || "{}";
+      const data = safeParseJSON(content);
+      return {
+        providerUsed: "openai" as const,
+        answerMarkdown: data.answer_markdown || "Sorry, I couldn't format the answer.",
+        followUps: Array.isArray(data.follow_ups) ? data.follow_ups.slice(0, 6) : [],
+      };
+    };
+
+    const tryGemini = async () => {
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) throw new Error("GEMINI_API_KEY missing");
+      const genAI = new GoogleGenerativeAI(key);
       const model = genAI.getGenerativeModel({
-        model: modelName,
+        model: GEMINI_MODEL,
+        systemInstruction: SYSTEM,
+      });
+
+      const contents = buildGeminiContents(history, question);
+      const result = await model.generateContent({
+        contents,
         generationConfig: {
-          maxOutputTokens: 900, // must be >= 16
           temperature: 0.6,
+          maxOutputTokens: 900,
+          responseMimeType: "application/json",
         },
       });
+      const text = result.response.text() || "{}";
+      const data = safeParseJSON(text);
+      return {
+        providerUsed: "gemini" as const,
+        answerMarkdown: data.answer_markdown || "Sorry, I couldn't format the answer.",
+        followUps: Array.isArray(data.follow_ups) ? data.follow_ups.slice(0, 6) : [],
+      };
+    };
 
-      const result = await model.generateContent([
-        SYSTEM_STYLE + "\n\n" + JSON_INSTRUCTIONS + "\n\nUser question:\n" + question,
-      ]);
+    let out:
+      | { providerUsed: "openai" | "gemini"; answerMarkdown: string; followUps: string[] }
+      | null = null;
 
-      raw = result.response.text();
+    if (provider === "openai") {
+      out = await tryOpenAI();
+    } else if (provider === "gemini") {
+      out = await tryGemini();
+    } else {
+      // auto: prefer OpenAI, then fall back to Gemini
+      try {
+        out = await tryOpenAI();
+      } catch {
+        out = await tryGemini();
+      }
     }
 
-    const parsed = extractFirstJSONBlock(raw);
-    if (!parsed?.markdown) {
-      return NextResponse.json({
-        answerMarkdown:
-          raw ||
-          "Sorry — I couldn’t parse the model response. Please try another option.",
-        followUps: [],
-        providerUsed: provider,
-      });
-    }
-
-    const answerMarkdown = String(parsed.markdown || "");
-    const followUps = Array.isArray(parsed.followUps)
-      ? parsed.followUps.filter((s) => typeof s === "string").slice(0, 6)
-      : [];
-
-    return NextResponse.json({ answerMarkdown, followUps, providerUsed: provider });
+    return NextResponse.json(out, { status: 200 });
   } catch (err: any) {
     return NextResponse.json(
-      { error: err?.message || "Unexpected error. Please try again." },
-      { status: 500 },
+      { error: err?.message || "LLM call failed" },
+      { status: 500 }
     );
   }
 }
