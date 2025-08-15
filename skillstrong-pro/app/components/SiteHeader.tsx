@@ -8,8 +8,6 @@ export default function SiteHeader() {
         <Link href="/" className="brand">SkillStrong</Link>
         <nav className="site-nav">
           <Link href="/">Home</Link>
-          <Link href="/features">Features</Link>
-          <Link href="/interest">Interest</Link>
           <Link href="/quiz">Quiz</Link>
           <Link href="/about">About</Link>
           <Link href="/explore">Explore Careers</Link>
