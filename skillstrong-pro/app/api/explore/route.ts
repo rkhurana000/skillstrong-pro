@@ -1,276 +1,169 @@
-// app/api/explore/route.ts
-import { NextRequest, NextResponse } from "next/server";
+/* app/api/explore/route.ts */
 
-// --- Runtime ---
-// OpenAI's Node SDK needs the Node runtime, not "edge".
-export const runtime = "nodejs";
+import { NextResponse } from "next/server";
 
-// --- Optional: keep the route cached off ---
-export const dynamic = "force-dynamic";
-
-// --- Env helpers ---
-const PROVIDER = (process.env.PROVIDER || "gemini").toLowerCase();
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
-
-// We import conditionally so the build doesn't fail if one SDK is missing.
-let OpenAI: any = null;
-let GoogleGenerativeAI: any = null;
-
-if (PROVIDER === "openai") {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  OpenAI = require("openai").default;
-} else {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  GoogleGenerativeAI = require("@google/generative-ai").GoogleGenerativeAI;
+// Lazy imports so the wrong SDK isn’t bundled if not used
+async function withOpenAI() {
+  const { default: OpenAI } = await import("openai");
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 }
 
-// --- Types for request/response ---
-type Mode = "skills" | "salary" | "training" | "freeform";
-
-interface ExploreRequest {
-  mode?: Mode;
-  selection?: string;      // e.g. "CNC Machining", "$60–80k+", "12–24 months"
-  question?: string;       // freeform question if user typed something
-  history?: Array<{ role: "user" | "assistant"; text: string }>;
+async function withGemini() {
+  const { GoogleGenerativeAI } = await import("@google/generative-ai");
+  return new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 }
 
-interface ExploreResponse {
-  ok: boolean;
-  answerMarkdown?: string;
-  followUps?: string[];
-  error?: string;
+type ExploreBody = { question?: string };
+
+// Choose provider from env
+function pickProvider() {
+  const wanted = (process.env.PROVIDER || "").toLowerCase();
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasGemini = !!process.env.GEMINI_API_KEY;
+
+  if (wanted === "openai" && hasOpenAI) return "openai" as const;
+  if (wanted === "gemini" && hasGemini) return "gemini" as const;
+
+  // Fallbacks
+  if (hasOpenAI) return "openai" as const;
+  if (hasGemini) return "gemini" as const;
+
+  return null;
 }
 
-// --- Shared prompt builder ---
-function buildSystemPrompt(payload: ExploreRequest) {
-  const mode = payload.mode || "freeform";
-  const selection = payload.selection || "";
-  const typed = payload.question || "";
+const SYSTEM_STYLE = `
+You are a friendly manufacturing career guide for the U.S.
 
-  const modeInstruction =
-    mode === "skills"
-      ? `User is exploring by SKILLS. Their current selection is: "${selection}".`
-      : mode === "salary"
-      ? `User is exploring by SALARY. Their current selection is: "${selection}".`
-      : mode === "training"
-      ? `User is exploring by TRAINING LENGTH. Their current selection is: "${selection}".`
-      : `User asked a FREEFORM question: "${typed}".`;
+Return your answer as Markdown that is EASY TO SCAN:
+- Use short sections with **H2 headings** (##).
+- Use bulleted lists with blank lines between sections.
+- For each role, prefer the format:
 
-  const historyText =
-    payload.history && payload.history.length
-      ? `Conversation so far:\n${payload.history
-          .map((m) => `${m.role.toUpperCase()}: ${m.text}`)
-          .join("\n")}`
-      : "No prior conversation.";
+### Role Name
+- **Duties:** …
+- **Training:** …
+- **Career Outlook:** …
+- **Common Employers:** …
+- **Salary:** …
 
-  return `
-You are a friendly manufacturing-careers coach. Write concise, helpful answers in GitHub-Flavored Markdown.
-Focus on real U.S. manufacturing roles (e.g., CNC Machinist, Quality Tech, Welder, Mechatronics Tech, etc.).
-When it helps, show bullet lists with emoji section labels like:
-- **🛠️ Duties**
-- **🎓 Training**
-- **📈 Career Outlook**
-- **💼 Common Employers**
-- **💵 Salary**
-Keep paragraphs short.
-
-${modeInstruction}
-
-${historyText}
-
-You MUST return JSON that matches this schema exactly:
-{
-  "answerMarkdown": string,            // Rich Markdown with lists and short paragraphs
-  "followUps": string[]                // Up to 6 short suggested follow-up questions
-}
-Rules:
-- "followUps" MUST have between 1 and 6 items.
-- Each follow-up should be a short, natural question the user can click next.
-- Do not include backticks or code fences around the JSON.
+Keep answers concise and practical. Avoid filler and apologies.
 `;
+
+const JSON_INSTRUCTIONS = `
+RESPONSE FORMAT (IMPORTANT):
+Return **only** a JSON object in a triple-backtick \`json\` code fence:
+
+\`\`\`json
+{
+  "markdown": "<your Markdown answer>",
+  "followUps": ["<clickable follow-up 1>", "... up to 6 total"]
 }
+\`\`\`
 
-// --- Default follow-ups if parsing fails ---
-function defaultFollowUps(mode: Mode, selection: string): string[] {
-  if (mode === "skills") {
-    return [
-      `What does a beginner need to get started with ${selection}?`,
-      `Which certifications help in ${selection}?`,
-      `What are entry-level roles related to ${selection}?`,
-      `How does pay progress with ${selection}?`,
-    ];
-  }
-  if (mode === "salary") {
-    return [
-      "What roles commonly fall in this salary range?",
-      "What skills can help me reach the upper end of this range?",
-      "What training paths lead to this range?",
-      "How does pay vary by state?",
-    ];
-  }
-  if (mode === "training") {
-    return [
-      "Which programs fit this training length?",
-      "Are there apprenticeships for this path?",
-      "What does the day-to-day look like after this training?",
-      "What roles hire graduates from such programs?",
-    ];
-  }
-  return [
-    "What training or certifications would you recommend?",
-    "What are nearby programs I can consider?",
-    "What’s the typical day like in that role?",
-    "How can I transition from another field?",
-  ];
-}
+Rules:
+- "markdown": the full answer in Markdown, using headings and bullet lists with blank lines between sections.
+- "followUps": 3–6 short, specific questions the user might ask next (no more than 6).
+- Nothing outside the JSON code fence.
+`;
 
-// --- JSON parsing helpers (tolerant) ---
-function tryExtractJson(text: string): { answerMarkdown: string; followUps: string[] } | null {
-  // Remove code fences if the model accidentally adds them
-  const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+function extractFirstJSONBlock(text: string): { markdown?: string; followUps?: string[] } | null {
+  // Prefer fenced JSON
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
 
-  // Try direct JSON.parse first
-  try {
-    const obj = JSON.parse(cleaned);
-    if (obj && typeof obj.answerMarkdown === "string" && Array.isArray(obj.followUps)) {
-      // Cap at 6
-      obj.followUps = obj.followUps.slice(0, 6);
-      return obj;
-    }
-  } catch {
-    // ignore and try a looser extract below
-  }
-
-  // Try to find the first balanced JSON object in the text
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
+  // Try to parse the first {...} block
+  const start = candidate.indexOf("{");
+  const end = candidate.lastIndexOf("}");
   if (start !== -1 && end !== -1 && end > start) {
-    const candidate = cleaned.slice(start, end + 1);
     try {
-      const obj = JSON.parse(candidate);
-      if (obj && typeof obj.answerMarkdown === "string" && Array.isArray(obj.followUps)) {
-        obj.followUps = obj.followUps.slice(0, 6);
-        return obj;
-      }
+      return JSON.parse(candidate.slice(start, end + 1));
     } catch {
-      // swallow
+      // fallthrough
     }
   }
   return null;
 }
 
-// --- OpenAI (Responses API) ---
-async function callOpenAI(payload: ExploreRequest): Promise<ExploreResponse> {
-  if (!process.env.OPENAI_API_KEY) {
-    return { ok: false, error: "Missing OPENAI_API_KEY" };
-  }
-
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-  const jsonSchema = {
-    name: "explore_answer",
-    schema: {
-      type: "object",
-      properties: {
-        answerMarkdown: { type: "string" },
-        followUps: {
-          type: "array",
-          items: { type: "string" },
-          maxItems: 6,
-        },
-      },
-      required: ["answerMarkdown", "followUps"],
-      additionalProperties: false,
-    },
-    strict: true,
-  };
-
-  const input = buildSystemPrompt(payload);
-
-  const resp = await client.responses.create({
-    model: OPENAI_MODEL,               // e.g., 'gpt-4o-mini'
-    input,                             // single string with all context
-    temperature: 0.4,
-    max_output_tokens: 700,            // MUST be >= 16 (you saw that 400 earlier)
-    response_format: {                 // <-- CORRECT key & shape
-      type: "json_schema",
-      json_schema: jsonSchema,
-    },
-  });
-
-  // The SDK gives a convenience field for combined text
-  const text: string = (resp as any).output_text ?? "";
-
-  const parsed = tryExtractJson(text);
-  if (parsed) {
-    return { ok: true, ...parsed };
-  }
-
-  // Fallback if parsing failed
-  return {
-    ok: true,
-    answerMarkdown:
-      "I couldn’t format that perfectly, but here’s a quick overview. Try asking another follow-up!",
-    followUps: defaultFollowUps(payload.mode || "freeform", payload.selection || ""),
-  };
-}
-
-// --- Gemini ---
-async function callGemini(payload: ExploreRequest): Promise<ExploreResponse> {
-  if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
-    return { ok: false, error: "Missing GEMINI_API_KEY (or GOOGLE_API_KEY)" };
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY!;
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-  const input = buildSystemPrompt(payload);
-
-  const result = await model.generateContent({
-    contents: [{ role: "user", parts: [{ text: input }] }],
-    generationConfig: {
-      maxOutputTokens: 700, // similar budget to OpenAI call
-      temperature: 0.4,
-    },
-  });
-
-  const text = result.response.text() ?? "";
-  const parsed = tryExtractJson(text);
-  if (parsed) {
-    return { ok: true, ...parsed };
-  }
-
-  return {
-    ok: true,
-    answerMarkdown:
-      "Here’s a brief overview based on your selection. You can ask another question to go deeper.",
-    followUps: defaultFollowUps(payload.mode || "freeform", payload.selection || ""),
-  };
-}
-
-// --- Route handler ---
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const payload = (await req.json()) as ExploreRequest;
+    const body = (await req.json()) as ExploreBody;
+    const question = (body?.question || "").trim();
 
-    let out: ExploreResponse;
-    if (PROVIDER === "openai") {
-      out = await callOpenAI(payload);
-    } else {
-      out = await callGemini(payload);
+    if (!question) {
+      return NextResponse.json(
+        { error: "Missing 'question'." },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json(out);
+    const provider = pickProvider();
+    if (!provider) {
+      return NextResponse.json(
+        { error: "No AI provider configured. Add OPENAI_API_KEY or GEMINI_API_KEY." },
+        { status: 500 }
+      );
+    }
+
+    let raw = "";
+
+    if (provider === "openai") {
+      const openai = await withOpenAI();
+      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+      const completion = await openai.chat.completions.create({
+        model,
+        temperature: 0.6,
+        max_tokens: 900,
+        messages: [
+          { role: "system", content: SYSTEM_STYLE + "\n\n" + JSON_INSTRUCTIONS },
+          { role: "user", content: question },
+        ],
+      });
+
+      raw = completion.choices[0]?.message?.content ?? "";
+    } else {
+      // gemini
+      const genAI = await withGemini();
+      const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: {
+          maxOutputTokens: 900, // must be >= 16 to satisfy their minimum
+          temperature: 0.6,
+        },
+      });
+
+      const result = await model.generateContent([
+        SYSTEM_STYLE + "\n\n" + JSON_INSTRUCTIONS + "\n\nUser question:\n" + question,
+      ]);
+
+      raw = result.response.text();
+    }
+
+    const parsed = extractFirstJSONBlock(raw);
+    if (!parsed?.markdown) {
+      // soft fallback: send whatever we got as plain markdown
+      return NextResponse.json({
+        answerMarkdown:
+          raw ||
+          "Sorry — I couldn’t parse the model response. Please try another option.",
+        followUps: [],
+      });
+    }
+
+    const answerMarkdown = String(parsed.markdown || "");
+    const followUps = Array.isArray(parsed.followUps)
+      ? parsed.followUps.filter((s) => typeof s === "string").slice(0, 6)
+      : [];
+
+    return NextResponse.json({ answerMarkdown, followUps });
   } catch (err: any) {
-    console.error("EXPLORE route error:", err?.message || err);
     return NextResponse.json(
       {
-        ok: false,
         error:
-          "Sorry — I hit a snag generating that. Please try again, or pick a different option.",
-      } satisfies ExploreResponse,
+          err?.message ||
+          "Unexpected error generating the response. Please try again.",
+      },
       { status: 500 }
     );
   }
