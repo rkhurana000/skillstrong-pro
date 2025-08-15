@@ -1,273 +1,310 @@
-"use client";
+'use client';
 
-import React, { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+// NOTE: Vercel sometimes has a vfile type mismatch with remark-gfm.
+// Casting to any avoids the build-time type error while keeping GFM features.
+import remarkGfm from 'remark-gfm';
 
-type Msg = { role: "user" | "assistant"; content: string };
-type Follow = { label: string; userQuery: string };
+type ModelProvider = 'gemini' | 'openai';
+type Role = 'user' | 'assistant';
 
-const pretty = (...cls: string[]) => cls.filter(Boolean).join(" ");
+type ChatMessage = {
+  role: Role;
+  content: string;
+  followups?: string[];
+};
 
-const Pill: React.FC<
-  React.ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }
-> = ({ active, className, children, ...props }) => (
-  <button
-    {...props}
-    className={pretty(
-      "rounded-full border px-4 py-2 text-sm transition",
-      active
-        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-        : "border-slate-300 hover:bg-slate-50",
-      className || ""
-    )}
-  >
-    {children}
-  </button>
-);
+const MARKDOWN_PLUGINS = [remarkGfm as unknown as any];
 
-const AnswerCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="rounded-2xl bg-gradient-to-br from-white to-slate-50 shadow-sm ring-1 ring-black/5 p-5 md:p-6">
-    {children}
-  </div>
-);
+function SectionCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white/70 shadow-sm backdrop-blur p-4 md:p-6">
+      {children}
+    </div>
+  );
+}
+
+function AnswerCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-6 shadow-sm">
+      {children}
+    </div>
+  );
+}
+
+function Chip({
+  children,
+  onClick,
+  active = false,
+}: {
+  children: React.ReactNode;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={[
+        'px-4 py-2 rounded-full border text-sm md:text-base transition',
+        active
+          ? 'bg-slate-900 text-white border-slate-900'
+          : 'bg-white hover:bg-slate-50 border-slate-200',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FollowUps({
+  items,
+  onPick,
+}: {
+  items?: string[];
+  onPick: (text: string) => void;
+}) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {items.slice(0, 6).map((q, i) => (
+        <button
+          key={`${q}-${i}`}
+          onClick={() => onPick(q)}
+          className="px-4 py-2 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-sm"
+        >
+          {q}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function ExplorePage() {
-  // Model toggle without redeploy
-  const [provider, setProvider] = useState<"gemini" | "openai">(
-    (typeof window !== "undefined" &&
-      (localStorage.getItem("modelProvider") as "gemini" | "openai")) ||
-      "gemini"
-  );
-  useEffect(() => {
-    localStorage.setItem("modelProvider", provider);
-  }, [provider]);
+  // —— UI state
+  const [mode, setMode] = useState<'skills' | 'salary' | 'training'>('skills');
+  const [provider, setProvider] = useState<ModelProvider>('gemini');
 
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const [followUps, setFollowUps] = useState<Follow[]>([]);
+  // —— chat state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // always scroll to latest
+  // auto-scroll to the latest message
+  const bottomRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, loading]);
 
-  const send = async (userText: string) => {
-    // *** typing fix: make sure role is a literal and array is typed as Msg[] ***
-    const newMsgs: Msg[] = [
-      ...messages,
-      { role: "user" as const, content: userText },
-    ];
-    setMessages(newMsgs);
+  // example seed chips
+  const salaryBuckets = ['$40–60k', '$60–80k+', '$80–100k+'];
+  const skillBuckets = [
+    'Welding',
+    'CNC Machining',
+    'Quality Control',
+    'Automation & Robotics',
+  ];
+  const trainingBuckets = ['< 3 months', '3–12 months', '1–2 years'];
+
+  const headerText = useMemo(() => {
+    if (mode === 'skills') return 'Explore by skills';
+    if (mode === 'salary') return 'Explore by salary range';
+    return 'Explore by training length';
+  }, [mode]);
+
+  async function send(userText: string) {
+    if (!userText.trim()) return;
+
+    const next = [...messages, { role: 'user', content: userText } as ChatMessage];
+    setMessages(next);
     setLoading(true);
+
     try {
-      const res = await fetch("/api/explore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMsgs, provider }),
+      const res = await fetch('/api/explore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider,            // lets you flip between Gemini/OpenAI without redeploys
+          messages: next,      // full context so follow-ups are contextual
+          intent: mode,        // lightweight hint for the server
+        }),
       });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Request failed');
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+
       const data = (await res.json()) as {
-        answerMarkdown: string;
-        followUps: Follow[];
+        content: string;
+        followups?: string[];
       };
-      // *** typing fix here as well ***
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant" as const, content: data.answerMarkdown || "…" },
-      ]);
-      setFollowUps(Array.isArray(data.followUps) ? data.followUps : []);
-    } catch {
+
       setMessages((prev) => [
         ...prev,
         {
-          role: "assistant" as const,
-          content:
-            "Sorry — I hit a snag generating that. Please try again or switch models.",
+          role: 'assistant',
+          content: data.content,
+          followups: data.followups ?? [],
         },
       ]);
-      setFollowUps([
-        { label: "Try again", userQuery: "Please try again" },
-        { label: "Switch model", userQuery: "Switch to the other model" },
+    } catch (e) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            'Sorry — I hit a snag generating that. Please try again, or pick a different option.',
+          followups: [],
+        },
       ]);
+      // no console noise in prod, but keep this for local debugging if needed
+      // console.error(e);
     } finally {
       setLoading(false);
     }
+  }
+
+  const handleSeed = (label: string) => {
+    // Turn a chip into a natural prompt
+    if (mode === 'salary') {
+      send(`What manufacturing roles fit the salary range ${label}?`);
+    } else if (mode === 'skills') {
+      send(`Show me manufacturing career paths related to ${label}.`);
+    } else {
+      send(`Manufacturing careers with training length ${label}.`);
+    }
   };
 
-  // ----- Top “mode” chips -----
-  const [exploreMode, setExploreMode] = useState<
-    "skills" | "salary" | "training" | null
-  >(null);
-
-  const topBar = (
-    <div className="flex flex-wrap items-center gap-2">
-      <Pill
-        active={provider === "gemini"}
-        onClick={() => setProvider("gemini")}
-        title="Use Google's Gemini"
-      >
-        Model: Gemini
-      </Pill>
-      <Pill
-        active={provider === "openai"}
-        onClick={() => setProvider("openai")}
-        title="Use OpenAI"
-      >
-        Model: OpenAI
-      </Pill>
-    </div>
-  );
-
-  const intro = (
-    <div className="rounded-2xl bg-slate-100/60 p-4 md:p-6 ring-1 ring-black/5">
-      <h2 className="text-xl md:text-2xl font-semibold">
-        Welcome! How would you like to explore career paths in manufacturing?
-      </h2>
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Pill active={exploreMode === "skills"} onClick={() => setExploreMode("skills")}>
-          Explore by skills
-        </Pill>
-        <Pill active={exploreMode === "salary"} onClick={() => setExploreMode("salary")}>
-          Explore by salary range
-        </Pill>
-        <Pill
-          active={exploreMode === "training"}
-          onClick={() => setExploreMode("training")}
-        >
-          Explore by training length
-        </Pill>
-      </div>
-
-      {/* Mode-specific starter chips */}
-      <div className="mt-4 flex flex-wrap gap-3">
-        {exploreMode === "skills" && (
-          <>
-            {[
-              "Welding",
-              "CNC Machining",
-              "Quality Control",
-              "Automation & Robotics",
-              "Supply Chain",
-              "Data Analysis",
-            ].map((s) => (
-              <Pill key={s} onClick={() => send(`Show careers for skill: ${s}`)}>
-                {s}
-              </Pill>
-            ))}
-          </>
-        )}
-
-        {exploreMode === "salary" && (
-          <>
-            {["<$40k", "$40–60k", "$60–80k+", "$80–100k+"].map((r) => (
-              <Pill
-                key={r}
-                onClick={() => send(`What manufacturing roles fit the salary range ${r}?`)}
-              >
-                {r}
-              </Pill>
-            ))}
-          </>
-        )}
-
-        {exploreMode === "training" && (
-          <>
-            {[
-              "Less than 3 months",
-              "3–12 months",
-              "1–2 years (associate)",
-              "4 years (bachelor)",
-            ].map((t) => (
-              <Pill
-                key={t}
-                onClick={() => send(`What training paths ~${t} lead to manufacturing jobs?`)}
-              >
-                {t}
-              </Pill>
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 md:py-8 space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl md:text-3xl font-bold">Manufacturing Career Explorer</h1>
-        {topBar}
+    <div className="mx-auto max-w-5xl px-4 md:px-6 py-6 md:py-8">
+      {/* Top bar */}
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl md:text-3xl font-semibold">
+          Manufacturing Career Explorer
+        </h1>
+
+        {/* Model switcher */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Model</span>
+          <div className="inline-flex rounded-full border border-slate-200 overflow-hidden">
+            <button
+              className={[
+                'px-3 py-1 text-sm',
+                provider === 'gemini' ? 'bg-slate-900 text-white' : 'bg-white',
+              ].join(' ')}
+              onClick={() => setProvider('gemini')}
+            >
+              Gemini
+            </button>
+            <button
+              className={[
+                'px-3 py-1 text-sm border-l border-slate-200',
+                provider === 'openai' ? 'bg-slate-900 text-white' : 'bg-white',
+              ].join(' ')}
+              onClick={() => setProvider('openai')}
+            >
+              OpenAI
+            </button>
+          </div>
+        </div>
       </div>
 
-      {intro}
+      {/* Mode + seeds */}
+      <div className="mt-6">
+        <SectionCard>
+          <div className="flex flex-wrap gap-2">
+            <Chip active={mode === 'skills'} onClick={() => setMode('skills')}>
+              Explore by skills
+            </Chip>
+            <Chip active={mode === 'salary'} onClick={() => setMode('salary')}>
+              Explore by salary range
+            </Chip>
+            <Chip
+              active={mode === 'training'}
+              onClick={() => setMode('training')}
+            >
+              Explore by training length
+            </Chip>
+          </div>
 
-      {/* Chat transcript */}
-      <div className="space-y-6">
+          <div className="mt-4 text-slate-600 font-medium">
+            {headerText}
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(mode === 'salary' ? salaryBuckets : mode === 'skills' ? skillBuckets : trainingBuckets).map(
+              (label) => (
+                <Chip key={label} onClick={() => handleSeed(label)}>
+                  {label}
+                </Chip>
+              ),
+            )}
+          </div>
+        </SectionCard>
+      </div>
+
+      {/* Conversation */}
+      <div className="mt-6 space-y-4">
         {messages.map((m, idx) =>
-          m.role === "user" ? (
+          m.role === 'user' ? (
             <div key={idx} className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl bg-blue-100 px-4 py-3 text-sm md:text-base">
+              <div className="max-w-[85%] rounded-2xl bg-blue-50 text-slate-900 px-4 py-3">
                 {m.content}
               </div>
             </div>
           ) : (
-            <AnswerCard key={idx}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  h1: (p) => <h1 className="text-xl md:text-2xl font-semibold mt-1 mb-3" {...p} />,
-                  h2: (p) => <h2 className="text-lg md:text-xl font-semibold mt-2 mb-2" {...p} />,
-                  h3: (p) => <h3 className="text-base md:text-lg font-semibold mt-2 mb-1.5" {...p} />,
-                  p: (p) => <p className="leading-relaxed my-2" {...p} />,
-                  ul: (p) => <ul className="list-disc ml-5 my-2 space-y-1.5" {...p} />,
-                  ol: (p) => <ol className="list-decimal ml-5 my-2 space-y-1.5" {...p} />,
-                  li: (p) => <li className="leading-relaxed" {...p} />,
-                  table: (p) => (
-                    <div className="overflow-x-auto my-3">
-                      <table className="min-w-full text-sm border border-slate-200" {...p} />
-                    </div>
-                  ),
-                  th: (p) => (
-                    <th
-                      className="border border-slate-200 bg-slate-50 px-3 py-2 text-left font-medium"
-                      {...p}
-                    />
-                  ),
-                  td: (p) => (
-                    <td className="border border-slate-200 px-3 py-2 align-top" {...p} />
-                  ),
-                  code: (p) => (
-                    <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[90%]" {...p} />
-                  ),
-                }}
-              >
-                {m.content}
-              </ReactMarkdown>
-            </AnswerCard>
-          )
+            <div key={idx} className="flex justify-start">
+              <div className="max-w-[95%] w-full">
+                <AnswerCard>
+                  <ReactMarkdown
+                    // fix Vercel type clash by passing any-typed plugins
+                    remarkPlugins={MARKDOWN_PLUGINS}
+                    components={{
+                      h1: (p) => (
+                        <h1 className="text-xl md:text-2xl font-semibold mt-1 mb-3" {...p} />
+                      ),
+                      h2: (p) => (
+                        <h2 className="text-lg md:text-xl font-semibold mt-2 mb-2" {...p} />
+                      ),
+                      p: (p) => <p className="leading-7 mb-3" {...p} />,
+                      li: (p) => <li className="mb-1" {...p} />,
+                      ul: (p) => <ul className="list-disc pl-5 mb-3" {...p} />,
+                      ol: (p) => <ol className="list-decimal pl-5 mb-3" {...p} />,
+                      table: (p) => (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-sm border border-slate-200 my-3" {...p} />
+                        </div>
+                      ),
+                      th: (p) => <th className="border px-3 py-2 bg-slate-100" {...p} />,
+                      td: (p) => <td className="border px-3 py-2" {...p} />,
+                      code: (p) => (
+                        <code className="rounded bg-slate-100 px-1 py-0.5" {...p} />
+                      ),
+                    }}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
+
+                  <FollowUps
+                    items={m.followups}
+                    onPick={(q) => send(q)}
+                  />
+                </AnswerCard>
+              </div>
+            </div>
+          ),
         )}
-      </div>
 
-      {/* Dynamic follow-ups */}
-      {followUps.length > 0 && (
-        <div className="rounded-2xl bg-slate-100/60 p-4 ring-1 ring-black/5">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {followUps.map((f, i) => (
-              <Pill
-                key={i}
-                className="justify-start text-left"
-                onClick={() => send(f.userQuery)}
-              >
-                {f.label}
-              </Pill>
-            ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-slate-500">
+              Thinking…
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {loading && <div className="text-sm text-slate-500">Generating…</div>}
-
-      <div ref={bottomRef} className="h-px" />
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }
