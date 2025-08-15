@@ -1,124 +1,106 @@
-'use client';
+// app/quiz/page.tsx
+"use client";
 
-import React, { useMemo, useState } from 'react';
-import Link from 'next/link';
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
-type Q = { id: string; text: string; key: 'R'|'I'|'A'|'S'|'E'|'C' };
-
-const QUESTIONS: Q[] = [
-  { id: 'q1', text: 'I enjoy working with tools or machinery.', key: 'R' },
-  { id: 'q2', text: 'I like fixing or building things with my hands.', key: 'R' },
-  { id: 'q3', text: 'I like figuring out how things work.', key: 'I' },
-  { id: 'q4', text: 'I enjoy solving technical problems.', key: 'I' },
-  { id: 'q5', text: 'I like designing or making things look better.', key: 'A' },
-  { id: 'q6', text: 'I enjoy creative projects or prototyping.', key: 'A' },
-  { id: 'q7', text: 'I like helping people learn or be safe.', key: 'S' },
-  { id: 'q8', text: 'I enjoy teamwork and clear communication.', key: 'S' },
-  { id: 'q9', text: 'I like organizing plans and taking the lead.', key: 'E' },
-  { id: 'q10', text: 'I enjoy meeting goals and improving processes.', key: 'C' },
+const QUESTIONS = [
+  "I enjoy working with tools or machinery.",
+  "I like fixing or building things with my hands.",
+  "I like figuring out how things work.",
+  "I enjoy solving technical problems.",
+  "I like designing or making things look better.",
+  "I enjoy creative projects or prototyping.",
+  "I like helping people learn or be safe.",
+  "I enjoy organizing information or processes.",
+  "I like working with numbers and data.",
+  "I enjoy collaborating as part of a team.",
 ];
 
-const ROLES: Record<string, string[]> = {
-  R: ['Welder', 'CNC Operator', 'Industrial Maintenance Tech', 'Electrician Apprentice'],
-  I: ['Quality Technician', 'Manufacturing Technician', 'Mechatronics Tech'],
-  A: ['CAD Technician', 'Additive Manufacturing Tech', 'Industrial Designer (junior)'],
-  S: ['Safety Technician', 'Trainer (shop floor)', 'Production Team Lead'],
-  E: ['Production Coordinator', 'Shift Lead', 'Operations Assistant'],
-  C: ['Supply Chain Assistant', 'Planner / Scheduler', 'Quality Documentation'],
-};
-
 export default function QuizPage() {
-  const [answers, setAnswers] = useState<Record<string, number>>({});
-  const [submitted, setSubmitted] = useState(false);
+  const router = useRouter();
+  const [answers, setAnswers] = useState<Array<number | null>>(
+    Array(QUESTIONS.length).fill(null)
+  );
 
-  const complete = Object.keys(answers).length === QUESTIONS.length;
+  const progress = useMemo(
+    () => answers.filter((a) => a !== null).length,
+    [answers]
+  );
 
-  const scores = useMemo(() => {
-    const s: Record<'R'|'I'|'A'|'S'|'E'|'C', number> = { R:0, I:0, A:0, S:0, E:0, C:0 };
-    for (const q of QUESTIONS) {
-      const v = answers[q.id] ?? 0;
-      s[q.key] += v;
-    }
-    return s;
-  }, [answers]);
+  function setAnswer(qIndex: number, value: number) {
+    setAnswers((prev) => {
+      const next = [...prev];
+      next[qIndex] = value;
+      return next;
+    });
+  }
 
-  const topKeys = useMemo(() => {
-    const pairs = Object.entries(scores) as [Q['key'], number][];
-    pairs.sort((a,b)=>b[1]-a[1]);
-    return pairs.slice(0,2).map(p=>p[0]).join('');
-  }, [scores]);
-
-  const suggestions = useMemo(() => {
-    // merge top 2 buckets (avoid duplicates)
-    const ordered = Object.entries(scores).sort((a,b)=>b[1]-a[1]).map(([k])=>k as Q['key']);
-    const pick = new Set<string>();
-    for (const k of ordered.slice(0,2)) ROLES[k].forEach(r=>pick.add(r));
-    return Array.from(pick);
-  }, [scores]);
-
-  function set(qid: string, value: number) {
-    setAnswers(prev => ({ ...prev, [qid]: value }));
+  function goToMatches(e: React.FormEvent) {
+    e.preventDefault();
+    // You can encode answers in the URL if you want to use them later:
+    // const encoded = encodeURIComponent(JSON.stringify(answers));
+    // router.push(`/explore?quiz=${encoded}`);
+    router.push("/explore");
   }
 
   return (
-    <div className="page">
-      <div className="container">
-        <h1 className="h1">Interest Quiz</h1>
-        <p className="muted">A quick RIASEC-lite check to pair you with manufacturing roles. Rate each 1–5.</p>
+    <main className="page-shell quiz-page">
+      <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
+        Interest Quiz
+      </h1>
+      <p className="mt-1 text-slate-600">
+        A quick RIASEC-lite check to pair you with manufacturing roles. Rate each
+        1–5.
+      </p>
 
-        {!submitted && (
-          <form
-            className="card stack"
-            onSubmit={(e) => { e.preventDefault(); setSubmitted(true); }}
+      <form onSubmit={goToMatches} className="page-card mt-4 p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="text-slate-700 font-medium">Progress: {progress}/10</div>
+          <button
+            type="submit"
+            disabled={progress === 0}
+            className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700"
           >
-            <div className="stack">
-              {QUESTIONS.map((q, i) => (
-                <div key={q.id} className="quiz-row">
-                  <div className="quiz-q">{i+1}. {q.text}</div>
-                  <div className="chip-group" role="radiogroup" aria-label={q.text}>
-                    {[1,2,3,4,5].map(v => (
-                      <label key={v} className={`chip ${answers[q.id]===v?'is-selected':''}`}>
-                        <input
-                          type="radio"
-                          name={q.id}
-                          value={v}
-                          checked={answers[q.id]===v}
-                          onChange={() => set(q.id, v)}
-                        />
-                        {v}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            See my matches
+          </button>
+        </div>
 
-            <div className="row between">
-              <div className="muted">Progress: {Object.keys(answers).length}/{QUESTIONS.length}</div>
-              <button className="btn btn-primary" disabled={!complete}>See my matches</button>
+        {QUESTIONS.map((q, idx) => (
+          <fieldset key={idx}>
+            <legend>{idx + 1}. {q}</legend>
+            <div className="scale" role="radiogroup" aria-label={`Question ${idx + 1}`}>
+              {[1, 2, 3, 4, 5].map((n) => {
+                const id = `q${idx}-${n}`;
+                return (
+                  <label key={id} htmlFor={id} className="inline-flex items-center gap-2">
+                    <input
+                      id={id}
+                      type="radio"
+                      name={`q${idx}`}
+                      value={n}
+                      checked={answers[idx] === n}
+                      onChange={() => setAnswer(idx, n)}
+                      className="h-4 w-4 accent-blue-600"
+                    />
+                    <span className="text-slate-700">{n}</span>
+                  </label>
+                );
+              })}
             </div>
-          </form>
-        )}
+          </fieldset>
+        ))}
 
-        {submitted && (
-          <div className="stack">
-            <div className="card">
-              <h2 className="h2">Your profile: <span className="badge">{topKeys}</span></h2>
-              <p className="muted">Top interests across Realistic / Investigative / Artistic / Social / Enterprising / Conventional.</p>
-              <ul className="list two-col">
-                {suggestions.map((r)=>(
-                  <li key={r}>• {r}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="row gap">
-              <Link className="btn" href="/quiz" onClick={()=>{ setAnswers({}); setSubmitted(false); }}>Retake</Link>
-              <Link className="btn btn-primary" href={`/explore?focus=${encodeURIComponent(topKeys)}`}>Start exploring →</Link>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+        <div className="pt-2">
+          <button
+            type="submit"
+            disabled={progress === 0}
+            className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700"
+          >
+            See my matches
+          </button>
+        </div>
+      </form>
+    </main>
   );
 }
