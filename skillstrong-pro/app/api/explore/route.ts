@@ -1,188 +1,173 @@
+// app/api/explore/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ---- Shared types with the client ----
-type Role = "user" | "assistant";
-export type Msg = { role: Role; content: string };
-export type FollowUp = { label: string; payload: string; choices?: string[] };
-export type ExploreResponse = { markdown: string; followUps: FollowUp[] };
+/**
+ * ENV expected:
+ *  - PROVIDER = "openai" | "gemini" (default: gemini)
+ *  - OPENAI_API_KEY (if using OpenAI)
+ *  - GEMINI_API_KEY (if using Gemini)
+ *  - OPENAI_MODEL (optional, default gpt-4o-mini)
+ *  - GEMINI_MODEL (optional, default gemini-1.5-flash)
+ */
 
-// ---- Helpers ----
+type Msg = { role: "user" | "assistant"; content: string };
+
+const DEFAULT_PROVIDER =
+  (process.env.PROVIDER as "openai" | "gemini") || "gemini";
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+
+const openai =
+  process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+const genAI =
+  process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+
+// System guardrails – keeps the domain focused on manufacturing & students.
 const SYSTEM_INSTRUCTIONS = `
-You are SkillStrong's manufacturing career coach for US students.
-Stay strictly in manufacturing topics (careers, training, certs, apprenticeships, local programs, entry-level jobs).
-Return answers as concise, friendly Markdown (short headings, bullets, callouts).
-Always include up to 6 useful follow-up actions.
-
-IMPORTANT for OpenAI: always CALL the tool "return_explore" exactly once with your final JSON.
-Do not print extra text when you call the tool.
-If a follow-up implies a choice (Yes/No or MIG/TIG/Stick), include a "choices" array for quick pick chips.
+You are SkillStrong, a concise career guide for **manufacturing** students.
+- Keep answers short, skimmable, and structured (headings, bullet lists).
+- Stay in manufacturing context: jobs, skills, training, certifications, apprenticeships, schools.
+- At the end, suggest up to 6 relevant follow-up questions as short, clickable prompts (no more than ~10 words each).
+- If user input looks like a choice (yes/no, MIG/TIG, etc.), act on it and continue the flow.
+- Return JSON with keys: "answer" (markdown string) and "followups" (string[] up to 6).
 `;
 
-const JSON_SCHEMA = {
-  // We reuse the same JSON schema for both providers
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    required: ["markdown", "followUps"],
-    properties: {
-      markdown: {
-        type: "string",
-        description:
-          "A well-formatted Markdown answer (headings, bullets, short callouts). No code fences.",
-      },
-      followUps: {
-        type: "array",
-        maxItems: 6,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["label", "payload"],
-          properties: {
-            label: { type: "string" },
-            payload: { type: "string" },
-            choices: { type: "array", items: { type: "string" } },
-          },
-        },
-      },
-    },
-  },
-  strict: true,
-} as const;
-
-function badRequest(msg: string, extra?: any) {
-  return NextResponse.json({ error: msg, extra }, { status: 400 });
-}
-
-function safeParse(text: string): ExploreResponse | null {
+function extractJsonFromText(text: string) {
+  // Try to find a fenced JSON block first
+  const fence = text.match(/```json([\s\S]*?)```/i);
+  const candidate = fence ? fence[1].trim() : text.trim();
   try {
-    return JSON.parse(text);
-  } catch {
-    const m = text.match(/\{[\s\S]*\}$/m);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
+    const obj = JSON.parse(candidate);
+    if (obj && typeof obj === "object" && ("answer" in obj || "followups" in obj)) {
+      return obj;
     }
-    return null;
+  } catch {
+    // ignore
   }
+  return null;
 }
 
-// ---- Route ----
+function fallbackFollowups(intentHint?: string): string[] {
+  // lightweight heuristic – safe defaults
+  const common = [
+    "Show nearby training programs",
+    "What entry-level jobs fit me?",
+    "Apprenticeship options near me",
+    "Certifications to start with",
+    "What skills should I learn first?",
+    "Typical pay & growth outlook",
+  ];
+  if (!intentHint) return common.slice(0, 4);
+  if (intentHint === "skills")
+    return ["Skills to begin with", "Beginner projects", "Recommended tools", "Safety basics"];
+  if (intentHint === "salary")
+    return ["Jobs in this salary band", "How to move up", "Certs to boost pay", "Cities with demand"];
+  if (intentHint === "training")
+    return ["Short programs", "Community colleges", "Online courses", "How to fund training"];
+  return common.slice(0, 6);
+}
+
+async function askOpenAI(messages: Msg[], intentHint?: string) {
+  if (!openai) throw new Error("OpenAI not configured");
+  const sys: Msg = { role: "user", content: `SYSTEM:\n${SYSTEM_INSTRUCTIONS}` };
+
+  // Use chat.completions for maximum compatibility
+  const completion = await openai.chat.completions.create({
+    model: OPENAI_MODEL,
+    temperature: 0.6,
+    messages: [
+      { role: "system", content: "You are a helpful manufacturing career guide." },
+      // Inject system instructions as a user content block (works better across models)
+      sys,
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content:
+          "Reply ONLY as JSON: {\"answer\": \"<markdown>\", \"followups\": [\"...\"]}.\n" +
+          "No prose outside JSON. Make followups <= 6 items.",
+      },
+    ],
+  });
+
+  const text =
+    completion.choices?.[0]?.message?.content?.toString() ||
+    "";
+
+  const parsed = extractJsonFromText(text);
+  if (parsed) return { answer: parsed.answer || "", followups: parsed.followups || [], raw: text };
+
+  // Fallback: return raw text, and synthesize followups
+  return {
+    answer: text || "Here’s what I found.",
+    followups: fallbackFollowups(intentHint),
+    raw: text,
+  };
+}
+
+async function askGemini(messages: Msg[], intentHint?: string) {
+  if (!genAI) throw new Error("Gemini not configured");
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+
+  const prompt = [
+    SYSTEM_INSTRUCTIONS,
+    "",
+    "Conversation:",
+    ...messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`),
+    "",
+    "Reply ONLY as JSON:",
+    `{"answer":"<markdown>","followups":["..."]}`,
+    "No prose outside JSON. Max 6 followups.",
+  ].join("\n");
+
+  const resp = await model.generateContent(prompt);
+  const text = resp.response?.text?.() || "";
+
+  const parsed = extractJsonFromText(text);
+  if (parsed) return { answer: parsed.answer || "", followups: parsed.followups || [], raw: text };
+
+  return {
+    answer: text || "Here’s what I found.",
+    followups: fallbackFollowups(intentHint),
+    raw: text,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const {
-      provider, // "openai" | "gemini"
-      model,
-      messages,
-    }: { provider?: "openai" | "gemini"; model?: string; messages: Msg[] } =
-      body;
+    const body = await req.json().catch(() => ({}));
+    const messages: Msg[] = Array.isArray(body.messages) ? body.messages : [];
+    const providerQuery = (req.nextUrl.searchParams.get("provider") || "").toLowerCase();
+    const providerHeader = (req.headers.get("x-provider") || "").toLowerCase();
+    const provider = (providerQuery || providerHeader || DEFAULT_PROVIDER) as "openai" | "gemini";
+    const intent: string | undefined = body.intent; // "skills" | "salary" | "training" | etc.
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return badRequest("Missing 'messages' array.");
+    let result: { answer: string; followups: string[]; raw?: string };
+
+    if (provider === "openai") {
+      result = await askOpenAI(messages, intent);
+    } else {
+      result = await askGemini(messages, intent);
     }
 
-    const prov =
-      provider ??
-      (process.env.PROVIDER as "openai" | "gemini" | undefined) ??
-      "gemini";
+    // Normalize & guarantee shape
+    const payload = {
+      provider,
+      answer: result.answer || (result.raw ?? "I couldn’t produce an answer."),
+      followups: Array.isArray(result.followups) ? result.followups.slice(0, 6) : [],
+      raw: result.raw,
+    };
 
-    // ---------- OPENAI via Chat Completions + tools ----------
-    if (prov === "openai") {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) return badRequest("OPENAI_API_KEY is not set.");
-
-      const { OpenAI } = await import("openai");
-      const client = new OpenAI({ apiKey });
-
-      const openaiModel = model || process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-      const chat = await client.chat.completions.create({
-        model: openaiModel,
-        temperature: 0.6,
-        messages: [
-          { role: "system", content: SYSTEM_INSTRUCTIONS },
-          // pass full history so follow-ups keep context
-          ...messages.map((m) => ({ role: m.role, content: m.content })) as any,
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "return_explore",
-              description:
-                "Return the final JSON payload to render (markdown + up to 6 followUps).",
-              // OpenAI tool schema expects JSON Schema v7-ish; our object is compatible.
-              parameters: JSON_SCHEMA.schema as any,
-            },
-          },
-        ],
-        // Force the model to call our tool with the structured output
-        tool_choice: { type: "function", function: { name: "return_explore" } },
-        max_tokens: 900,
-      } as any); // cast for older SDK typings
-
-      const choice = chat.choices?.[0];
-      const toolCall = choice?.message?.tool_calls?.[0];
-
-      if (toolCall?.function?.arguments) {
-        try {
-          const parsed = JSON.parse(toolCall.function.arguments) as ExploreResponse;
-          return NextResponse.json(parsed);
-        } catch (e) {
-          // fallback: try to parse normal content if tool args parsing fails
-        }
-      }
-
-      // Fallback: try to parse raw text (older models may put JSON in content)
-      const txt = choice?.message?.content ?? "";
-      const parsed = safeParse(txt);
-      if (!parsed) return badRequest("OpenAI: could not parse JSON.", chat);
-      return NextResponse.json(parsed);
-    }
-
-    // ---------- GEMINI ----------
-    if (prov === "gemini") {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) return badRequest("GEMINI_API_KEY is not set.");
-
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const mdl = model || process.env.GEMINI_MODEL || "gemini-1.5-flash";
-      const gemModel = genAI.getGenerativeModel({ model: mdl });
-
-      const prompt = [
-        SYSTEM_INSTRUCTIONS,
-        "",
-        "History:",
-        JSON.stringify(messages),
-        "",
-        "Return JSON ONLY exactly matching the schema (no code fences).",
-      ].join("\n");
-
-      const result = await gemModel.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.6,
-          maxOutputTokens: 900,
-          responseMimeType: "application/json",
-        } as any,
-      });
-
-      const text = result.response?.text();
-      if (!text) return badRequest("Gemini returned empty text.", result);
-
-      const parsed = safeParse(text);
-      if (!parsed) return badRequest("Gemini returned non-JSON.", text);
-
-      return NextResponse.json(parsed);
-    }
-
-    return badRequest("Unknown provider.");
+    return NextResponse.json(payload, { status: 200 });
   } catch (err: any) {
-    console.error("Explore API error:", err);
     return NextResponse.json(
-      { error: "Server error", details: err?.message ?? String(err) },
+      {
+        error: "LLM_CALL_FAILED",
+        message: err?.message || "Unknown error",
+      },
       { status: 500 }
     );
   }
