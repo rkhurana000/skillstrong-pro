@@ -8,7 +8,7 @@ import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// --- Type Definitions ---
+// Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; }
@@ -46,18 +46,8 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 return;
             }
             localStorage.removeItem('skillstrong-quiz-results');
-            const { answers } = JSON.parse(quizResultsString);
-
-            // --- UPDATED PROMPT LOGIC ---
-            // This prompt now instructs the AI to generate a specific, welcoming response.
-            let quizPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}.
-            
-            Based on these results, please act as my career coach. Your entire response must follow these rules:
-            1.  Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore."
-            2.  Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results.
-            3.  For each career, provide a brief, one-sentence explanation of why it's a good match.
-            4.  Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
-
+            const { answers, questions } = JSON.parse(quizResultsString);
+            let quizPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}. Based on these results, please act as my career coach. Your entire response must follow these rules: 1. Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore." 2. Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results. 3. For each career, provide a brief, one-sentence explanation of why it's a good match. 4. Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
             const newChat = createNewChat(false);
             sendMessage(quizPrompt, newChat.id);
         } else {
@@ -77,13 +67,15 @@ export default function ExploreClient({ user }: { user: User | null }) {
         }
     }, [user]);
 
+    // ** THIS IS THE FIX **
+    // The activeChat variable must be defined here, *before* it is used in the useEffect hook below.
+    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
+
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [activeChat?.messages, isLoading]);
-
-    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
     const updateAndSaveHistory = (newHistory: ChatSession[]) => {
         const limitedHistory = newHistory.slice(0, 30);
