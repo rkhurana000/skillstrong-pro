@@ -18,6 +18,7 @@ interface ChatSession {
   title: string;
   messages: Message[];
   provider: 'openai' | 'gemini';
+  followUps?: string[]; // <-- THIS IS THE FIX: Added the missing property
 }
 
 // --- NEW CONTENT FOR EXPLORE SCREEN ---
@@ -103,6 +104,7 @@ export default function ExplorePage() {
       title: "New Chat",
       messages: [],
       provider: 'gemini',
+      followUps: [],
     };
     const updatedHistory = [newChat, ...chatHistory];
     updateChatHistory(updatedHistory);
@@ -123,10 +125,11 @@ export default function ExplorePage() {
     const newUserMessage: Message = { role: 'user', content: query };
     const updatedMessages = [...activeChat.messages, newUserMessage];
     
-    const updatedHistory = chatHistory.map(chat =>
-      chat.id === activeChatId ? { ...chat, messages: updatedMessages } : chat
+    // Clear previous follow-ups immediately for a cleaner UX
+    const intermediateHistory = chatHistory.map(chat =>
+      chat.id === activeChatId ? { ...chat, messages: updatedMessages, followUps: [] } : chat
     );
-    updateChatHistory(updatedHistory);
+    updateChatHistory(intermediateHistory);
     setIsLoading(true);
 
     const response = await fetch(`/api/explore?provider=${activeChat.provider}`, {
@@ -136,7 +139,6 @@ export default function ExplorePage() {
     });
 
     if (!response.ok) {
-        // Handle error
         const errorMessage: Message = { role: 'assistant', content: "Sorry, I encountered an error. Please try again."};
         const finalHistory = chatHistory.map(chat =>
             chat.id === activeChatId ? {...chat, messages: [...updatedMessages, errorMessage]} : chat
@@ -167,7 +169,7 @@ export default function ExplorePage() {
     }
 
     const finalHistory = chatHistory.map(chat =>
-      chat.id === activeChatId ? { ...chat, messages: finalMessages, title: finalTitle, followUps: data.followups } : chat
+      chat.id === activeChatId ? { ...chat, messages: finalMessages, title: finalTitle, followUps: data.followups || [] } : chat
     );
     updateChatHistory(finalHistory);
     setIsLoading(false);
