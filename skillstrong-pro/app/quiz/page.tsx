@@ -33,6 +33,7 @@ export default function QuizPage() {
     }
     // Save results to localStorage to be picked up by the explore page
     localStorage.setItem('skillstrong-quiz-results', JSON.stringify({ answers, questions: quizQuestions }));
+    
     // Redirect to the explore page
     router.push('/explore');
   };
@@ -45,7 +46,7 @@ export default function QuizPage() {
       <div className="container mx-auto max-w-2xl px-4">
         <div className="bg-white p-8 rounded-xl shadow-md">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Interest Quiz</h1>
-          <p className="text-gray-600 mb-8">A quick RIASEC-lite check to pair you with manufacturing roles. Rate each 1-5.</p>
+          <p className="text-gray-600 mb-8">A quick check to pair your interests with manufacturing roles. Rate each statement from 1 (Disagree) to 5 (Agree).</p>
           
           <div className="w-full bg-gray-200 rounded-full h-2.5 mb-8">
             <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
@@ -56,10 +57,10 @@ export default function QuizPage() {
               <div key={index}>
                 <p className="font-semibold text-gray-700 mb-3">{`${index + 1}. ${question}`}</p>
                 <div className="flex justify-between items-center text-sm text-gray-500">
-                  <span>Strongly Disagree</span>
-                  <div className="flex space-x-4">
+                  <span>Disagree</span>
+                  <div className="flex space-x-2 sm:space-x-4">
                     {[1, 2, 3, 4, 5].map(value => (
-                      <label key={value} className="flex flex-col items-center cursor-pointer">
+                      <label key={value} className="flex flex-col items-center cursor-pointer p-2 rounded-md hover:bg-gray-100">
                         <input
                           type="radio"
                           name={`question-${index}`}
@@ -68,11 +69,11 @@ export default function QuizPage() {
                           onChange={() => handleAnswerChange(index, value)}
                           className="h-6 w-6 accent-blue-600"
                         />
-                        <span className="mt-1">{value}</span>
+                        <span className="mt-1 font-semibold">{value}</span>
                       </label>
                     ))}
                   </div>
-                  <span>Strongly Agree</span>
+                  <span>Agree</span>
                 </div>
               </div>
             ))}
