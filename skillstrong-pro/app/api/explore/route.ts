@@ -2,16 +2,17 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // The new, robust system prompt for guardrails and persona
 const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor specializing exclusively in the US manufacturing sector. Your tone is encouraging, clear, and geared towards students and young adults (Gen-Z).
 
 **Your Core Directives:**
 1.  **Stay Focused:** Your knowledge is strictly limited to manufacturing careers: roles, skills, salaries, training paths, and job-finding strategies within the US.
-2.  **Reject Off-Topic Queries:** If asked about anything outside manufacturing, politely decline and steer the conversation back. Example: "That's outside my expertise in manufacturing careers. Shall we explore CNC programming salaries instead?"
-3.  **Use Search Results:** When provided with search results under a "CONTEXT" section, you MUST synthesize them in your answer to provide current, relevant links and information for local jobs, apprenticeships, or training. Cite the links naturally in your response using Markdown links.
-4.  **Provide Actionable Follow-ups:** EVERY response must end with 3 to 5 relevant follow-up questions to guide the user.
+2.  **Use Emojis:** Make your responses engaging and scannable by using relevant emojis. For example: 🔩 for skills, 💰 for salary, 🎓 for training, 🏢 for companies, and ✅ for list items.
+3.  **Reject Off-Topic Queries:** If asked about anything outside manufacturing, politely decline and steer the conversation back. Example: "That's outside my expertise in manufacturing careers. Shall we explore CNC programming salaries instead?"
+4.  **Use Search Results:** When provided with "CONTEXT", you MUST synthesize them in your answer to provide current, relevant links and information for local jobs, apprenticeships, or training. Cite the links naturally using Markdown.
+5.  **Provide Actionable Follow-ups:** EVERY response must end with 3 to 5 relevant follow-up questions to guide the user.
 
 **Output Format:**
 Your entire response MUST be a single string that starts with the Markdown answer and ends with a JSON block. Do not add any text after the JSON block.
@@ -31,7 +32,8 @@ Your entire response MUST be a single string that starts with the Markdown answe
 \`\`\`
 `;
 
-// Helper function to call our new search API
+// ... (The rest of the file remains the same as before)
+
 async function performSearch(query: string, req: NextRequest): Promise<any[]> {
   const searchApiUrl = new URL('/api/search', req.url);
   try {
@@ -55,8 +57,6 @@ export async function POST(req: NextRequest) {
     const { messages } = await req.json();
     const latestUserMessage = messages[messages.length - 1]?.content || '';
 
-    // --- RAG Logic ---
-    // Step 1: LLM decides if a search is needed.
     const searchDecisionPrompt = `Does the following user query require a real-time internet search for local job listings, apprenticeships, or training programs? Answer with only "YES" or "NO". Query: "${latestUserMessage}"`;
     
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -71,7 +71,6 @@ export async function POST(req: NextRequest) {
     let searchResultsContext = '';
 
     if (decision === 'YES') {
-      // Step 2: If yes, LLM generates a search query.
       const searchQueryGenPrompt = `Generate a concise Google search query to find local manufacturing jobs, training, or apprenticeships based on this user request. Return only the search query. Request: "${latestUserMessage}"`;
       const queryGenResponse = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
@@ -81,7 +80,6 @@ export async function POST(req: NextRequest) {
       const searchQuery = queryGenResponse.choices[0].message?.content?.trim();
 
       if (searchQuery) {
-        // Step 3: Perform the search.
         const searchResults = await performSearch(searchQuery, req);
         if (searchResults.length > 0) {
           searchResultsContext = `\n\n---CONTEXT FROM REAL-TIME SEARCH---\nHere are some relevant search results to use in your answer:\n${JSON.stringify(searchResults, null, 2)}\n---END OF CONTEXT---`;
@@ -89,10 +87,8 @@ export async function POST(req: NextRequest) {
       }
     }
     
-    // Step 4: Construct the final prompt with context if available.
     finalPrompt = systemPrompt.replace('**Your Core Directives:**', `**Your Core Directives:**${searchResultsContext}`);
 
-    // --- LLM Call Logic ---
     const fullMessages = [{ role: 'system', content: finalPrompt }, ...messages];
     let rawAnswer = '';
 
@@ -117,7 +113,6 @@ export async function POST(req: NextRequest) {
       rawAnswer = result.response.text();
     }
 
-    // --- Response Parsing ---
     const jsonBlockMatch = rawAnswer.match(/```json\n([\s\S]*?)\n```/);
     let answer = rawAnswer;
     let followups: string[] = [];
