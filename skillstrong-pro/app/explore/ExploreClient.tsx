@@ -69,6 +69,9 @@ export default function ExploreClient({ user }: { user: User | null }) {
             }
         }
     }, [user]);
+    
+    // --- FIX: Moved this line up ---
+    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
     // Effect to scroll to bottom
     useEffect(() => {
@@ -76,8 +79,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [activeChat?.messages, isLoading]);
-
-    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
     const updateAndSaveHistory = (newHistory: ChatSession[]) => {
         const limitedHistory = newHistory.slice(0, 30);
@@ -118,8 +119,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        const currentChat = chatHistory.find(c => c.id === chatId);
-        const messagesForApi = [...(currentChat?.messages || []), newUserMessage];
+        const messagesForApi = [...(activeChat?.messages || []), newUserMessage];
         
         setChatHistory(prev => prev.map(chat => 
             chat.id === chatId 
@@ -176,13 +176,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 </div>
             </aside>
             
-            {/* MODIFIED: Added 'relative' to anchor the footer */}
             <div className="flex flex-1 flex-col relative">
                 <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                     <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
                 </header>
                 
-                {/* MODIFIED: Added padding to the bottom (pb-40) */}
                 <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-40">
                    {activeChat && activeChat.messages.length > 0 ? (
                         <div className="space-y-6">
@@ -215,7 +213,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     )}
                 </main>
                 
-                {/* MODIFIED: Made footer 'absolute' to stick to the bottom of the relative parent */}
                 <footer className="absolute bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-sm border-t">
                     <div className="w-full max-w-3xl mx-auto">
                         <div className="flex flex-wrap gap-3 justify-center mb-4">
