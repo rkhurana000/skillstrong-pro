@@ -38,6 +38,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [inputValue, setInputValue] = useState("");
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
+    // Effect to load history and handle quiz results
     useEffect(() => {
         const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
         if (quizResultsString) {
@@ -69,11 +70,12 @@ export default function ExploreClient({ user }: { user: User | null }) {
         }
     }, [user]);
 
+    // Effect to scroll to bottom
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
-    }, [chatHistory, activeChatId, isLoading]);
+    }, [activeChat?.messages, isLoading]);
 
     const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
@@ -119,7 +121,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
         const currentChat = chatHistory.find(c => c.id === chatId);
         const messagesForApi = [...(currentChat?.messages || []), newUserMessage];
         
-        // Optimistically update UI
         setChatHistory(prev => prev.map(chat => 
             chat.id === chatId 
                 ? { ...chat, messages: messagesForApi }
@@ -142,7 +143,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            // Final state update with assistant message
             setChatHistory(prev => prev.map(chat => {
                 if (chat.id === chatId) {
                     const title = chat.messages.length === 0 ? data.answer.substring(0, 40) + '...' : chat.title;
@@ -175,20 +175,22 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     {chatHistory.map(chat => ( <button key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center w-full text-left px-4 py-2 text-sm rounded-md transition-colors ${activeChatId === chat.id ? 'bg-gray-700' : 'hover:bg-gray-700/50'}`}> <MessageSquareText className="w-4 h-4 mr-3 flex-shrink-0" /> <span className="truncate">{chat.title}</span> </button> ))}
                 </div>
             </aside>
-            <div className="flex flex-1 flex-col">
+            
+            {/* MODIFIED: Added 'relative' to anchor the footer */}
+            <div className="flex flex-1 flex-col relative">
                 <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                     <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
                 </header>
-                <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+                
+                {/* MODIFIED: Added padding to the bottom (pb-40) */}
+                <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-40">
                    {activeChat && activeChat.messages.length > 0 ? (
                         <div className="space-y-6">
                             {activeChat.messages.map((msg, index) => (
                                 <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                     <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-blue-500 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
                                         <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
-                                            </ReactMarkdown>
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
                                         </article>
                                     </div>
                                 </div>
@@ -212,7 +214,9 @@ export default function ExploreClient({ user }: { user: User | null }) {
                         </div>
                     )}
                 </main>
-                <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
+                
+                {/* MODIFIED: Made footer 'absolute' to stick to the bottom of the relative parent */}
+                <footer className="absolute bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-sm border-t">
                     <div className="w-full max-w-3xl mx-auto">
                         <div className="flex flex-wrap gap-3 justify-center mb-4">
                             {!isLoading && currentFollowUps.map((prompt, index) => {
