@@ -277,7 +277,7 @@ export default function ExplorePage() {
           return (
             <div key={idx} className="flex justify-start">
               <Card>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm as any]}>{m.content}</ReactMarkdown>
               </Card>
             </div>
           );
