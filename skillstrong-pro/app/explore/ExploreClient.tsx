@@ -8,7 +8,7 @@ import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// --- Type Definitions ---
+// Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; }
@@ -69,13 +69,15 @@ export default function ExploreClient({ user }: { user: User | null }) {
         }
     }, [user]);
 
+    // ** THE FIX IS HERE **
+    // The activeChat variable must be defined *before* it is used in the useEffect hook below.
+    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
+
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [activeChat?.messages, isLoading]);
-
-    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
     const updateAndSaveHistory = (newHistory: ChatSession[]) => {
         const limitedHistory = newHistory.slice(0, 30);
@@ -115,11 +117,13 @@ export default function ExploreClient({ user }: { user: User | null }) {
         if (isLoading || !chatId) return;
 
         const newUserMessage: Message = { role: 'user', content: query };
-        const currentChat = chatHistory.find(c => c.id === chatId);
-        const messagesForApi = [...(currentChat?.messages || []), newUserMessage];
+        
+        const messagesForApi = [...(activeChat?.messages || []), newUserMessage];
         
         setChatHistory(prev => prev.map(chat => 
-            chat.id === chatId ? { ...chat, messages: messagesForApi } : chat
+            chat.id === chatId 
+                ? { ...chat, messages: messagesForApi }
+                : chat
         ));
         
         setInputValue("");
@@ -152,7 +156,9 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
             
             setChatHistory(prev => prev.map(chat => 
-                chat.id === chatId ? { ...chat, messages: [...messagesForApi, errorMessage] } : chat
+                chat.id === chatId
+                    ? { ...chat, messages: [...messagesForApi, errorMessage] }
+                    : chat
             ));
         } finally {
             setIsLoading(false);
@@ -169,13 +175,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 </div>
             </aside>
             
-            {/* --- LAYOUT FIX: This container now correctly manages the header, scrolling content, and footer --- */}
             <div className="flex flex-1 flex-col h-screen">
                 <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                     <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
                 </header>
                 
-                {/* This main area now correctly fills the space and scrolls independently */}
                 <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
                    {activeChat && activeChat.messages.length > 0 ? (
                         <div className="space-y-6">
@@ -208,7 +212,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     )}
                 </main>
                 
-                {/* This footer is now a direct child of the flex container, making it static */}
                 <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
                     <div className="w-full max-w-3xl mx-auto">
                         <div className="flex flex-wrap gap-3 justify-center mb-4">
@@ -218,7 +221,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             })}
                         </div>
                         <form onSubmit={(e) => { e.preventDefault(); sendMessage(inputValue, activeChatId); }} className="flex items-center space-x-2">
-                            {/* --- STYLE FIX: Added focus:border-blue-500 and focus:ring-2 for a more prominent outline --- */}
                             <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Ask anything or enter your location..." disabled={isLoading} 
                                 className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50" />
                             <button type="submit" disabled={isLoading || !inputValue.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors"> <Send className="w-5 h-5" /> </button>
