@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { Bot, Gem, Sparkles, MessageSquarePlus, MessageSquareText } from 'lucide-react';
+import { Bot, Gem, Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -18,8 +18,10 @@ interface ChatSession {
   title: string;
   messages: Message[];
   provider: 'openai' | 'gemini';
-  followUps?: string[]; // <-- THIS IS THE FIX: Added the missing property
+  followUps?: string[];
 }
+type ExploreTab = 'skills' | 'salary' | 'training';
+
 
 // --- NEW CONTENT FOR EXPLORE SCREEN ---
 const exploreContent = {
@@ -51,11 +53,11 @@ export default function ExplorePage() {
   const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
   const chatContainerRef = useRef<HTMLDivElement>(null);
-
-  // --- DATA & STATE MANAGEMENT ---
+  
+  // --- DATA & STATE MANAGEMENT (omitted for brevity, same as before) ---
   useEffect(() => {
-    // Load chat history from localStorage on initial render
     try {
       const savedHistory = localStorage.getItem('skillstrong-chathistory');
       if (savedHistory) {
@@ -76,7 +78,6 @@ export default function ExplorePage() {
   }, []);
 
   useEffect(() => {
-    // Auto-scroll to the bottom of the chat
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
@@ -84,18 +85,14 @@ export default function ExplorePage() {
 
   const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
-  // --- HANDLER FUNCTIONS ---
   const updateChatHistory = (updatedHistory: ChatSession[]) => {
-    // Limit history to 30 conversations
     if (updatedHistory.length > 30) {
       updatedHistory = updatedHistory.slice(updatedHistory.length - 30);
     }
     setChatHistory(updatedHistory);
     try {
       localStorage.setItem('skillstrong-chathistory', JSON.stringify(updatedHistory));
-    } catch (error) {
-      console.error("Failed to save chat history", error);
-    }
+    } catch (error) { console.error("Failed to save chat history", error); }
   };
   
   const handleNewChat = () => {
@@ -121,11 +118,8 @@ export default function ExplorePage() {
 
   const handleChipClick = async (query: string) => {
     if (isLoading || !activeChat) return;
-
     const newUserMessage: Message = { role: 'user', content: query };
     const updatedMessages = [...activeChat.messages, newUserMessage];
-    
-    // Clear previous follow-ups immediately for a cleaner UX
     const intermediateHistory = chatHistory.map(chat =>
       chat.id === activeChatId ? { ...chat, messages: updatedMessages, followUps: [] } : chat
     );
@@ -140,9 +134,7 @@ export default function ExplorePage() {
 
     if (!response.ok) {
         const errorMessage: Message = { role: 'assistant', content: "Sorry, I encountered an error. Please try again."};
-        const finalHistory = chatHistory.map(chat =>
-            chat.id === activeChatId ? {...chat, messages: [...updatedMessages, errorMessage]} : chat
-        );
+        const finalHistory = chatHistory.map(chat => chat.id === activeChatId ? {...chat, messages: [...updatedMessages, errorMessage]} : chat );
         updateChatHistory(finalHistory);
         setIsLoading(false);
         return;
@@ -153,14 +145,9 @@ export default function ExplorePage() {
     let finalMessages = [...updatedMessages, assistantMessage];
     let finalTitle = activeChat.title;
 
-    // Generate title for new chats
-    if (activeChat.messages.length === 0) { // This means it's the first exchange
+    if (activeChat.messages.length === 0) {
       try {
-        const titleResponse = await fetch('/api/title', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: finalMessages }),
-        });
+        const titleResponse = await fetch('/api/title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: finalMessages }), });
         if (titleResponse.ok) {
           const { title } = await titleResponse.json();
           finalTitle = title;
@@ -168,9 +155,7 @@ export default function ExplorePage() {
       } catch (e) { console.error("Title generation failed", e); }
     }
 
-    const finalHistory = chatHistory.map(chat =>
-      chat.id === activeChatId ? { ...chat, messages: finalMessages, title: finalTitle, followUps: data.followups || [] } : chat
-    );
+    const finalHistory = chatHistory.map(chat => chat.id === activeChatId ? { ...chat, messages: finalMessages, title: finalTitle, followUps: data.followups || [] } : chat );
     updateChatHistory(finalHistory);
     setIsLoading(false);
   };
@@ -180,23 +165,14 @@ export default function ExplorePage() {
     <div className="flex h-screen bg-gray-100 text-gray-800">
       {/* Sidebar */}
       <aside className="w-64 bg-gray-800 text-white flex flex-col p-2">
-        <button
-          onClick={handleNewChat}
-          className="flex items-center w-full px-4 py-2 mb-4 text-sm font-semibold rounded-md bg-blue-600 hover:bg-blue-700 transition-colors"
-        >
-          <MessageSquarePlus className="w-5 h-5 mr-2" />
-          New Chat
+        <button onClick={handleNewChat} className="flex items-center w-full px-4 py-2 mb-4 text-sm font-semibold rounded-md bg-blue-600 hover:bg-blue-700 transition-colors">
+          <MessageSquarePlus className="w-5 h-5 mr-2" /> New Chat
         </button>
         <div className="flex-1 overflow-y-auto">
           <h2 className="px-4 text-xs font-bold tracking-wider uppercase text-gray-400 mb-2">Recent</h2>
           {chatHistory.map(chat => (
-            <button
-              key={chat.id}
-              onClick={() => setActiveChatId(chat.id)}
-              className={`flex items-center w-full text-left px-4 py-2 text-sm rounded-md transition-colors ${activeChatId === chat.id ? 'bg-gray-700' : 'hover:bg-gray-700/50'}`}
-            >
-              <MessageSquareText className="w-4 h-4 mr-3 flex-shrink-0" />
-              <span className="truncate">{chat.title}</span>
+            <button key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center w-full text-left px-4 py-2 text-sm rounded-md transition-colors ${activeChatId === chat.id ? 'bg-gray-700' : 'hover:bg-gray-700/50'}`}>
+              <MessageSquareText className="w-4 h-4 mr-3 flex-shrink-0" /> <span className="truncate">{chat.title}</span>
             </button>
           ))}
         </div>
@@ -206,23 +182,14 @@ export default function ExplorePage() {
       <div className="flex flex-1 flex-col">
         <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-800 flex items-center">
-            <Sparkles className="w-6 h-6 mr-2 text-blue-500" />
-            SkillStrong Coach
+            <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach
           </h1>
           {activeChat && (
             <div className="flex items-center space-x-2 p-1 bg-gray-100 rounded-full">
-              <button
-                onClick={() => handleProviderChange('openai')}
-                disabled={isLoading}
-                className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'openai' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}
-              >
+              <button onClick={() => handleProviderChange('openai')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'openai' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
                 <Bot className="w-4 h-4 inline-block mr-1" /> GPT
               </button>
-              <button
-                onClick={() => handleProviderChange('gemini')}
-                disabled={isLoading}
-                className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'gemini' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}
-              >
+              <button onClick={() => handleProviderChange('gemini')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'gemini' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
                 <Gem className="w-4 h-4 inline-block mr-1" /> Gemini
               </button>
             </div>
@@ -235,32 +202,42 @@ export default function ExplorePage() {
               {activeChat.messages.map((msg, index) => (
                 <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-xl p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-white text-gray-800 border rounded-bl-none'}`}>
-                    <article className="prose prose-sm max-w-none"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown></article>
+                    {/* ENHANCED MARKDOWN STYLING with 'prose' class */}
+                    <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    </article>
                   </div>
                 </div>
               ))}
               {isLoading && (
-                <div className="flex justify-start">
-                  <div className="max-w-xl p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none"><TypingIndicator /></div>
-                </div>
+                <div className="flex justify-start"><div className="max-w-xl p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none"><TypingIndicator /></div></div>
               )}
             </div>
           ) : (
-             // New Explore Screen
+            // EXPLORE SCREEN WITH TABS
             <div className="max-w-3xl mx-auto">
               <h2 className="text-2xl font-bold text-center mb-2">How can I help you build your career?</h2>
               <p className="text-center text-gray-500 mb-8">Select a category to begin exploring.</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {Object.values(exploreContent).map((category, idx) => (
-                  <div key={idx} className="bg-white p-4 rounded-lg border">
-                    <h3 className="font-semibold mb-3">{category.title}</h3>
-                    <div className="flex flex-col space-y-2">
-                      {category.prompts.map((prompt, pIdx) => (
-                        <button key={pIdx} onClick={() => handleChipClick(prompt)} className="text-left text-sm p-2 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">{prompt}</button>
-                      ))}
-                    </div>
+              
+              <div className="border-b border-gray-200 mb-6">
+                <nav className="-mb-px flex justify-center space-x-8" aria-label="Tabs">
+                  {(['skills', 'salary', 'training'] as ExploreTab[]).map(tab => (
+                    <button key={tab} onClick={() => setActiveExploreTab(tab)}
+                      className={`${ activeExploreTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }
+                        whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium capitalize`}>
+                      {tab}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+              
+              <div className="bg-white p-4 rounded-lg border">
+                  <h3 className="font-semibold mb-3">{exploreContent[activeExploreTab].title}</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {exploreContent[activeExploreTab].prompts.map((prompt, pIdx) => (
+                      <button key={pIdx} onClick={() => handleChipClick(prompt)} className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">{prompt}</button>
+                    ))}
                   </div>
-                ))}
               </div>
             </div>
           )}
@@ -268,10 +245,13 @@ export default function ExplorePage() {
         
         <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
           <div className="w-full max-w-3xl mx-auto">
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div className="flex flex-wrap gap-3 justify-center">
+              {/* RESTYLED FOLLOW-UP BUTTONS */}
               {activeChat?.followUps?.map((prompt: string, index: number) => (
-                <button key={index} onClick={() => handleChipClick(prompt)} disabled={isLoading} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                <button key={index} onClick={() => handleChipClick(prompt)} disabled={isLoading} 
+                  className="group flex items-center px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-full text-sm font-medium hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                   {prompt}
+                  <ArrowRight className="w-4 h-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </button>
               ))}
             </div>
