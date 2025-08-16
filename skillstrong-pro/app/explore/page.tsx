@@ -12,67 +12,7 @@ type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; provider: 'openai' | 'gemini'; followUps?: string[]; }
 type ExploreTab = 'skills' | 'salary' | 'training';
-const exploreContent = { /* ... same as before ... */ };
 
-// ... (Other functions and component structure are the same) ...
-
-export default function ExplorePage() {
-    // ... (All state and functions are the same as the previous correct version)
-    // ...
-
-    return (
-        <div className="flex h-screen bg-gray-100 text-gray-800">
-            {/* ... Sidebar ... */}
-            <div className="flex flex-1 flex-col">
-                {/* ... Header ... */}
-                <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-                    {activeChat && activeChat.messages.length > 0 ? (
-                        <div className="space-y-6">
-                            {activeChat.messages.map((msg, index) => (
-                                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-xl p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-white text-gray-800 border rounded-bl-none'}`}>
-                                        <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
-                                            {/* --- SAFEGUARD ADDED HERE --- */}
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
-                                            </ReactMarkdown>
-                                        </article>
-                                    </div>
-                                </div>
-                            ))}
-                            {isLoading && (
-                                <div className="flex justify-start"><div className="max-w-xl p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none"><TypingIndicator /></div></div>
-                            )}
-                        </div>
-                    ) : (
-                        // ... Explore screen JSX ...
-                    )}
-                </main>
-                {/* ... Footer ... */}
-            </div>
-        </div>
-    );
-}
-
-// NOTE: Please use the FULL file from the previous step, and just ensure the <ReactMarkdown> component has the safeguard as shown above.
-// For clarity, here is the full, correct file again.
-
-// --- FULL CORRECT FILE ---
-
-// /app/explore/page.tsx
-
-"use client";
-
-import { useState, useEffect, useRef } from 'react';
-import { Bot, Gem, Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
-// Type definitions and exploreContent
-type Role = "user" | "assistant";
-interface Message { role: Role; content: string; }
-interface ChatSession { id: string; title: string; messages: Message[]; provider: 'openai' | 'gemini'; followUps?: string[]; }
-type ExploreTab = 'skills' | 'salary' | 'training';
 const exploreContent = {
   skills: { title: "Explore by Job Category", prompts: ["CNC Machinist", "Welder", "Robotics Technician", "Industrial Maintenance", "Quality Control", "Logistics & Supply Chain"]},
   salary: { title: "Explore by Salary Range", prompts: ["What jobs pay $40k-$60k?", "Find roles making $60k-$80k", "What careers make $80k+?"]},
@@ -159,6 +99,14 @@ export default function ExplorePage() {
   };
 
   const handleFormSubmit = (e: React.FormEvent) => { e.preventDefault(); if (inputValue.trim()) { sendMessage(inputValue.trim(), activeChatId); } };
+
+  const handleResetChat = () => {
+    if (!activeChatId) return;
+    const updatedHistory = chatHistory.map(chat => 
+      chat.id === activeChatId ? { ...chat, messages: [], followUps: [] } : chat
+    );
+    updateChatHistory(updatedHistory);
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800">
