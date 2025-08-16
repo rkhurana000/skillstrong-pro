@@ -1,26 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// -------- Types shared with the client --------
+// ---- Shared types with the client ----
 type Role = "user" | "assistant";
 export type Msg = { role: Role; content: string };
 export type FollowUp = { label: string; payload: string; choices?: string[] };
 export type ExploreResponse = { markdown: string; followUps: FollowUp[] };
 
-// -------- Helpers --------
+// ---- Helpers ----
 const SYSTEM_INSTRUCTIONS = `
 You are SkillStrong's manufacturing career coach for US students.
 Stay strictly in manufacturing topics (careers, training, certs, apprenticeships, local programs, entry-level jobs).
-Return answers as concise, friendly Markdown (use short headings, bullets, callouts).
+Return answers as concise, friendly Markdown (short headings, bullets, callouts).
 Always include up to 6 useful follow-up actions.
 
-IMPORTANT: You MUST return valid JSON that matches the schema exactly.
-Do not include extra fields or commentary. Avoid code fences.
-When a follow-up is a question, phrase it as a clickable option (short and actionable).
-If a follow-up implies a choice (e.g., Yes/No or MIG/TIG/Stick), include a "choices" array.
+IMPORTANT for OpenAI: always CALL the tool "return_explore" exactly once with your final JSON.
+Do not print extra text when you call the tool.
+If a follow-up implies a choice (Yes/No or MIG/TIG/Stick), include a "choices" array for quick pick chips.
 `;
 
 const JSON_SCHEMA = {
-  name: "skillstrong_explore",
+  // We reuse the same JSON schema for both providers
   schema: {
     type: "object",
     additionalProperties: false,
@@ -29,7 +28,7 @@ const JSON_SCHEMA = {
       markdown: {
         type: "string",
         description:
-          "A well-formatted Markdown answer (headings, bullets, short callouts). No frontmatter, no code fences.",
+          "A well-formatted Markdown answer (headings, bullets, short callouts). No code fences.",
       },
       followUps: {
         type: "array",
@@ -40,17 +39,8 @@ const JSON_SCHEMA = {
           required: ["label", "payload"],
           properties: {
             label: { type: "string" },
-            payload: {
-              type: "string",
-              description:
-                "A short instruction the app will send back to continue the flow (e.g., 'Show local apprenticeships', 'Yes', 'TIG').",
-            },
-            choices: {
-              type: "array",
-              items: { type: "string" },
-              description:
-                "Optional list of choices if this follow-up expects a quick pick (e.g., ['Yes','No'] or welding types).",
-            },
+            payload: { type: "string" },
+            choices: { type: "array", items: { type: "string" } },
           },
         },
       },
@@ -63,19 +53,30 @@ function badRequest(msg: string, extra?: any) {
   return NextResponse.json({ error: msg, extra }, { status: 400 });
 }
 
-// -------- Route --------
+function safeParse(text: string): ExploreResponse | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const m = text.match(/\{[\s\S]*\}$/m);
+    if (m) {
+      try {
+        return JSON.parse(m[0]);
+      } catch {}
+    }
+    return null;
+  }
+}
+
+// ---- Route ----
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
       provider, // "openai" | "gemini"
-      model,    // optional override
-      messages, // Msg[]
-    }: {
-      provider?: "openai" | "gemini";
-      model?: string;
-      messages: Msg[];
-    } = body;
+      model,
+      messages,
+    }: { provider?: "openai" | "gemini"; model?: string; messages: Msg[] } =
+      body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return badRequest("Missing 'messages' array.");
@@ -86,63 +87,77 @@ export async function POST(req: NextRequest) {
       (process.env.PROVIDER as "openai" | "gemini" | undefined) ??
       "gemini";
 
+    // ---------- OPENAI via Chat Completions + tools ----------
     if (prov === "openai") {
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) return badRequest("OPENAI_API_KEY is not set.");
-      const { OpenAI } = await import("openai");
 
+      const { OpenAI } = await import("openai");
       const client = new OpenAI({ apiKey });
 
-      // Use Responses API with strict JSON schema
-      const res = await client.responses.create({
-        model: model || process.env.OPENAI_MODEL || "gpt-4o-mini",
+      const openaiModel = model || process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+      const chat = await client.chat.completions.create({
+        model: openaiModel,
         temperature: 0.6,
-        max_output_tokens: 900,
-        response_format: { type: "json_schema", json_schema: JSON_SCHEMA },
-        input: [
+        messages: [
           { role: "system", content: SYSTEM_INSTRUCTIONS },
+          // pass full history so follow-ups keep context
+          ...messages.map((m) => ({ role: m.role, content: m.content })) as any,
+        ],
+        tools: [
           {
-            role: "user",
-            // Send history so model keeps context
-            content: JSON.stringify({
-              history: messages,
-              instruction:
-                "Respond with JSON ONLY that matches the schema. Do not add backticks.",
-            }),
+            type: "function",
+            function: {
+              name: "return_explore",
+              description:
+                "Return the final JSON payload to render (markdown + up to 6 followUps).",
+              // OpenAI tool schema expects JSON Schema v7-ish; our object is compatible.
+              parameters: JSON_SCHEMA.schema as any,
+            },
           },
         ],
-      });
+        // Force the model to call our tool with the structured output
+        tool_choice: { type: "function", function: { name: "return_explore" } },
+        max_tokens: 900,
+      } as any); // cast for older SDK typings
 
-      // SDK convenience to get text from the response
-      const text = (res as any).output_text as string | undefined;
-      if (!text) {
-        return badRequest("OpenAI returned empty output_text.", res);
+      const choice = chat.choices?.[0];
+      const toolCall = choice?.message?.tool_calls?.[0];
+
+      if (toolCall?.function?.arguments) {
+        try {
+          const parsed = JSON.parse(toolCall.function.arguments) as ExploreResponse;
+          return NextResponse.json(parsed);
+        } catch (e) {
+          // fallback: try to parse normal content if tool args parsing fails
+        }
       }
 
-      const parsed = safeParse(text);
-      if (!parsed) return badRequest("OpenAI returned non-JSON.", text);
-
+      // Fallback: try to parse raw text (older models may put JSON in content)
+      const txt = choice?.message?.content ?? "";
+      const parsed = safeParse(txt);
+      if (!parsed) return badRequest("OpenAI: could not parse JSON.", chat);
       return NextResponse.json(parsed);
     }
 
-    // -------- GEMINI --------
+    // ---------- GEMINI ----------
     if (prov === "gemini") {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return badRequest("GEMINI_API_KEY is not set.");
-      const { GoogleGenerativeAI } = await import("@google/generative-ai");
 
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
       const genAI = new GoogleGenerativeAI(apiKey);
       const mdl = model || process.env.GEMINI_MODEL || "gemini-1.5-flash";
       const gemModel = genAI.getGenerativeModel({ model: mdl });
 
-      // Ask Gemini to return raw JSON (no code fences)
       const prompt = [
         SYSTEM_INSTRUCTIONS,
         "",
         "History:",
         JSON.stringify(messages),
         "",
-        "Return JSON ONLY (no backticks) exactly matching the schema.",
+        "Return JSON ONLY exactly matching the schema (no code fences).",
       ].join("\n");
 
       const result = await gemModel.generateContent({
@@ -170,21 +185,5 @@ export async function POST(req: NextRequest) {
       { error: "Server error", details: err?.message ?? String(err) },
       { status: 500 }
     );
-  }
-}
-
-// -------- Robust parser (handles plain JSON or JSON inside fences) --------
-function safeParse(text: string): ExploreResponse | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Try to extract a JSON block if model wrapped it
-    const m = text.match(/\{[\s\S]*\}$/m);
-    if (m) {
-      try {
-        return JSON.parse(m[0]);
-      } catch {}
-    }
-    return null;
   }
 }
