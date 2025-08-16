@@ -8,7 +8,7 @@ import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// Type Definitions
+// --- Type Definitions ---
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; }
@@ -46,12 +46,20 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 return;
             }
             localStorage.removeItem('skillstrong-quiz-results');
-            const { answers, questions } = JSON.parse(quizResultsString);
-            let quizSummary = "I just took the interest quiz. Here are my ratings (1=Disagree, 5=Agree):\n";
-            questions.forEach((q: string, i: number) => { quizSummary += `* ${q}: ${answers[i]}\n`; });
-            quizSummary += "\nBased on these results, what manufacturing roles are a good fit for me?";
+            const { answers } = JSON.parse(quizResultsString);
+
+            // --- UPDATED PROMPT LOGIC ---
+            // This prompt now instructs the AI to generate a specific, welcoming response.
+            let quizPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}.
+            
+            Based on these results, please act as my career coach. Your entire response must follow these rules:
+            1.  Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore."
+            2.  Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results.
+            3.  For each career, provide a brief, one-sentence explanation of why it's a good match.
+            4.  Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
+
             const newChat = createNewChat(false);
-            sendMessage(quizSummary, newChat.id);
+            sendMessage(quizPrompt, newChat.id);
         } else {
             try {
                 const savedHistory = localStorage.getItem('skillstrong-chathistory');
@@ -69,15 +77,13 @@ export default function ExploreClient({ user }: { user: User | null }) {
         }
     }, [user]);
 
-    // ** THE FIX IS HERE **
-    // The activeChat variable must be defined *before* it is used in the useEffect hook below.
-    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
-
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [activeChat?.messages, isLoading]);
+
+    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
     const updateAndSaveHistory = (newHistory: ChatSession[]) => {
         const limitedHistory = newHistory.slice(0, 30);
@@ -117,7 +123,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
         if (isLoading || !chatId) return;
 
         const newUserMessage: Message = { role: 'user', content: query };
-        
         const messagesForApi = [...(activeChat?.messages || []), newUserMessage];
         
         setChatHistory(prev => prev.map(chat => 
@@ -144,7 +149,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
             setChatHistory(prev => prev.map(chat => {
                 if (chat.id === chatId) {
-                    const title = chat.messages.length === 0 ? data.answer.substring(0, 40) + '...' : chat.title;
+                    const title = chat.messages.length === 0 ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 40) + '...' : chat.title);
                     return { ...chat, messages: [...messagesForApi, assistantMessage], title };
                 }
                 return chat;
