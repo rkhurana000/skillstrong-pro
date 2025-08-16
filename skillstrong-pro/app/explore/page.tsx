@@ -3,7 +3,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import { OpenAI, Gem, Sparkles } from 'lucide-react';
+// CORRECTED IMPORT: Replaced 'OpenAI' with 'Bot'
+import { Bot, Gem, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -144,7 +145,8 @@ export default function ExplorePage() {
             disabled={isLoading}
             className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${provider === 'openai' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}
           >
-            <OpenAI className="w-4 h-4 inline-block mr-1" /> GPT
+            {/* CORRECTED USAGE: Replaced 'OpenAI' with 'Bot' */}
+            <Bot className="w-4 h-4 inline-block mr-1" /> GPT
           </button>
           <button
             onClick={() => setProvider('gemini')}
