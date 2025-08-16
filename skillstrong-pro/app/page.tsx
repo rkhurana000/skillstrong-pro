@@ -17,7 +17,7 @@ export default function HomePage() {
             Build your Manufacturing Career
           </h1>
           <p className="mt-4 max-w-2xl mx-auto text-lg md:text-xl text-slate-300">
-            Don't just get a job. Start a high-demand, high-tech career in modern manufacturing—no four-year degree required.
+            Start a high-demand, high-tech career in modern manufacturing—no four-year degree required.
           </p>
           <div className="mt-8 flex justify-center gap-4">
             <Link href="/explore" className="inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
