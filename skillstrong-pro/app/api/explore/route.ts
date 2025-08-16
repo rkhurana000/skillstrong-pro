@@ -1,174 +1,146 @@
-// app/api/explore/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+// /app/api/explore/route.ts
 
-/**
- * ENV expected:
- *  - PROVIDER = "openai" | "gemini" (default: gemini)
- *  - OPENAI_API_KEY (if using OpenAI)
- *  - GEMINI_API_KEY (if using Gemini)
- *  - OPENAI_MODEL (optional, default gpt-4o-mini)
- *  - GEMINI_MODEL (optional, default gemini-1.5-flash)
- */
+import { NextRequest, NextResponse } from 'next/server';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
-type Msg = { role: "user" | "assistant"; content: string };
+// The new, robust system prompt for guardrails and persona
+const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor specializing exclusively in the US manufacturing sector. Your tone is encouraging, clear, and geared towards students and young adults (Gen-Z).
 
-const DEFAULT_PROVIDER =
-  (process.env.PROVIDER as "openai" | "gemini") || "gemini";
+**Your Core Directives:**
+1.  **Stay Focused:** Your knowledge is strictly limited to manufacturing careers: roles, skills, salaries, training paths, and job-finding strategies within the US.
+2.  **Reject Off-Topic Queries:** If asked about anything outside manufacturing, politely decline and steer the conversation back. Example: "That's outside my expertise in manufacturing careers. Shall we explore CNC programming salaries instead?"
+3.  **Use Search Results:** When provided with search results under a "CONTEXT" section, you MUST synthesize them in your answer to provide current, relevant links and information for local jobs, apprenticeships, or training. Cite the links naturally in your response using Markdown links.
+4.  **Provide Actionable Follow-ups:** EVERY response must end with 3 to 5 relevant follow-up questions to guide the user.
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+**Output Format:**
+Your entire response MUST be a single string that starts with the Markdown answer and ends with a JSON block. Do not add any text after the JSON block.
 
-const openai =
-  process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+<START OF YOUR ANSWER IN MARKDOWN>
+... your helpful, manufacturing-focused advice...
+<END OF YOUR ANSWER IN MARKDOWN>
 
-const genAI =
-  process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
-
-// System guardrails – keeps the domain focused on manufacturing & students.
-const SYSTEM_INSTRUCTIONS = `
-You are SkillStrong, a concise career guide for **manufacturing** students.
-- Keep answers short, skimmable, and structured (headings, bullet lists).
-- Stay in manufacturing context: jobs, skills, training, certifications, apprenticeships, schools.
-- At the end, suggest up to 6 relevant follow-up questions as short, clickable prompts (no more than ~10 words each).
-- If user input looks like a choice (yes/no, MIG/TIG, etc.), act on it and continue the flow.
-- Return JSON with keys: "answer" (markdown string) and "followups" (string[] up to 6).
+\`\`\`json
+{
+  "followups": [
+    "Follow-up question 1.",
+    "Follow-up question 2.",
+    "Follow-up question 3."
+  ]
+}
+\`\`\`
 `;
 
-function extractJsonFromText(text: string) {
-  // Try to find a fenced JSON block first
-  const fence = text.match(/```json([\s\S]*?)```/i);
-  const candidate = fence ? fence[1].trim() : text.trim();
+// Helper function to call our new search API
+async function performSearch(query: string, req: NextRequest): Promise<any[]> {
+  const searchApiUrl = new URL('/api/search', req.url);
   try {
-    const obj = JSON.parse(candidate);
-    if (obj && typeof obj === "object" && ("answer" in obj || "followups" in obj)) {
-      return obj;
-    }
-  } catch {
-    // ignore
+    const response = await fetch(searchApiUrl.toString(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    if (!response.ok) return [];
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to call internal search API:", error);
+    return [];
   }
-  return null;
-}
-
-function fallbackFollowups(intentHint?: string): string[] {
-  // lightweight heuristic – safe defaults
-  const common = [
-    "Show nearby training programs",
-    "What entry-level jobs fit me?",
-    "Apprenticeship options near me",
-    "Certifications to start with",
-    "What skills should I learn first?",
-    "Typical pay & growth outlook",
-  ];
-  if (!intentHint) return common.slice(0, 4);
-  if (intentHint === "skills")
-    return ["Skills to begin with", "Beginner projects", "Recommended tools", "Safety basics"];
-  if (intentHint === "salary")
-    return ["Jobs in this salary band", "How to move up", "Certs to boost pay", "Cities with demand"];
-  if (intentHint === "training")
-    return ["Short programs", "Community colleges", "Online courses", "How to fund training"];
-  return common.slice(0, 6);
-}
-
-async function askOpenAI(messages: Msg[], intentHint?: string) {
-  if (!openai) throw new Error("OpenAI not configured");
-  const sys: Msg = { role: "user", content: `SYSTEM:\n${SYSTEM_INSTRUCTIONS}` };
-
-  // Use chat.completions for maximum compatibility
-  const completion = await openai.chat.completions.create({
-    model: OPENAI_MODEL,
-    temperature: 0.6,
-    messages: [
-      { role: "system", content: "You are a helpful manufacturing career guide." },
-      // Inject system instructions as a user content block (works better across models)
-      sys,
-      ...messages.map((m) => ({ role: m.role, content: m.content })),
-      {
-        role: "user",
-        content:
-          "Reply ONLY as JSON: {\"answer\": \"<markdown>\", \"followups\": [\"...\"]}.\n" +
-          "No prose outside JSON. Make followups <= 6 items.",
-      },
-    ],
-  });
-
-  const text =
-    completion.choices?.[0]?.message?.content?.toString() ||
-    "";
-
-  const parsed = extractJsonFromText(text);
-  if (parsed) return { answer: parsed.answer || "", followups: parsed.followups || [], raw: text };
-
-  // Fallback: return raw text, and synthesize followups
-  return {
-    answer: text || "Here’s what I found.",
-    followups: fallbackFollowups(intentHint),
-    raw: text,
-  };
-}
-
-async function askGemini(messages: Msg[], intentHint?: string) {
-  if (!genAI) throw new Error("Gemini not configured");
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-  const prompt = [
-    SYSTEM_INSTRUCTIONS,
-    "",
-    "Conversation:",
-    ...messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`),
-    "",
-    "Reply ONLY as JSON:",
-    `{"answer":"<markdown>","followups":["..."]}`,
-    "No prose outside JSON. Max 6 followups.",
-  ].join("\n");
-
-  const resp = await model.generateContent(prompt);
-  const text = resp.response?.text?.() || "";
-
-  const parsed = extractJsonFromText(text);
-  if (parsed) return { answer: parsed.answer || "", followups: parsed.followups || [], raw: text };
-
-  return {
-    answer: text || "Here’s what I found.",
-    followups: fallbackFollowups(intentHint),
-    raw: text,
-  };
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const messages: Msg[] = Array.isArray(body.messages) ? body.messages : [];
-    const providerQuery = (req.nextUrl.searchParams.get("provider") || "").toLowerCase();
-    const providerHeader = (req.headers.get("x-provider") || "").toLowerCase();
-    const provider = (providerQuery || providerHeader || DEFAULT_PROVIDER) as "openai" | "gemini";
-    const intent: string | undefined = body.intent; // "skills" | "salary" | "training" | etc.
+    const { searchParams } = new URL(req.url);
+    const provider = searchParams.get('provider') || 'gemini';
+    const { messages } = await req.json();
+    const latestUserMessage = messages[messages.length - 1]?.content || '';
 
-    let result: { answer: string; followups: string[]; raw?: string };
+    // --- RAG Logic ---
+    // Step 1: LLM decides if a search is needed.
+    const searchDecisionPrompt = `Does the following user query require a real-time internet search for local job listings, apprenticeships, or training programs? Answer with only "YES" or "NO". Query: "${latestUserMessage}"`;
+    
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const decisionResponse = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: searchDecisionPrompt }],
+        max_tokens: 2,
+    });
+    const decision = decisionResponse.choices[0].message?.content?.trim().toUpperCase();
 
-    if (provider === "openai") {
-      result = await askOpenAI(messages, intent);
-    } else {
-      result = await askGemini(messages, intent);
+    let finalPrompt = systemPrompt;
+    let searchResultsContext = '';
+
+    if (decision === 'YES') {
+      // Step 2: If yes, LLM generates a search query.
+      const searchQueryGenPrompt = `Generate a concise Google search query to find local manufacturing jobs, training, or apprenticeships based on this user request. Return only the search query. Request: "${latestUserMessage}"`;
+      const queryGenResponse = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [{ role: 'user', content: searchQueryGenPrompt }],
+          max_tokens: 20,
+      });
+      const searchQuery = queryGenResponse.choices[0].message?.content?.trim();
+
+      if (searchQuery) {
+        // Step 3: Perform the search.
+        const searchResults = await performSearch(searchQuery, req);
+        if (searchResults.length > 0) {
+          searchResultsContext = `\n\n---CONTEXT FROM REAL-TIME SEARCH---\nHere are some relevant search results to use in your answer:\n${JSON.stringify(searchResults, null, 2)}\n---END OF CONTEXT---`;
+        }
+      }
+    }
+    
+    // Step 4: Construct the final prompt with context if available.
+    finalPrompt = systemPrompt.replace('**Your Core Directives:**', `**Your Core Directives:**${searchResultsContext}`);
+
+    // --- LLM Call Logic ---
+    const fullMessages = [{ role: 'system', content: finalPrompt }, ...messages];
+    let rawAnswer = '';
+
+    if (provider === 'openai') {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: fullMessages,
+      });
+      rawAnswer = response.choices[0].message?.content || '';
+    } else { // Gemini
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction: finalPrompt });
+      const geminiHistory = messages
+        .filter((msg: { role: string }) => msg.role !== 'system')
+        .map((msg: { role: string, content: string }) => ({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: msg.content }],
+        }));
+        
+      const chat = model.startChat({ history: geminiHistory });
+      const result = await chat.sendMessage(latestUserMessage);
+      rawAnswer = result.response.text();
     }
 
-    // Normalize & guarantee shape
-    const payload = {
-      provider,
-      answer: result.answer || (result.raw ?? "I couldn’t produce an answer."),
-      followups: Array.isArray(result.followups) ? result.followups.slice(0, 6) : [],
-      raw: result.raw,
-    };
+    // --- Response Parsing ---
+    const jsonBlockMatch = rawAnswer.match(/```json\n([\s\S]*?)\n```/);
+    let answer = rawAnswer;
+    let followups: string[] = [];
 
-    return NextResponse.json(payload, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json(
-      {
-        error: "LLM_CALL_FAILED",
-        message: err?.message || "Unknown error",
-      },
-      { status: 500 }
-    );
+    if (jsonBlockMatch && jsonBlockMatch[1]) {
+      answer = rawAnswer.substring(0, jsonBlockMatch.index).trim();
+      try {
+        const parsedJson = JSON.parse(jsonBlockMatch[1]);
+        followups = parsedJson.followups || [];
+      } catch (e) {
+        console.error("Failed to parse follow-ups JSON:", e);
+      }
+    }
+    
+    if (answer.length === 0) {
+        answer = "I'm not sure how to respond to that. Could you try asking in a different way?";
+        followups = ["What are common manufacturing jobs?", "How do I start a career in welding?"];
+    }
+
+    return NextResponse.json({ answer, followups });
+
+  } catch (error) {
+    console.error("Error in /api/explore:", error);
+    return NextResponse.json({ error: 'An internal server error occurred.' }, { status: 500 });
   }
 }
