@@ -101,58 +101,56 @@ export default function ExplorePage() {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        let newHistory = chatHistory.map(chat => {
-            if (chat.id === chatId) {
-                return { ...chat, messages: [...chat.messages, newUserMessage] };
-            }
-            return chat;
-        });
-        updateAndSaveHistory(newHistory);
+        // This state update needs to happen before the API call.
+        setChatHistory(prev => prev.map(chat => 
+            chat.id === chatId 
+                ? { ...chat, messages: [...chat.messages, newUserMessage] }
+                : chat
+        ));
+        
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
         try {
-            const currentChat = newHistory.find(c => c.id === chatId);
+            const currentChat = chatHistory.find(c => c.id === chatId);
+            const messagesForApi = [...(currentChat?.messages || []), newUserMessage];
+
             const response = await fetch('/api/explore', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: currentChat?.messages || [] }),
+                body: JSON.stringify({ messages: messagesForApi }),
             });
 
             if (!response.ok) throw new Error("API response was not ok.");
 
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
-
-            let finalHistory = chatHistory.map(chat => {
+            
+            setChatHistory(prev => prev.map(chat => {
                 if (chat.id === chatId) {
-                    const updatedMessages = [...chat.messages, newUserMessage, assistantMessage];
                     // Update title for the first message exchange
-                    const title = chat.messages.length === 0 ? data.answer.substring(0, 40) + '...' : chat.title;
-                    return { ...chat, messages: updatedMessages, title };
+                    const title = chat.messages.length === 1 ? data.answer.substring(0, 40) + '...' : chat.title;
+                    return { ...chat, messages: [...chat.messages, assistantMessage], title };
                 }
                 return chat;
-            });
+            }));
 
-            updateAndSaveHistory(finalHistory);
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            let errorHistory = chatHistory.map(chat => {
-                if (chat.id === chatId) {
-                    return { ...chat, messages: [...chat.messages, newUserMessage, errorMessage] };
-                }
-                return chat;
-            });
-            updateAndSaveHistory(errorHistory);
+            
+            setChatHistory(prev => prev.map(chat => 
+                chat.id === chatId
+                    ? { ...chat, messages: [...chat.messages, errorMessage] }
+                    : chat
+            ));
         } finally {
             setIsLoading(false);
         }
     };
     
-    // --- Render Logic ---
     return (
         <div className="flex h-screen bg-gray-100 text-gray-800">
             <aside className="w-64 bg-gray-800 text-white flex flex-col p-2">
@@ -167,18 +165,19 @@ export default function ExplorePage() {
                     <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
                 </header>
                 <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-                   {activeChat && activeChat.messages.map((msg, index) => (
-  <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-    {/* MODIFIED: User messages are narrower, assistant answers are wider */}
-    <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-blue-500 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
-      <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
-        </ReactMarkdown>
-      </article>
-    </div>
-  </div>
-))}
+                   {activeChat && activeChat.messages.length > 0 ? (
+                        <div className="space-y-6">
+                            {activeChat.messages.map((msg, index) => (
+                                <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-blue-500 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
+                                        <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                                {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
+                                            </ReactMarkdown>
+                                        </article>
+                                    </div>
+                                </div>
+                            ))}
                             {isLoading && ( <div className="flex justify-start"><div className="max-w-xl p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none"><TypingIndicator /></div></div> )}
                         </div>
                     ) : (
