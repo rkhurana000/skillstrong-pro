@@ -18,8 +18,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
             <div className="flex gap-8 text-slate-600">
               <Link href="/">Home</Link>
-              <Link href="/features">Features</Link>
-              <Link href="/interest">Interest</Link>
               <Link href="/quiz">Quiz</Link>
               <Link href="/about">About</Link>
               <Link href="/explore">Explore Careers</Link>
