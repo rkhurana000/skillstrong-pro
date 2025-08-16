@@ -1,10 +1,11 @@
-// app/quiz/page.tsx
+// /app/quiz/page.tsx
+
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-const QUESTIONS = [
+const quizQuestions = [
   "I enjoy working with tools or machinery.",
   "I like fixing or building things with my hands.",
   "I like figuring out how things work.",
@@ -13,94 +14,81 @@ const QUESTIONS = [
   "I enjoy creative projects or prototyping.",
   "I like helping people learn or be safe.",
   "I enjoy organizing information or processes.",
-  "I like working with numbers and data.",
-  "I enjoy collaborating as part of a team.",
+  "I like working in a team towards a clear goal.",
+  "I prefer tasks with clear, measurable results."
 ];
 
 export default function QuizPage() {
+  const [answers, setAnswers] = useState<Record<number, number>>({});
   const router = useRouter();
-  const [answers, setAnswers] = useState<Array<number | null>>(
-    Array(QUESTIONS.length).fill(null)
-  );
 
-  const progress = useMemo(
-    () => answers.filter((a) => a !== null).length,
-    [answers]
-  );
+  const handleAnswerChange = (questionIndex: number, value: number) => {
+    setAnswers(prev => ({ ...prev, [questionIndex]: value }));
+  };
 
-  function setAnswer(qIndex: number, value: number) {
-    setAnswers((prev) => {
-      const next = [...prev];
-      next[qIndex] = value;
-      return next;
-    });
-  }
-
-  function goToMatches(e: React.FormEvent) {
-    e.preventDefault();
-    // You can encode answers in the URL if you want to use them later:
-    // const encoded = encodeURIComponent(JSON.stringify(answers));
-    // router.push(`/explore?quiz=${encoded}`);
-    router.push("/explore");
-  }
+  const handleSubmit = () => {
+    if (Object.keys(answers).length < quizQuestions.length) {
+      alert("Please answer all questions before proceeding.");
+      return;
+    }
+    // Save results to localStorage to be picked up by the explore page
+    localStorage.setItem('skillstrong-quiz-results', JSON.stringify({ answers, questions: quizQuestions }));
+    // Redirect to the explore page
+    router.push('/explore');
+  };
+  
+  const answeredCount = Object.keys(answers).length;
+  const progress = (answeredCount / quizQuestions.length) * 100;
 
   return (
-    <main className="page-shell quiz-page">
-      <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
-        Interest Quiz
-      </h1>
-      <p className="mt-1 text-slate-600">
-        A quick RIASEC-lite check to pair you with manufacturing roles. Rate each
-        1–5.
-      </p>
+    <div className="bg-gray-50 min-h-screen py-12">
+      <div className="container mx-auto max-w-2xl px-4">
+        <div className="bg-white p-8 rounded-xl shadow-md">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Interest Quiz</h1>
+          <p className="text-gray-600 mb-8">A quick RIASEC-lite check to pair you with manufacturing roles. Rate each 1-5.</p>
+          
+          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-8">
+            <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+          </div>
+          
+          <div className="space-y-8">
+            {quizQuestions.map((question, index) => (
+              <div key={index}>
+                <p className="font-semibold text-gray-700 mb-3">{`${index + 1}. ${question}`}</p>
+                <div className="flex justify-between items-center text-sm text-gray-500">
+                  <span>Strongly Disagree</span>
+                  <div className="flex space-x-4">
+                    {[1, 2, 3, 4, 5].map(value => (
+                      <label key={value} className="flex flex-col items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`question-${index}`}
+                          value={value}
+                          checked={answers[index] === value}
+                          onChange={() => handleAnswerChange(index, value)}
+                          className="h-6 w-6 accent-blue-600"
+                        />
+                        <span className="mt-1">{value}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <span>Strongly Agree</span>
+                </div>
+              </div>
+            ))}
+          </div>
 
-      <form onSubmit={goToMatches} className="page-card mt-4 p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="text-slate-700 font-medium">Progress: {progress}/10</div>
-          <button
-            type="submit"
-            disabled={progress === 0}
-            className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700"
-          >
-            See my matches
-          </button>
+          <div className="mt-10 text-center">
+            <button
+              onClick={handleSubmit}
+              disabled={answeredCount < quizQuestions.length}
+              className="px-8 py-3 bg-blue-600 text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all"
+            >
+              See My Matches
+            </button>
+          </div>
         </div>
-
-        {QUESTIONS.map((q, idx) => (
-          <fieldset key={idx}>
-            <legend>{idx + 1}. {q}</legend>
-            <div className="scale" role="radiogroup" aria-label={`Question ${idx + 1}`}>
-              {[1, 2, 3, 4, 5].map((n) => {
-                const id = `q${idx}-${n}`;
-                return (
-                  <label key={id} htmlFor={id} className="inline-flex items-center gap-2">
-                    <input
-                      id={id}
-                      type="radio"
-                      name={`q${idx}`}
-                      value={n}
-                      checked={answers[idx] === n}
-                      onChange={() => setAnswer(idx, n)}
-                      className="h-4 w-4 accent-blue-600"
-                    />
-                    <span className="text-slate-700">{n}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-        ))}
-
-        <div className="pt-2">
-          <button
-            type="submit"
-            disabled={progress === 0}
-            className="rounded-xl bg-blue-600 text-white px-4 py-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700"
-          >
-            See my matches
-          </button>
-        </div>
-      </form>
-    </main>
+      </div>
+    </div>
   );
 }
