@@ -21,7 +21,9 @@
     "react-dom": "18.3.1",
     "remark-gfm": "4.0.0",
     "ai": "5.0.14",
-    "typescript": "5.4.5"
+    "typescript": "5.4.5",
+    "@ai-sdk/react": "5.0.0"
+
   },
   "devDependencies": {
     "typescript": "^5.4.5",
