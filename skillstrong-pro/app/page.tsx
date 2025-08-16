@@ -12,12 +12,9 @@ export default function HomePage() {
     <div className="bg-white text-slate-800">
       {/* --- Hero Section --- */}
       <section className="relative bg-slate-900 text-white">
-        <div className="absolute inset-0">
-            <img src={heroImage} alt="Modern manufacturing environment" className="w-full h-full object-cover opacity-30" />
-        </div>
         <div className="relative container mx-auto px-6 lg:px-8 py-24 md:py-32 text-center">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-            Build What's Next.
+            Build your Manufacturing Career
           </h1>
           <p className="mt-4 max-w-2xl mx-auto text-lg md:text-xl text-slate-300">
             Don't just get a job. Start a high-demand, high-tech career in modern manufacturing—no four-year degree required.
