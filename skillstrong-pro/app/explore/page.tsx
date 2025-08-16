@@ -167,17 +167,18 @@ export default function ExplorePage() {
                     <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
                 </header>
                 <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-                    {activeChat && activeChat.messages.length > 0 ? (
-                        <div className="space-y-6">
-                            {activeChat.messages.map((msg, index) => (
-                                <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-xl p-3 rounded-2xl ${msg.role === 'user' ? 'bg-blue-500 text-white rounded-br-none' : 'bg-white text-gray-800 border rounded-bl-none'}`}>
-                                        <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
-                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
-                                        </article>
-                                    </div>
-                                </div>
-                            ))}
+                   {activeChat && activeChat.messages.map((msg, index) => (
+  <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+    {/* MODIFIED: User messages are narrower, assistant answers are wider */}
+    <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-blue-500 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
+      <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
+        </ReactMarkdown>
+      </article>
+    </div>
+  </div>
+))}
                             {isLoading && ( <div className="flex justify-start"><div className="max-w-xl p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none"><TypingIndicator /></div></div> )}
                         </div>
                     ) : (
