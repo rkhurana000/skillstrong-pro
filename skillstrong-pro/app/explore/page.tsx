@@ -1,49 +1,19 @@
+// app/explore/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import remarkGfmImport from "remark-gfm";
 
-// --- Types must match the server ---
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
-type FollowUp = { label: string; payload: string; choices?: string[] };
-type ExploreResponse = { markdown: string; followUps: FollowUp[] };
 
-// UI chips
-function Chip({
-  children,
-  onClick,
-  selected,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  selected?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-4 py-2 text-sm border transition ${
-        selected
-          ? "bg-blue-600 text-white border-blue-600"
-          : "bg-white hover:bg-blue-50 border-neutral-300"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+const gfm: any = remarkGfmImport; // avoid CI type mismatch
 
-// Pretty card for assistant answers
-function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl bg-neutral-50/70 shadow-sm border border-neutral-200 p-4 md:p-6">
-      {children}
-    </div>
-  );
-}
+const TABS = ["skills", "salary", "training"] as const;
+type Tab = (typeof TABS)[number];
 
-const SKILLS = [
+const SKILL_TAGS = [
   "Welding",
   "CNC Machining",
   "Quality Control",
@@ -54,238 +24,183 @@ const SKILLS = [
   "Design & Engineering",
 ];
 
-type Tab = "skills" | "salary" | "training";
-
-/** Safely parse JSON from API with a tiny fallback (never throws) */
-function coerceExploreJson(data: any): ExploreResponse | null {
-  if (!data) return null;
-  if (typeof data === "object" && data.markdown && data.followUps) return data;
-
-  if (typeof data === "string") {
-    try {
-      return JSON.parse(data);
-    } catch {
-      const m = data.match(/\{[\s\S]*\}$/m);
-      if (m)
-        try {
-          return JSON.parse(m[0]);
-        } catch {}
-    }
-  }
-  return null;
-}
+const SALARY_BANDS = ["< $40k", "$40–60k", "$60–80k+", "$80–100k+"];
 
 export default function ExplorePage() {
-  const [tab, setTab] = useState<Tab>("skills");
   const [provider, setProvider] = useState<"gemini" | "openai">("gemini");
+  const [tab, setTab] = useState<Tab>("skills");
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [followups, setFollowups] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  // scroll to latest
-  const bottomRef = useRef<HTMLDivElement>(null);
-  useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), [
-    messages.length,
-    loading,
-  ]);
-
-  // initial greeting
   useEffect(() => {
-    if (messages.length) return;
-    setMessages([
-      {
-        role: "assistant",
-        content:
-          "Welcome! Pick a way to explore manufacturing careers, or select a chip to start.",
-      },
-    ]);
-  }, [messages.length]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, followups, loading]);
 
-  // Send a new turn to the API
-  const send = async (userText: string) => {
-    const newMsgs = [...messages, { role: "user" as Role, content: userText }];
-    setMessages(newMsgs);
+  // pretty chip
+  const Chip = ({ children, onClick, active = false }: { children: React.ReactNode; onClick?: () => void; active?: boolean }) => (
+    <button
+      onClick={onClick}
+      className={`rounded-full border px-4 py-2 text-sm ${active ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-zinc-50"}`}
+    >
+      {children}
+    </button>
+  );
+
+  async function callLLM(userText: string) {
+    const newMessages = [...messages, { role: "user", content: userText }];
+    setMessages(newMessages);
     setLoading(true);
 
     try {
-      const res = await fetch("/api/explore", {
+      const res = await fetch(`/api/explore?provider=${provider}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-provider": provider },
         body: JSON.stringify({
-          provider,
-          messages: newMsgs,
+          intent: tab,          // hint for better followups
+          messages: newMessages // keep context
         }),
       });
 
-      const raw = await res.json();
-      const parsed = coerceExploreJson(raw);
-
-      if (!parsed) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content:
-              "Sorry — I didn’t get a readable answer. Please try again.",
-          },
-        ]);
-      } else {
-        const md = parsed.markdown;
-        const fu = parsed.followUps ?? [];
-
-        // Append the assistant turn as markdown, then a synthetic “followUps” message
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: md },
-          { role: "assistant", content: JSON.stringify({ followUps: fu }) },
-        ]);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const text = err?.message || "Sorry — I couldn’t get an answer. Please try again.";
+        setMessages((prev) => [...prev, { role: "assistant", content: text }]);
+        setFollowups([]);
+        return;
       }
-    } catch (e) {
+
+      const data = await res.json();
+      const answer: string = data?.answer || data?.raw || "Here’s what I found.";
+      const fu: string[] = Array.isArray(data?.followups) ? data.followups : [];
+
+      setMessages((prev) => [...prev, { role: "assistant", content: answer }]);
+      setFollowups(fu.slice(0, 6));
+    } catch (e: any) {
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Network error — please try again.",
+          content: "Sorry — I couldn’t reach the model. Please try again.",
         },
       ]);
+      setFollowups([]);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  // Quick builders for the three tabs
-  const primaryChips = useMemo(() => {
-    if (tab === "skills")
-      return SKILLS.map((s) => (
-        <Chip key={s} onClick={() => send(`Explore by skill: ${s}`)}>
-          {s}
-        </Chip>
-      ));
-
-    if (tab === "salary")
-      return ["<$40k", "$40–60k", "$60–80k+", "$80–100k+"].map((s) => (
-        <Chip key={s} onClick={() => send(`Explore by salary: ${s}`)}>
-          {s}
-        </Chip>
-      ));
-
-    // training
-    return ["< 3 months", "3–12 months", "1–2 years", "2+ years"].map((s) => (
-      <Chip key={s} onClick={() => send(`Explore by training length: ${s}`)}>
-        {s}
-      </Chip>
-    ));
-  }, [tab]);
-
-  // Render assistant follow-up bubbles (we stored them as a JSON string message)
-  const renderFollowUps = (m: Msg, idx: number) => {
-    if (m.role !== "assistant") return null;
-    let payload: { followUps?: FollowUp[] } | null = null;
-    try {
-      payload = JSON.parse(m.content);
-    } catch {
-      return null;
-    }
-    if (!payload?.followUps?.length) return null;
-
-    return (
-      <div className="flex flex-wrap gap-3">
-        {payload.followUps.map((f, i) => (
-          <div key={`${idx}-${i}`} className="flex items-center gap-2">
-            <Chip onClick={() => send(f.payload)}>{f.label}</Chip>
-            {f.choices?.length ? (
-              <div className="flex gap-2">
-                {f.choices.map((c) => (
-                  <Chip key={c} onClick={() => send(`${f.payload}: ${c}`)}>
-                    {c}
-                  </Chip>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    );
-  };
+  // helpers for the chips in each tab
+  function handleSkillClick(skill: string) {
+    callLLM(`Explore manufacturing career paths related to ${skill}.`);
+  }
+  function handleSalaryClick(band: string) {
+    callLLM(`What manufacturing roles fit the salary range ${band}?`);
+  }
+  function handleTrainingClick() {
+    callLLM("Suggest short manufacturing training programs and certifications.");
+  }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl md:text-3xl font-bold">
-          Manufacturing Career Explorer
-        </h1>
-
-        {/* quick provider toggle (no redeploy) */}
+    <div className="mx-auto max-w-5xl px-4 py-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl md:text-3xl font-semibold">Manufacturing Career Explorer</h1>
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-neutral-500">Model</span>
-          <Chip
-            selected={provider === "gemini"}
-            onClick={() => setProvider("gemini")}
-          >
+          <span className="text-zinc-500">Model</span>
+          <Chip onClick={() => setProvider("gemini")} active={provider === "gemini"}>
             Gemini
           </Chip>
-          <Chip
-            selected={provider === "openai"}
-            onClick={() => setProvider("openai")}
-          >
+          <Chip onClick={() => setProvider("openai")} active={provider === "openai"}>
             OpenAI
           </Chip>
         </div>
       </div>
 
-      {/* mode tabs */}
-      <div className="mt-6 border rounded-2xl p-4">
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Chip selected={tab === "skills"} onClick={() => setTab("skills")}>
-            Explore by skills
+      {/* Tabs */}
+      <div className="mb-4 flex gap-2">
+        {TABS.map((t) => (
+          <Chip key={t} onClick={() => setTab(t)} active={tab === t}>
+            {t === "skills" && "Explore by skills"}
+            {t === "salary" && "Explore by salary range"}
+            {t === "training" && "Explore by training length"}
           </Chip>
-          <Chip selected={tab === "salary"} onClick={() => setTab("salary")}>
-            Explore by salary range
-          </Chip>
-          <Chip selected={tab === "training"} onClick={() => setTab("training")}>
-            Explore by training length
-          </Chip>
-        </div>
-        <div className="flex flex-wrap gap-2">{primaryChips}</div>
+        ))}
+      </div>
+
+      {/* Tab content chips */}
+      <div className="mb-6 rounded-2xl border bg-zinc-50 px-4 py-4">
+        {tab === "skills" && (
+          <>
+            <div className="mb-2 text-sm font-medium text-zinc-600">Explore by skills</div>
+            <div className="flex flex-wrap gap-2">
+              {SKILL_TAGS.map((s) => (
+                <Chip key={s} onClick={() => handleSkillClick(s)}>
+                  {s}
+                </Chip>
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === "salary" && (
+          <div className="flex flex-wrap gap-2">
+            {SALARY_BANDS.map((b) => (
+              <Chip key={b} onClick={() => handleSalaryClick(b)}>
+                {b}
+              </Chip>
+            ))}
+          </div>
+        )}
+
+        {tab === "training" && (
+          <div>
+            <Chip onClick={handleTrainingClick}>Show short programs</Chip>
+          </div>
+        )}
       </div>
 
       {/* Conversation */}
-      <div className="mt-6 space-y-4">
-        {messages.map((m, idx) => {
-          // Follow-up bubble block we injected
-          try {
-            const maybeFU = JSON.parse(m.content);
-            if (m.role === "assistant" && maybeFU?.followUps) {
-              return (
-                <div key={idx} className="flex justify-start">
-                  {renderFollowUps(m, idx)}
-                </div>
-              );
-            }
-          } catch {}
-
-          if (m.role === "user") {
-            return (
-              <div key={idx} className="flex justify-end">
-                <div className="rounded-2xl bg-blue-100 px-4 py-3 text-sm">
+      <div className="space-y-4">
+        {messages.map((m, idx) => (
+          <div
+            key={idx}
+            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                m.role === "user" ? "bg-blue-50" : "bg-white border shadow-sm"
+              }`}
+            >
+              {m.role === "assistant" ? (
+                <ReactMarkdown remarkPlugins={[gfm]} className="prose prose-zinc max-w-none">
                   {m.content}
-                </div>
-              </div>
-            );
-          }
-
-          // assistant markdown
-          return (
-            <div key={idx} className="flex justify-start">
-              <Card>
-                  <ReactMarkdown remarkPlugins={[remarkGfm as any]}>{m.content}</ReactMarkdown>
-              </Card>
+                </ReactMarkdown>
+              ) : (
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              )}
             </div>
-          );
-        })}
+          </div>
+        ))}
 
         {loading && (
-          <div className="text-sm text-neutral-500">Thinking…</div>
+          <div className="flex justify-start">
+            <div className="rounded-2xl border bg-white px-4 py-3 shadow-sm text-sm text-zinc-500">
+              Thinking…
+            </div>
+          </div>
         )}
+
+        {!loading && followups.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {followups.map((f, i) => (
+              <Chip key={i} onClick={() => callLLM(f)}>
+                {f}
+              </Chip>
+            ))}
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
     </div>
