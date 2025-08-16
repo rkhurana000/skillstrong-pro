@@ -1,12 +1,11 @@
 // /app/page.tsx
 import Link from 'next/link';
-import { ArrowRight, Bot, Compass, Briefcase, Zap, ShieldCheck, DollarSign } from 'lucide-react';
+import { 
+    ArrowRight, Bot, Compass, Briefcase, Zap, ShieldCheck, DollarSign,
+    Cpu, Printer, Flame, Wrench, ScanSearch 
+} from 'lucide-react';
 
-// You can replace these with more specific, high-quality images
 const heroImage = "https://images.unsplash.com/photo-1664363459345-d8b7617d5983?q=80&w=2940&auto=format&fit=crop";
-const roboticsImage = "https://images.unsplash.com/photo-1581092921462-2052714a8993?q=80&w=2940&auto=format&fit=crop";
-const cncImage = "https://images.unsplash.com/photo-1599301822457-3dc627549527?q=80&w=2803&auto=format&fit=crop";
-const additiveImage = "https://images.unsplash.com/photo-1633435473339-380d3a824d35?q=80&w=2832&auto=format&fit=crop";
 
 export default function HomePage() {
   return (
@@ -61,34 +60,50 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- Featured Careers Section --- */}
+      {/* --- FEATURED CAREERS SECTION (UPDATED) --- */}
       <section className="py-20">
         <div className="container mx-auto px-6 lg:px-8">
           <div className="text-center">
             <h2 className="text-3xl font-bold">Careers of the Future, Available Today</h2>
             <p className="mt-2 text-slate-600">These aren't your parents' factory jobs. Work with cutting-edge technology.</p>
           </div>
+          {/* Now a 2x3 grid with icons instead of images */}
           <div className="mt-12 grid md:grid-cols-3 gap-8">
-            <div className="group rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow">
-              <img src={roboticsImage} alt="Robotics Technician" className="w-full h-48 object-cover" />
-              <div className="p-6 bg-white">
-                <h3 className="text-xl font-semibold">Robotics Technician</h3>
-                <p className="mt-2 text-slate-600">Install, maintain, and repair the robotic systems that power modern industry.</p>
-              </div>
+            {/* Card 1 */}
+            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+              <Bot className="w-16 h-16 mx-auto text-blue-600"/>
+              <h3 className="mt-5 text-xl font-semibold">Robotics Technician</h3>
+              <p className="mt-2 text-slate-600">Install, maintain, and repair the robotic systems that power modern industry.</p>
             </div>
-            <div className="group rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow">
-              <img src={cncImage} alt="CNC Machinist" className="w-full h-48 object-cover" />
-              <div className="p-6 bg-white">
-                <h3 className="text-xl font-semibold">CNC Machinist</h3>
-                <p className="mt-2 text-slate-600">Turn digital blueprints into precision parts for everything from aerospace to medical devices.</p>
-              </div>
+            {/* Card 2 */}
+            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+              <Cpu className="w-16 h-16 mx-auto text-blue-600"/>
+              <h3 className="mt-5 text-xl font-semibold">CNC Machinist</h3>
+              <p className="mt-2 text-slate-600">Turn digital blueprints into precision parts for everything from aerospace to medical devices.</p>
             </div>
-            <div className="group rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-shadow">
-              <img src={additiveImage} alt="Additive Manufacturing" className="w-full h-48 object-cover" />
-              <div className="p-6 bg-white">
-                <h3 className="text-xl font-semibold">Additive Manufacturing</h3>
-                <p className="mt-2 text-slate-600">Use industrial 3D printers to create complex components and innovative prototypes.</p>
-              </div>
+            {/* Card 3 */}
+            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+              <Printer className="w-16 h-16 mx-auto text-blue-600"/>
+              <h3 className="mt-5 text-xl font-semibold">Additive Manufacturing</h3>
+              <p className="mt-2 text-slate-600">Use industrial 3D printers to create complex components and innovative prototypes.</p>
+            </div>
+            {/* Card 4 (New) */}
+            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+              <Flame className="w-16 h-16 mx-auto text-blue-600"/>
+              <h3 className="mt-5 text-xl font-semibold">Welding Technologist</h3>
+              <p className="mt-2 text-slate-600">Fuse metals using advanced techniques, including robotic and laser welding systems.</p>
+            </div>
+            {/* Card 5 (New) */}
+            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+              <Wrench className="w-16 h-16 mx-auto text-blue-600"/>
+              <h3 className="mt-5 text-xl font-semibold">Maintenance Technician</h3>
+              <p className="mt-2 text-slate-600">Be the problem-solver who keeps the high-tech machinery of a facility running smoothly.</p>
+            </div>
+            {/* Card 6 (New) */}
+            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+              <ScanSearch className="w-16 h-16 mx-auto text-blue-600"/>
+              <h3 className="mt-5 text-xl font-semibold">Quality Control Inspector</h3>
+              <p className="mt-2 text-slate-600">Use precision instruments and technology to ensure products meet the highest standards.</p>
             </div>
           </div>
         </div>
