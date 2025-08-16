@@ -6,7 +6,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfmImport from "remark-gfm";
 
 type Role = "user" | "assistant";
-type Msg = { role: Role; content: string };
+
+type Msg = {
+  role: Role;
+  content: string;
+};
+
 
 const gfm: any = remarkGfmImport; // avoid CI type mismatch
 
@@ -49,7 +54,11 @@ export default function ExplorePage() {
   );
 
   async function callLLM(userText: string) {
-    const newMessages = [...messages, { role: "user", content: userText }];
+  const newMessages: Msg[] = [
+  ...messages,
+  { role: "user" as const, content: userText },
+];
+setMessages(newMessages);
     setMessages(newMessages);
     setLoading(true);
 
@@ -66,7 +75,10 @@ export default function ExplorePage() {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         const text = err?.message || "Sorry — I couldn’t get an answer. Please try again.";
-        setMessages((prev) => [...prev, { role: "assistant", content: text }]);
+        setMessages(prev => [
+  ...prev,
+  { role: "assistant" as const, content: answerText },
+]);
         setFollowups([]);
         return;
       }
