@@ -1,31 +1,27 @@
-// app/layout.tsx
+// /app/layout.tsx
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import Link from "next/link";
+import SiteHeader from "@/app/components/SiteHeader"; // Make sure you're importing the header
 
-export const metadata = {
-  title: "SkillStrong",
-  description: "Manufacturing careers, training, and quiz",
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "SkillStrong | Build Your Manufacturing Career",
+  description: "Explore careers in modern manufacturing with an AI-powered coach.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
-      <body className="bg-white text-slate-900">
-        <header className="border-b border-slate-200">
-          <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-            <Link href="/" className="text-2xl font-extrabold text-slate-900 no-underline">
-              SkillStrong
-            </Link>
-            <div className="flex gap-8 text-slate-600">
-              <Link href="/">Home</Link>
-              <Link href="/quiz">Quiz</Link>
-              <Link href="/about">About</Link>
-              <Link href="/explore">Explore Careers</Link>
-              <Link href="/account">Account</Link>
-            </div>
-          </nav>
-        </header>
-        {children}
+      <body className={inter.className}>
+        <SiteHeader /> {/* The sticky header goes here */}
+        <main>{children}</main>
+        {/* You can add a site-wide footer here if you wish */}
       </body>
     </html>
   );
