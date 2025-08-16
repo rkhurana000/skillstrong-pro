@@ -22,7 +22,7 @@
     "remark-gfm": "4.0.0",
     "ai": "5.0.14",
     "typescript": "5.4.5",
-    "@ai-sdk/react": "5.0.0"
+    "@ai-sdk/react": "2.0.15"
 
   },
   "devDependencies": {
