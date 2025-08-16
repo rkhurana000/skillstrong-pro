@@ -13,6 +13,7 @@
     "openai": "^4.58.1",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.46.1",
+     "@supabase/ssr": "^0.4.0",
     "posthog-js": "^1.155.0",
     "cheerio": "^1.0.0-rc.12",
     "html-to-text": "^9.0.5",
