@@ -38,7 +38,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [inputValue, setInputValue] = useState("");
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // Effect to load history and handle quiz results
     useEffect(() => {
         const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
         if (quizResultsString) {
@@ -69,16 +68,14 @@ export default function ExploreClient({ user }: { user: User | null }) {
             }
         }
     }, [user]);
-    
-    // --- FIX: Moved this line up ---
-    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
-    // Effect to scroll to bottom
     useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [activeChat?.messages, isLoading]);
+
+    const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
     const updateAndSaveHistory = (newHistory: ChatSession[]) => {
         const limitedHistory = newHistory.slice(0, 30);
@@ -118,13 +115,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
         if (isLoading || !chatId) return;
 
         const newUserMessage: Message = { role: 'user', content: query };
-        
-        const messagesForApi = [...(activeChat?.messages || []), newUserMessage];
+        const currentChat = chatHistory.find(c => c.id === chatId);
+        const messagesForApi = [...(currentChat?.messages || []), newUserMessage];
         
         setChatHistory(prev => prev.map(chat => 
-            chat.id === chatId 
-                ? { ...chat, messages: messagesForApi }
-                : chat
+            chat.id === chatId ? { ...chat, messages: messagesForApi } : chat
         ));
         
         setInputValue("");
@@ -157,9 +152,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
             
             setChatHistory(prev => prev.map(chat => 
-                chat.id === chatId
-                    ? { ...chat, messages: [...messagesForApi, errorMessage] }
-                    : chat
+                chat.id === chatId ? { ...chat, messages: [...messagesForApi, errorMessage] } : chat
             ));
         } finally {
             setIsLoading(false);
@@ -176,12 +169,14 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 </div>
             </aside>
             
-            <div className="flex flex-1 flex-col relative">
+            {/* --- LAYOUT FIX: This container now correctly manages the header, scrolling content, and footer --- */}
+            <div className="flex flex-1 flex-col h-screen">
                 <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                     <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
                 </header>
                 
-                <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-40">
+                {/* This main area now correctly fills the space and scrolls independently */}
+                <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
                    {activeChat && activeChat.messages.length > 0 ? (
                         <div className="space-y-6">
                             {activeChat.messages.map((msg, index) => (
@@ -213,7 +208,8 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     )}
                 </main>
                 
-                <footer className="absolute bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-sm border-t">
+                {/* This footer is now a direct child of the flex container, making it static */}
+                <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
                     <div className="w-full max-w-3xl mx-auto">
                         <div className="flex flex-wrap gap-3 justify-center mb-4">
                             {!isLoading && currentFollowUps.map((prompt, index) => {
@@ -222,7 +218,9 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             })}
                         </div>
                         <form onSubmit={(e) => { e.preventDefault(); sendMessage(inputValue, activeChatId); }} className="flex items-center space-x-2">
-                            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Ask anything or enter your location..." disabled={isLoading} className="w-full px-4 py-2 border border-gray-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50" />
+                            {/* --- STYLE FIX: Added focus:border-blue-500 and focus:ring-2 for a more prominent outline --- */}
+                            <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Ask anything or enter your location..." disabled={isLoading} 
+                                className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50" />
                             <button type="submit" disabled={isLoading || !inputValue.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors"> <Send className="w-5 h-5" /> </button>
                         </form>
                     </div>
