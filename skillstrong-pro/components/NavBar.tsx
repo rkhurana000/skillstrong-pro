@@ -6,8 +6,6 @@ import React from 'react';
 
 const links = [
   { href: '/', label: 'Home' },
-  { href: '/features', label: 'Features' },
-  { href: '/interest', label: 'Interest' },
   { href: '/quiz', label: 'Quiz' },
   { href: '/about', label: 'About' },
   { href: '/explore', label: 'Explore Careers' },
