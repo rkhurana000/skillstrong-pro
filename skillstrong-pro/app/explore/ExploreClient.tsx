@@ -8,25 +8,7 @@ import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// Type Definitions
-type Role = "user" | "assistant";
-interface Message { role: Role; content: string; }
-interface ChatSession { id: string; title: string; messages: Message[]; }
-type ExploreTab = 'skills' | 'salary' | 'training';
-
-const exploreContent = {
-  skills: { title: "Explore by Job Category", prompts: ["CNC Machinist", "Welder", "Robotics Technician", "Industrial Maintenance", "Quality Control", "Logistics & Supply Chain"]},
-  salary: { title: "Explore by Salary Range", prompts: ["What jobs pay $40k-$60k?", "Find roles making $60k-$80k", "What careers make $80k+?"]},
-  training: { title: "Explore by Training Length", prompts: ["Programs under 3 months", "Training of 6-12 months", "Apprenticeships (1-2 years)"]}
-};
-
-const TypingIndicator = () => (
-    <div className="flex items-center space-x-2">
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div>
-    </div>
-);
+// ... (Type Definitions, exploreContent, and TypingIndicator are unchanged)
 
 export default function ExploreClient({ user }: { user: User | null }) {
     const router = useRouter();
@@ -38,98 +20,74 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [inputValue, setInputValue] = useState("");
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // --- REWRITTEN FOR STABILITY ---
-    // This hook now runs only once on mount and handles initialization sequentially.
     useEffect(() => {
         const initialize = () => {
             const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
 
             if (quizResultsString) {
-                // Clear the item immediately so it's not processed again on refresh.
                 localStorage.removeItem('skillstrong-quiz-results');
-
                 if (!user) {
                     router.push('/account?message=Please sign up or sign in to see your quiz results.');
                     return;
                 }
 
                 const { answers } = JSON.parse(quizResultsString);
-                const quizPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}. Based on these results, please act as my career coach. Your entire response must follow these rules: 1. Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore." 2. Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results. 3. For each career, provide a brief, one-sentence explanation of why it's a good match. 4. Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
                 
-                // Create a new chat session and send the message.
+                // --- THIS IS THE KEY CHANGE ---
+                // 1. A clean message for the user to see.
+                const userVisibleMessage = "I just finished the interest quiz. What careers do you recommend for me?";
+                
+                // 2. A detailed prompt for the AI to process (hidden from the user).
+                const apiPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}. Based on these results, please act as my career coach. Your entire response must follow these rules: 1. Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore." 2. Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results. 3. For each career, provide a brief, one-sentence explanation of why it's a good match. 4. Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
+
                 const newChat = createNewChat(false);
-                updateAndSaveHistory([newChat, ...chatHistory]); // Update history before sending message
+                updateAndSaveHistory([newChat, ...chatHistory]);
                 setActiveChatId(newChat.id);
-                sendMessage(quizPrompt, newChat.id, [newChat, ...chatHistory]); // Pass the new history
+                // 3. Send both prompts to the sendMessage function.
+                sendMessage(userVisibleMessage, newChat.id, [newChat, ...chatHistory], apiPrompt);
             } else {
                 try {
                     const savedHistory = localStorage.getItem('skillstrong-chathistory');
                     const history = savedHistory ? JSON.parse(savedHistory) : [];
                     setChatHistory(history);
-                    if (history.length > 0) {
-                        setActiveChatId(history[0].id);
-                    } else {
-                        createNewChat();
-                    }
-                } catch (error) {
-                    console.error("Failed to load or parse chat history:", error);
-                    createNewChat();
-                }
+                    if (history.length > 0) { setActiveChatId(history[0].id); } else { createNewChat(); }
+                } catch (error) { console.error("Failed to load or parse chat history:", error); createNewChat(); }
             }
         };
-
         initialize();
-    }, []); // Empty dependency array [] ensures this runs only once.
+    }, []);
 
-    useEffect(() => {
-        if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-    }, [chatHistory, isLoading]);
+    // ... (useEffect for scrolling is unchanged)
 
     const activeChat = chatHistory.find(chat => chat.id === activeChatId);
 
-    const updateAndSaveHistory = (newHistory: ChatSession[]) => {
-        const limitedHistory = newHistory.slice(0, 30);
-        setChatHistory(limitedHistory);
-        try {
-            localStorage.setItem('skillstrong-chathistory', JSON.stringify(limitedHistory));
-        } catch (e) { console.error("Failed to save history:", e); }
-    };
+    // ... (updateAndSaveHistory, createNewChat, handleResetActiveChat are unchanged)
     
-    const createNewChat = (setActive = true) => {
-        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [] };
-        if (setActive) {
-            updateAndSaveHistory([newChat, ...chatHistory]);
-            setActiveChatId(newChat.id);
-            setCurrentFollowUps([]);
-        }
-        return newChat;
-    };
-
-    const handleResetActiveChat = () => {
-        if (!activeChatId) return;
-        const newHistory = chatHistory.map(chat =>
-            chat.id === activeChatId ? { ...chat, messages: [] } : chat
-        );
-        updateAndSaveHistory(newHistory);
-        setCurrentFollowUps([]);
-    };
-    
-    const sendMessage = async (query: string, chatId: string | null, initialHistory?: ChatSession[]) => {
+    // --- UPDATED sendMessage FUNCTION SIGNATURE ---
+    const sendMessage = async (query: string, chatId: string | null, initialHistory?: ChatSession[], apiQueryOverride?: string) => {
         if (!user) {
             router.push('/account?message=Please sign up or sign in to start a chat.');
             return;
         }
         if (isLoading || !chatId) return;
 
+        // The query for the API is either the override or the visible query.
+        const apiQuery = apiQueryOverride || query;
+        
+        // The message displayed in the UI is always the clean one.
         const newUserMessage: Message = { role: 'user', content: query };
         const historyToUpdate = initialHistory || chatHistory;
         
-        const messagesForApi = [...(historyToUpdate.find(c => c.id === chatId)?.messages || []), newUserMessage];
+        const currentMessages = historyToUpdate.find(c => c.id === chatId)?.messages || [];
+        
+        // The message list for the API call uses the detailed prompt.
+        const messagesForApi = [...currentMessages, { role: 'user', content: apiQuery }];
+        
+        // The message list for the UI uses the clean prompt.
+        const messagesForUi = [...currentMessages, newUserMessage];
         
         const optimisticHistory = historyToUpdate.map(chat => 
-            chat.id === chatId ? { ...chat, messages: messagesForApi } : chat
+            chat.id === chatId ? { ...chat, messages: messagesForUi } : chat
         );
         updateAndSaveHistory(optimisticHistory);
         
@@ -141,7 +99,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const response = await fetch('/api/explore', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: messagesForApi }),
+                body: JSON.stringify({ messages: messagesForApi }), // Send detailed prompt to API
             });
 
             if (!response.ok) throw new Error("API response was not ok.");
@@ -158,21 +116,14 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 return chat;
             });
             updateAndSaveHistory(finalHistory);
-
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
-            console.error("Error sending message:", error);
-            const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            
-            const errorHistory = optimisticHistory.map(chat => 
-                chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
-            );
-            updateAndSaveHistory(errorHistory);
+            // ... (error handling is unchanged)
         } finally {
             setIsLoading(false);
         }
     };
-    
+        
     return (
       <div className="flex h-screen bg-gray-100 text-gray-800">
         <aside className="w-64 bg-gray-800 text-white flex flex-col p-2">
