@@ -8,7 +8,7 @@ import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// --- Type Definitions ---
+// Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; }
@@ -38,43 +38,48 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [inputValue, setInputValue] = useState("");
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // --- EFFECT HOOK REWRITTEN FOR STABILITY ---
-    // This now runs ONLY ONCE when the component first loads.
+    // --- REWRITTEN FOR STABILITY ---
+    // This hook now runs only once on mount and handles initialization sequentially.
     useEffect(() => {
-        // Step 1: Immediately check for quiz results.
-        const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
-        
-        // Step 2: If results exist, clear the storage item and process them.
-        if (quizResultsString) {
-            localStorage.removeItem('skillstrong-quiz-results');
-            
-            if (!user) {
-                router.push('/account?message=Please sign up or sign in to see your quiz results.');
-                return;
-            }
+        const initialize = () => {
+            const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
 
-            const { answers } = JSON.parse(quizResultsString);
-            const quizPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}. Based on these results, please act as my career coach. Your entire response must follow these rules: 1. Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore." 2. Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results. 3. For each career, provide a brief, one-sentence explanation of why it's a good match. 4. Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
-            
-            const newChat = createNewChat(false); // Create a new chat session
-            sendMessage(quizPrompt, newChat.id); // Send the special prompt
-        } else {
-            // Step 3: If no quiz results, load the normal chat history.
-            try {
-                const savedHistory = localStorage.getItem('skillstrong-chathistory');
-                const history = savedHistory ? JSON.parse(savedHistory) : [];
-                setChatHistory(history);
-                if (history.length > 0) {
-                    setActiveChatId(history[0].id);
-                } else {
+            if (quizResultsString) {
+                // Clear the item immediately so it's not processed again on refresh.
+                localStorage.removeItem('skillstrong-quiz-results');
+
+                if (!user) {
+                    router.push('/account?message=Please sign up or sign in to see your quiz results.');
+                    return;
+                }
+
+                const { answers } = JSON.parse(quizResultsString);
+                const quizPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}. Based on these results, please act as my career coach. Your entire response must follow these rules: 1. Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore." 2. Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results. 3. For each career, provide a brief, one-sentence explanation of why it's a good match. 4. Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
+                
+                // Create a new chat session and send the message.
+                const newChat = createNewChat(false);
+                updateAndSaveHistory([newChat, ...chatHistory]); // Update history before sending message
+                setActiveChatId(newChat.id);
+                sendMessage(quizPrompt, newChat.id, [newChat, ...chatHistory]); // Pass the new history
+            } else {
+                try {
+                    const savedHistory = localStorage.getItem('skillstrong-chathistory');
+                    const history = savedHistory ? JSON.parse(savedHistory) : [];
+                    setChatHistory(history);
+                    if (history.length > 0) {
+                        setActiveChatId(history[0].id);
+                    } else {
+                        createNewChat();
+                    }
+                } catch (error) {
+                    console.error("Failed to load or parse chat history:", error);
                     createNewChat();
                 }
-            } catch (error) {
-                console.error("Failed to load or parse chat history:", error);
-                createNewChat();
             }
-        }
-    }, []); // Empty dependency array [] ensures this runs only once on mount.
+        };
+
+        initialize();
+    }, []); // Empty dependency array [] ensures this runs only once.
 
     useEffect(() => {
         if (chatContainerRef.current) {
@@ -94,9 +99,8 @@ export default function ExploreClient({ user }: { user: User | null }) {
     
     const createNewChat = (setActive = true) => {
         const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [] };
-        const newHistory = [newChat, ...chatHistory];
-        updateAndSaveHistory(newHistory);
         if (setActive) {
+            updateAndSaveHistory([newChat, ...chatHistory]);
             setActiveChatId(newChat.id);
             setCurrentFollowUps([]);
         }
@@ -112,38 +116,32 @@ export default function ExploreClient({ user }: { user: User | null }) {
         setCurrentFollowUps([]);
     };
     
-    const sendMessage = async (query: string, chatId: string | null) => {
+    const sendMessage = async (query: string, chatId: string | null, initialHistory?: ChatSession[]) => {
         if (!user) {
             router.push('/account?message=Please sign up or sign in to start a chat.');
             return;
         }
         if (isLoading || !chatId) return;
-        
+
         const newUserMessage: Message = { role: 'user', content: query };
+        const historyToUpdate = initialHistory || chatHistory;
         
-        setChatHistory(prev => {
-            const currentChatExists = prev.some(c => c.id === chatId);
-            if (!currentChatExists) return prev; // Safety check
-            
-            return prev.map(chat => 
-                chat.id === chatId 
-                    ? { ...chat, messages: [...chat.messages, newUserMessage] }
-                    : chat
-            );
-        });
+        const messagesForApi = [...(historyToUpdate.find(c => c.id === chatId)?.messages || []), newUserMessage];
+        
+        const optimisticHistory = historyToUpdate.map(chat => 
+            chat.id === chatId ? { ...chat, messages: messagesForApi } : chat
+        );
+        updateAndSaveHistory(optimisticHistory);
         
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
         try {
-            // Get the most up-to-date messages for the API call
-            const updatedMessages = [...(chatHistory.find(c => c.id === chatId)?.messages || []), newUserMessage];
-
             const response = await fetch('/api/explore', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: updatedMessages }),
+                body: JSON.stringify({ messages: messagesForApi }),
             });
 
             if (!response.ok) throw new Error("API response was not ok.");
@@ -151,25 +149,25 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            setChatHistory(prev => prev.map(chat => {
+            const finalHistory = optimisticHistory.map(chat => {
                 if (chat.id === chatId) {
                     const isFirstUserMessage = chat.messages.length === 1;
-                    const newTitle = isFirstUserMessage ? (data.answer.substring(0, 35) + '...') : chat.title;
+                    const newTitle = isFirstUserMessage ? "Quiz Results" : chat.title;
                     return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
                 }
                 return chat;
-            }));
+            });
+            updateAndSaveHistory(finalHistory);
 
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
             
-            setChatHistory(prev => prev.map(chat => 
-                chat.id === chatId
-                    ? { ...chat, messages: [...chat.messages, errorMessage] }
-                    : chat
-            ));
+            const errorHistory = optimisticHistory.map(chat => 
+                chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
+            );
+            updateAndSaveHistory(errorHistory);
         } finally {
             setIsLoading(false);
         }
