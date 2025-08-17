@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+// This is the list of questions for the quiz.
 const quizQuestions = [
   "I enjoy working with tools or machinery.",
   "I like fixing or building things with my hands.",
@@ -27,14 +28,17 @@ export default function QuizPage() {
   };
 
   const handleSubmit = () => {
+    // Check if all questions have been answered.
     if (Object.keys(answers).length < quizQuestions.length) {
       alert("Please answer all questions before proceeding.");
       return;
     }
-    // Save results to localStorage to be picked up by the explore page
+    
+    // **THIS IS THE CRITICAL LOGIC**
+    // It saves the results to the browser's storage before redirecting.
     localStorage.setItem('skillstrong-quiz-results', JSON.stringify({ answers, questions: quizQuestions }));
     
-    // Redirect to the explore page
+    // Redirect to the explore/chat page.
     router.push('/explore');
   };
   
