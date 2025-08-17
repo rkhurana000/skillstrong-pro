@@ -172,11 +172,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     <div className="space-y-6">
                         {activeChat.messages.map((msg, index) => (
                             <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-blue-500 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
-                                    <article className="prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold prose-a:text-blue-600 hover:prose-a:text-blue-500">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
-                                    </article>
-                                </div>
+                          <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-slate-800 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
+                                        <article className="prose prose-sm lg:prose-base max-w-none prose-invert prose-headings:font-semibold prose-a:text-blue-400 hover:prose-a:text-blue-300">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
+                                        </article>
+                                    </div>
                             </div>
                         ))}
                         {isLoading && ( <div className="flex justify-start"><div className="max-w-xl p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none"><TypingIndicator /></div></div> )}
