@@ -46,7 +46,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 const newChat = createNewChat(false);
                 updateAndSaveHistory([newChat, ...chatHistory]);
                 setActiveChatId(newChat.id);
-                // Send the simple user message AND the quiz results data to the backend
                 sendMessage(userMessage, newChat.id, { quiz_results: answers });
             } else {
                 try {
