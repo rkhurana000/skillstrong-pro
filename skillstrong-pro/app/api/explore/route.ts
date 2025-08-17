@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
         } else {
             const searchDecisionPrompt = `Does the user's latest message ask for local jobs, apprenticeships, or training programs? Answer ONLY with YES or NO. Message: "${latestUserMessage}"`;
             const decisionResponse = await openai.chat.completions.create({
-                model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
+                model: 'gpt-4o', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
             });
             const decision = decisionResponse.choices[0].message?.content?.trim().toUpperCase();
 
@@ -87,9 +87,9 @@ export async function POST(req: NextRequest) {
 
         if (provider === 'openai') {
             const response = await openai.chat.completions.create({
-                model: 'gpt-4o-mini',
+                model: 'gpt-4o',
                 messages: fullMessages,
-                temperature: 0.3,
+                temperature: 0.2,
                 response_format: { type: "json_object" },
             });
             content = response.choices[0].message?.content || '{}';
