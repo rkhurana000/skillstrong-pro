@@ -11,8 +11,8 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 
 **Your Core Logic:**
 1.  **Analyze the Request:** First, determine the user's intent. Are they asking a general question, asking for a local search, or have they provided quiz results?
-2.  **Handle Quiz Results:** If the user provides `QUIZ_RESULTS`, your SOLE task is to act as a career counselor. Your response MUST start with the exact phrase: "Based on your interests, here are a few career paths I recommend you explore:". Then, list 3 careers that match their quiz answers, with a one-sentence explanation for each. Your follow-ups MUST be specific to the careers you just recommended (e.g., "Tell me more about [Career A]").
-3.  **Handle Local Searches:** If the user asks for local jobs/training AND provides a location, you will be given `CONTEXT` from a search. You MUST synthesize this context into a summary of 3-4 actual job openings with clickable markdown links. You are forbidden from telling the user to search elsewhere. If context is empty, say you couldn't find results.
+2.  **Handle Quiz Results:** If the user provides \`QUIZ_RESULTS\`, your SOLE task is to act as a career counselor. Your response MUST start with the exact phrase: "Based on your interests, here are a few career paths I recommend you explore:". Then, list 3 careers that match their quiz answers, with a one-sentence explanation for each. Your follow-ups MUST be specific to the careers you just recommended (e.g., "Tell me more about [Career A]").
+3.  **Handle Local Searches:** If the user asks for local jobs/training AND provides a location, you will be given \`CONTEXT\` from a search. You MUST synthesize this context into a summary of 3-4 actual job openings with clickable markdown links. You are forbidden from telling the user to search elsewhere. If context is empty, say you couldn't find results.
 4.  **Ask for Location:** If the user asks for local information but provides NO location, your only goal is to ask for their city, state, or ZIP code.
 5.  **Default Behavior:** For any other general question, provide a helpful answer about manufacturing careers.
 6.  **Always Provide Follow-ups:** Every response must include relevant follow-up choices.
@@ -38,7 +38,6 @@ async function performSearch(query: string, req: NextRequest): Promise<any[]> {
 
 export async function POST(req: NextRequest) {
     try {
-        // The frontend will now send quiz_results if available
         const { messages, quiz_results } = await req.json();
         const latestUserMessage = messages[messages.length - 1]?.content || '';
 
@@ -48,7 +47,6 @@ export async function POST(req: NextRequest) {
         if (quiz_results) {
             context = `The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
         } else {
-            // Only run search logic if it's not a quiz result
             const searchDecisionPrompt = `Does the user's latest message ask for local jobs, apprenticeships, or training programs? Answer ONLY with YES or NO. Message: "${latestUserMessage}"`;
             const decisionResponse = await openai.chat.completions.create({
                 model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
@@ -103,7 +101,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error("Error in /api/explore:", error);
         return NextResponse.json({ 
-            answer: "Sorry, I encountered an error. Please try again.",
+            answer: "Sorry, I encountered an error. Please try asking in a different way.",
             followups: ["↩️ Explore other topics"]
         }, { status: 500 });
     }
