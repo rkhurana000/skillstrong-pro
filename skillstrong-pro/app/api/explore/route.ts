@@ -1,7 +1,4 @@
 // /app/api/explore/route.ts
-
-const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor for the US manufacturing sector.
-
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -23,13 +20,26 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys.
 `;
-
-async function performSearch(query: string, req: NextRequest): Promise<any[]> { /* ... (same as before) ... */ }
+async function performSearch(query: string, req: NextRequest): Promise<any[]> {
+    const searchApiUrl = new URL('/api/search', req.url);
+    try {
+        const response = await fetch(searchApiUrl.toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+        });
+        if (!response.ok) return [];
+        return await response.json();
+    } catch (error) {
+        console.error("Failed to call internal search API:", error);
+        return [];
+    }
+}
 
 export async function POST(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
-        const provider = searchParams.get('provider') || 'openai'; // Get provider from URL
+        const provider = searchParams.get('provider') || 'openai';
         const { messages, quiz_results } = await req.json();
         const latestUserMessage = messages[messages.length - 1]?.content || '';
 
@@ -39,7 +49,32 @@ export async function POST(req: NextRequest) {
         if (quiz_results) {
             context = `The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
         } else {
-            // ... (search logic is the same as before)
+            const searchDecisionPrompt = `Does the user's latest message ask for local jobs, apprenticeships, or training programs? Answer ONLY with YES or NO. Message: "${latestUserMessage}"`;
+            const decisionResponse = await openai.chat.completions.create({
+                model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
+            });
+            const decision = decisionResponse.choices[0].message?.content?.trim().toUpperCase();
+
+            if (decision === 'YES') {
+                const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
+                const locationExtractionPrompt = `From the following conversation, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nConversation:\n${fullConversation}`;
+                const locationResponse = await openai.chat.completions.create({
+                    model: 'gpt-4o-mini', messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
+                });
+                let location = locationResponse.choices[0].message?.content?.trim();
+
+                if (location && location.toUpperCase() !== 'NONE') {
+                    const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${location}".`;
+                    const queryGenResponse = await openai.chat.completions.create({
+                        model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
+                    });
+                    const searchQuery = queryGenResponse.choices[0].message?.content?.trim();
+                    if (searchQuery) {
+                        const searchResults = await performSearch(searchQuery, req);
+                        context = `CONTEXT:\n${JSON.stringify(searchResults.length > 0 ? searchResults : "No results found.")}`;
+                    }
+                }
+            }
         }
         
         const fullMessages = [
@@ -52,26 +87,42 @@ export async function POST(req: NextRequest) {
 
         if (provider === 'openai') {
             const response = await openai.chat.completions.create({
-                model: 'gpt-4o', messages: fullMessages, temperature: 0.3, response_format: { type: "json_object" },
+                model: 'gpt-4o-mini',
+                messages: fullMessages,
+                temperature: 0.3,
+                response_format: { type: "json_object" },
             });
             content = response.choices[0].message?.content || '{}';
         } else { // Gemini
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
             const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-            const geminiMessages = [{ role: 'user', parts: [{ text: systemPrompt }] }, { role: 'model', parts: [{ text: "Understood." }] }, ...messages.map((m: any) => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] }))];
-            
-            const result = await model.generateContent({ contents: geminiMessages });
+
+            const geminiHistory = messages.map((m: { role: string; content: string }) => ({
+                role: m.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: m.content }],
+            }));
+
+            const result = await model.generateContent({
+                contents: [{ role: 'user', parts: [{ text: systemPrompt }] }, ...geminiHistory],
+            });
+
             let textResponse = result.response.text();
             
             const jsonMatch = textResponse.match(/```json\n([\s\S]*)\n```/);
-            content = jsonMatch ? jsonMatch[1] : `{ "answer": "${textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n')}", "followups": [] }`;
+            if (jsonMatch && jsonMatch[1]) {
+                content = jsonMatch[1];
+            } else {
+                // Fallback for when Gemini doesn't return a perfect JSON block
+                const escapedAnswer = textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                content = `{ "answer": "${escapedAnswer}", "followups": [] }`;
+            }
         }
 
         if (!content) { throw new Error("Empty response from AI"); }
         
         const parsedContent = JSON.parse(content);
 
-        if (parsedContent.followups) {
+        if (parsedContent.followups && (parsedContent.followups.length > 0 || messages.length > 0)) {
             parsedContent.followups.push("↩️ Explore other topics");
         }
 
