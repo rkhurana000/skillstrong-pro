@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
         if (provider === 'openai') {
             const response = await openai.chat.completions.create({
-                model: 'gpt-4o-mini', messages: fullMessages, temperature: 0.3, response_format: { type: "json_object" },
+                model: 'gpt-4o', messages: fullMessages, temperature: 0.3, response_format: { type: "json_object" },
             });
             content = response.choices[0].message?.content || '{}';
         } else { // Gemini
