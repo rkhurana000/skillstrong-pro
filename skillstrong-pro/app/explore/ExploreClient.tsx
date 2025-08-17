@@ -8,7 +8,7 @@ import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// --- Type Definitions ---
+// Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; }
@@ -20,13 +20,7 @@ const exploreContent = {
   training: { title: "Explore by Training Length", prompts: ["Programs under 3 months", "Training of 6-12 months", "Apprenticeships (1-2 years)"]}
 };
 
-const TypingIndicator = () => (
-    <div className="flex items-center space-x-2">
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div>
-    </div>
-);
+const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
 
 export default function ExploreClient({ user }: { user: User | null }) {
     const router = useRouter();
@@ -41,23 +35,19 @@ export default function ExploreClient({ user }: { user: User | null }) {
     useEffect(() => {
         const initialize = () => {
             const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
-
             if (quizResultsString) {
                 localStorage.removeItem('skillstrong-quiz-results');
                 if (!user) {
                     router.push('/account?message=Please sign up or sign in to see your quiz results.');
                     return;
                 }
-
                 const { answers } = JSON.parse(quizResultsString);
-                
-                const userVisibleMessage = "I just finished the interest quiz. What careers do you recommend for me?";
-                const apiPrompt = `My interest quiz results are in. The scores are an object: ${JSON.stringify(answers)}. Based on these results, please act as my career coach. Your entire response must follow these rules: 1. Start your response with the exact sentence: "Based on your interests, here are a few career paths I recommend you explore." 2. Immediately after that sentence, provide a markdown list of the top 3 manufacturing careers that best match the quiz results. 3. For each career, provide a brief, one-sentence explanation of why it's a good match. 4. Do not mention the quiz scores or answers in your response. Only provide the recommendations.`;
-
+                const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
                 updateAndSaveHistory([newChat, ...chatHistory]);
                 setActiveChatId(newChat.id);
-                sendMessage(userVisibleMessage, newChat.id, [newChat, ...chatHistory], apiPrompt);
+                // Send the simple user message AND the quiz results data to the backend
+                sendMessage(userMessage, newChat.id, { quiz_results: answers });
             } else {
                 try {
                     const savedHistory = localStorage.getItem('skillstrong-chathistory');
@@ -68,10 +58,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     } else {
                         createNewChat();
                     }
-                } catch (error) {
-                    console.error("Failed to load or parse chat history:", error);
-                    createNewChat();
-                }
+                } catch (error) { console.error("Failed to load or parse chat history:", error); createNewChat(); }
             }
         };
         initialize();
@@ -88,9 +75,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const updateAndSaveHistory = (newHistory: ChatSession[]) => {
         const limitedHistory = newHistory.slice(0, 30);
         setChatHistory(limitedHistory);
-        try {
-            localStorage.setItem('skillstrong-chathistory', JSON.stringify(limitedHistory));
-        } catch (e) { console.error("Failed to save history:", e); }
+        try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(limitedHistory)); } catch (e) { console.error("Failed to save history:", e); }
     };
     
     const createNewChat = (setActive = true) => {
@@ -105,42 +90,40 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
     const handleResetActiveChat = () => {
         if (!activeChatId) return;
-        const newHistory = chatHistory.map(chat =>
-            chat.id === activeChatId ? { ...chat, messages: [] } : chat
-        );
+        const newHistory = chatHistory.map(chat => chat.id === activeChatId ? { ...chat, messages: [] } : chat);
         updateAndSaveHistory(newHistory);
         setCurrentFollowUps([]);
     };
     
-    const sendMessage = async (query: string, chatId: string | null, initialHistory?: ChatSession[], apiQueryOverride?: string) => {
+    const sendMessage = async (query: string, chatId: string | null, additionalData = {}) => {
         if (!user) {
             router.push('/account?message=Please sign up or sign in to start a chat.');
             return;
         }
         if (isLoading || !chatId) return;
 
-        const apiQuery = apiQueryOverride || query;
         const newUserMessage: Message = { role: 'user', content: query };
-        const historyToUpdate = initialHistory || chatHistory;
         
-        const currentMessages = historyToUpdate.find(c => c.id === chatId)?.messages || [];
-        const messagesForApi = [...currentMessages, { role: 'user', content: apiQuery }];
-        const messagesForUi = [...currentMessages, newUserMessage];
-        
-        const optimisticHistory = historyToUpdate.map(chat => 
-            chat.id === chatId ? { ...chat, messages: messagesForUi } : chat
+        let updatedHistory = chatHistory.map(chat => 
+            chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
         );
-        updateAndSaveHistory(optimisticHistory);
+        updateAndSaveHistory(updatedHistory);
         
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
         try {
+            const currentChat = updatedHistory.find(c => c.id === chatId);
+            const body = {
+                messages: currentChat?.messages || [],
+                ...additionalData
+            };
+
             const response = await fetch('/api/explore', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: messagesForApi }),
+                body: JSON.stringify(body),
             });
 
             if (!response.ok) throw new Error("API response was not ok.");
@@ -148,23 +131,23 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            const finalHistory = optimisticHistory.map(chat => {
+            updatedHistory = updatedHistory.map(chat => {
                 if (chat.id === chatId) {
                     const isFirstUserMessage = chat.messages.length === 1;
-                    const newTitle = isFirstUserMessage ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 35) + '...' : chat.title);
+                    const newTitle = isFirstUserMessage ? "Quiz Results" : chat.title;
                     return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
                 }
                 return chat;
             });
-            updateAndSaveHistory(finalHistory);
+            updateAndSaveHistory(updatedHistory);
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            const errorHistory = optimisticHistory.map(chat => 
+            updatedHistory = updatedHistory.map(chat => 
                 chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
             );
-            updateAndSaveHistory(errorHistory);
+            updateAndSaveHistory(updatedHistory);
         } finally {
             setIsLoading(false);
         }
@@ -176,7 +159,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
             <button onClick={() => createNewChat()} className="flex items-center w-full px-4 py-2 mb-4 text-sm font-semibold rounded-md bg-blue-600 hover:bg-blue-700 transition-colors"> <MessageSquarePlus className="w-5 h-5 mr-2" /> New Chat </button>
             <div className="flex-1 overflow-y-auto">
                 <h2 className="px-4 text-xs font-bold tracking-wider uppercase text-gray-400 mb-2">Recent</h2>
-                {chatHistory.map(chat => ( <button key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center w-full text-left px-4 py-2 text-sm rounded-md transition-colors ${activeChatId === chat.id ? 'bg-gray-700' : 'hover:bg-gray-700/ ৫০'}`}> <MessageSquareText className="w-4 h-4 mr-3 flex-shrink-0" /> <span className="truncate">{chat.title}</span> </button> ))}
+                {chatHistory.map(chat => ( <button key={chat.id} onClick={() => setActiveChatId(chat.id)} className={`flex items-center w-full text-left px-4 py-2 text-sm rounded-md transition-colors ${activeChatId === chat.id ? 'bg-gray-700' : 'hover:bg-gray-700/50'}`}> <MessageSquareText className="w-4 h-4 mr-3 flex-shrink-0" /> <span className="truncate">{chat.title}</span> </button> ))}
             </div>
         </aside>
         
