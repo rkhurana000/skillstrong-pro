@@ -5,7 +5,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-// This is the list of questions for the quiz.
 const quizQuestions = [
   "I enjoy working with tools or machinery.",
   "I like fixing or building things with my hands.",
@@ -28,14 +27,11 @@ export default function QuizPage() {
   };
 
   const handleSubmit = () => {
-    // Check if all questions have been answered.
     if (Object.keys(answers).length < quizQuestions.length) {
       alert("Please answer all questions before proceeding.");
       return;
     }
-    
-    // **THIS IS THE CRITICAL LOGIC**
-    // It saves the results to the browser's storage before redirecting.
+    // This is the critical logic that saves the results.
     localStorage.setItem('skillstrong-quiz-results', JSON.stringify({ answers, questions: quizQuestions }));
     
     // Redirect to the explore/chat page.
@@ -49,6 +45,10 @@ export default function QuizPage() {
     <div className="bg-gray-50 min-h-screen py-12">
       <div className="container mx-auto max-w-2xl px-4">
         <div className="bg-white p-8 rounded-xl shadow-md">
+          
+          {/* --- DEBUGGING VERSION CHECK --- */}
+          <p className="text-right text-xs text-red-500 font-mono mb-4">Quiz Version: 2.0</p>
+
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Interest Quiz</h1>
           <p className="text-gray-600 mb-8">A quick check to pair your interests with manufacturing roles. Rate each statement from 1 (Disagree) to 5 (Agree).</p>
           
