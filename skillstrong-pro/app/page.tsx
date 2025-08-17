@@ -2,11 +2,11 @@
 import Link from 'next/link';
 import { ArrowRight, Bot, Compass, Briefcase, Zap, ShieldCheck, DollarSign } from 'lucide-react';
 
-// --- Easy to replace image URLs ---
-const heroImage = "https://images.unsplash.com/photo-1616127715729-94a862955f30?q=80&w=2862&auto=format&fit=crop";
-const roboticsImage = "https://images.unsplash.com/photo-1633355444132-695d587cce05?q=80&w=2940&auto=format&fit=crop";
-const cncImage = "https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=2940&auto=format&fit=crop";
-const additiveImage = "https://images.unsplash.com/photo-1633435473339-380d3a824d35?q=80&w=2832&auto=format&fit=crop";
+// --- NEW, WORKING IMAGE URLS ---
+const heroImage = "https://images.unsplash.com/photo-1581092921462-2052714a8993?q=80&w=2940&auto=format&fit=crop";
+const roboticsImage = "https://images.unsplash.com/photo-1678229237024-15951a34a8a0?q=80&w=2832&auto=format&fit=crop";
+const cncImage = "https://images.unsplash.com/photo-1599301822457-3dc627549527?q=80&w=2803&auto=format&fit=crop";
+const additiveImage = "https://images.unsplash.com/photo-1611288624195-5a4a5c8935c1?q=80&w=2832&auto=format&fit=crop";
 
 export default function HomePage() {
   return (
