@@ -1,7 +1,7 @@
 // /app/components/SiteHeader.tsx
 import Link from 'next/link';
 import { Factory } from 'lucide-react';
-import { createClient } from '@/utils/supabase/server'; // Use the server client
+import { createClient } from '@/utils/supabase/server';
 
 export default async function SiteHeader() {
   const supabase = createClient();
@@ -9,7 +9,6 @@ export default async function SiteHeader() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Get the first letter of the email for the initial
   const userInitial = user?.email?.charAt(0).toUpperCase();
 
   return (
@@ -23,10 +22,14 @@ export default async function SiteHeader() {
           <Link href="/explore" className="text-gray-500 hover:text-gray-900 font-medium">Explore Careers</Link>
           <Link href="/quiz" className="text-gray-500 hover:text-gray-900 font-medium">Interest Quiz</Link>
           
-          {/* --- DYNAMIC ACCOUNT LINK --- */}
           {user ? (
-            <Link href="/account" className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full font-bold text-sm">
-              {userInitial}
+            <Link href="/account">
+              {/* --- NEW: Gemini-style Icon --- */}
+              <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-blue-500">
+                <div className="flex items-center justify-center w-[28px] h-[28px] bg-white rounded-full">
+                  <span className="text-sm font-bold text-slate-700">{userInitial}</span>
+                </div>
+              </div>
             </Link>
           ) : (
             <Link href="/account" className="text-gray-500 hover:text-gray-900 font-medium">
