@@ -1,6 +1,6 @@
-// /app/explore/page.tsx (New server component wrapper)
+// /app/explore/page.tsx (Server Component Wrapper)
 import { createClient } from '@/utils/supabase/server';
-import ExploreClient from './ExploreClient'; // Import the component you just renamed
+import ExploreClient from './ExploreClient';
 
 export default async function ExplorePage() {
   const supabase = createClient();
@@ -8,6 +8,16 @@ export default async function ExplorePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Pass the user object (or null if not logged in) as a prop
-  return <ExploreClient user={user} />;
+  let initialLocation: string | null = null;
+  if (user) {
+    // If user is logged in, get location from their profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('zip_code')
+      .eq('id', user.id)
+      .single();
+    initialLocation = profile?.zip_code || null;
+  }
+
+  return <ExploreClient user={user} initialLocation={initialLocation} />;
 }
