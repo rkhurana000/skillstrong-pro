@@ -4,14 +4,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem } from 'lucide-react';
+import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useLocation } from '@/app/contexts/LocationContext';
 
 // Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
-interface ChatSession { id: string; title: string; messages: Message[]; provider: 'openai' | 'gemini'; }
+interface ChatSession { id: string; title: string; messages: Message[]; }
 type ExploreTab = 'skills' | 'salary' | 'training';
 
 const exploreContent = {
@@ -20,9 +21,15 @@ const exploreContent = {
   training: { title: "Explore by Training Length", prompts: ["Programs under 3 months", "Training of 6-12 months", "Apprenticeships (1-2 years)"]}
 };
 
-const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
+const TypingIndicator = () => (
+    <div className="flex items-center space-x-2">
+        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
+        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div>
+        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div>
+    </div>
+);
 
-export default function ExploreClient({ user, initialLocation }: { user: User | null, initialLocation: string | null }) {
+export default function ExploreClient({ user }: { user: User | null }) {
     const router = useRouter();
     const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -30,23 +37,10 @@ export default function ExploreClient({ user, initialLocation }: { user: User | 
     const [isLoading, setIsLoading] = useState(false);
     const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
     const [inputValue, setInputValue] = useState("");
-    const [location, setLocation] = useState<string | null>(initialLocation);
+    const { location } = useLocation(); // Use the global location from context
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Sync location state from props
-        setLocation(initialLocation);
-    }, [initialLocation]);
-    
-    useEffect(() => {
-        // For logged-out users, sync from localStorage on mount as a fallback
-        if (!user) {
-            const savedLocation = localStorage.getItem('skillstrong-location');
-            if (savedLocation) {
-                setLocation(savedLocation);
-            }
-        }
-
         const initialize = () => {
             const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
             if (quizResultsString) {
@@ -98,21 +92,13 @@ export default function ExploreClient({ user, initialLocation }: { user: User | 
     };
     
     const createNewChat = (setActive = true): ChatSession => {
-        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [], provider: 'openai' };
+        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [] };
         if (setActive) {
             updateAndSaveHistory([newChat, ...chatHistory]);
             setActiveChatId(newChat.id);
             setCurrentFollowUps([]);
         }
         return newChat;
-    };
-
-    const handleProviderChange = (provider: 'openai' | 'gemini') => {
-        if (!activeChatId) return;
-        const newHistory = chatHistory.map(chat => 
-            chat.id === activeChatId ? { ...chat, provider } : chat
-        );
-        updateAndSaveHistory(newHistory);
     };
 
     const handleResetActiveChat = () => {
@@ -148,7 +134,7 @@ export default function ExploreClient({ user, initialLocation }: { user: User | 
                 ...additionalData
             };
 
-            const response = await fetch(`/api/explore?provider=${currentChat?.provider || 'openai'}`, {
+            const response = await fetch('/api/explore', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -176,7 +162,8 @@ export default function ExploreClient({ user, initialLocation }: { user: User | 
                     });
                     if (titleResponse.ok) {
                         const { title } = await titleResponse.json();
-                        updatedHistory = updatedHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat);
+                        // Use functional update for setting title to avoid race conditions
+                        setChatHistory(prevHistory => prevHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat));
                     }
                 } catch (e) { console.error("Title generation failed", e); }
             }
@@ -208,16 +195,7 @@ export default function ExploreClient({ user, initialLocation }: { user: User | 
         <div className="flex flex-1 flex-col h-screen">
             <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
-                {activeChat && (
-                  <div className="flex items-center space-x-2 p-1 bg-gray-100 rounded-full">
-                    <button onClick={() => handleProviderChange('openai')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'openai' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
-                      <OpenAIIcon className="w-4 h-4 inline-block mr-1" /> GPT-4o
-                    </button>
-                    <button onClick={() => handleProviderChange('gemini')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'gemini' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
-                      <Gem className="w-4 h-4 inline-block mr-1" /> Gemini
-                    </button>
-                  </div>
-                )}
+                {/* The model toggle was removed for stability, focusing on a single reliable provider */}
             </header>
             
             <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
