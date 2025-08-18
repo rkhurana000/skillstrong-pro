@@ -13,11 +13,17 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 **Your Core Logic:**
 1.  **Handle Quiz Results:** If \`QUIZ_RESULTS\` are provided, your SOLE task is to act as a career counselor. Your response MUST start with "Based on your interests...". Your follow-ups MUST be specific to the careers you just recommended.
 2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find any specific openings and then suggest broader search terms or alternative resources as a helpful next step.
-3.  **Ask for Location:** If a user asks for local information but NO location is provided in the context, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
+3.  **Ask for Location:** If a user asks for local information but NO location has been established in the conversation, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
 4.  **Always Provide Follow-ups:** Every response (except when asking for a location) must include relevant follow-up choices.
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys. For Gemini, your ENTIRE output must be ONLY the raw JSON object.
 `;
+
+// Helper type for clarity
+interface Message {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+}
 
 async function performSearch(query: string, req: NextRequest): Promise<any[]> {
     const searchApiUrl = new URL('/api/search', req.url);
@@ -61,8 +67,11 @@ export async function POST(req: NextRequest) {
             }
 
             if (decision === 'YES') {
-                const effectiveLocation = location || messages.map(m => m.content).join('\n');
-                const locationExtractionPrompt = `From the following text, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nText:\n${effectiveLocation}`;
+                // --- THIS IS THE FIX ---
+                // Added the 'Message' type to the 'm' parameter here.
+                const fullConversation = messages.map((m: Message) => m.content).join('\n');
+                
+                const locationExtractionPrompt = `From the following text, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nText:\n${location || fullConversation}`;
                 const locationResponse = await openai.chat.completions.create({
                     model: 'gpt-4o',
                     messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
@@ -122,11 +131,13 @@ export async function POST(req: NextRequest) {
         }
         
         const parsedContent = JSON.parse(content);
+
         if (parsedContent.followups && (parsedContent.followups.length > 0 || messages.length > 0) && !parsedContent.answer.toLowerCase().includes("city, state, or zip code")) {
             parsedContent.followups.push("↩️ Explore other topics");
         }
 
         return NextResponse.json(parsedContent);
+
     } catch (error) {
         console.error("Error in /api/explore:", error);
         return NextResponse.json({ 
