@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem } from 'lucide-react';
+import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem, MapPin } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -30,9 +30,15 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [isLoading, setIsLoading] = useState(false);
     const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
     const [inputValue, setInputValue] = useState("");
+    const [location, setLocation] = useState<string | null>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        const savedLocation = localStorage.getItem('skillstrong-location');
+        if (savedLocation) {
+            setLocation(savedLocation);
+        }
+        
         const initialize = () => {
             const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
             if (quizResultsString) {
@@ -44,7 +50,8 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 const { answers } = JSON.parse(quizResultsString);
                 const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
-                updateAndSaveHistory([newChat, ...chatHistory]);
+                const newHistory = [newChat, ...chatHistory];
+                updateAndSaveHistory(newHistory);
                 setActiveChatId(newChat.id);
                 sendMessage(userMessage, newChat.id, { quiz_results: answers });
             } else {
@@ -58,7 +65,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
                         const newChat = createNewChat(true);
                         setChatHistory([newChat]);
                     }
-                } catch (error) { console.error("Failed to load or parse chat history:", error); createNewChat(true); }
+                } catch (error) { 
+                    console.error("Failed to load history:", error); 
+                    const newChat = createNewChat(true);
+                    setChatHistory([newChat]);
+                }
             }
         };
         initialize();
@@ -102,6 +113,15 @@ export default function ExploreClient({ user }: { user: User | null }) {
         updateAndSaveHistory(newHistory);
         setCurrentFollowUps([]);
     };
+
+    const handleChangeLocation = () => {
+        const newLocation = prompt("Please enter your City, State, or ZIP code for local searches:", location || "");
+        if (newLocation && newLocation.trim() !== "") {
+            const trimmedLocation = newLocation.trim();
+            setLocation(trimmedLocation);
+            localStorage.setItem('skillstrong-location', trimmedLocation);
+        }
+    };
     
     const sendMessage = async (query: string, chatId: string | null, additionalData = {}) => {
         if (!user) {
@@ -125,6 +145,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const currentChat = updatedHistory.find(c => c.id === chatId);
             const body = {
                 messages: currentChat?.messages || [],
+                location: location,
                 ...additionalData
             };
 
@@ -193,16 +214,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-slate-800 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
                                     <article className={`prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold ${msg.role === 'user' ? 'prose-invert prose-a:text-blue-400' : 'prose-a:text-blue-600'}`}>
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                                a: ({ node, ...props }) => (
-                                                    <a {...props} target="_blank" rel="noopener noreferrer" />
-                                                ),
-                                            }}
-                                        >
-                                            {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
-                                        </ReactMarkdown>
+                                        <ReactMarkdown components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" /> }} remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
                                     </article>
                                 </div>
                             </div>
@@ -240,6 +252,17 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50" />
                         <button type="submit" disabled={isLoading || !inputValue.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors"> <Send className="w-5 h-5" /> </button>
                     </form>
+                    <div className="text-center mt-2 h-4 text-xs text-gray-500">
+                        {location ? (
+                            <button onClick={handleChangeLocation} className="hover:text-gray-800 flex items-center justify-center mx-auto">
+                                <MapPin className="w-3 h-3 mr-1"/> Searching near {location} (Change)
+                            </button>
+                        ) : (
+                           <button onClick={handleChangeLocation} className="hover:text-gray-800">
+                                Set Location for Local Results
+                           </button>
+                        )}
+                    </div>
                 </div>
             </footer>
         </div>
