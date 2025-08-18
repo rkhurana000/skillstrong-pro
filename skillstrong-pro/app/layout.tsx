@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import SiteHeader from "@/app/components/SiteHeader";
-import { LocationProvider } from "@/app/contexts/LocationContext"; // Import the provider
+import { LocationProvider } from "@/app/contexts/LocationContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <LocationProvider> {/* Wrap the content with the provider */}
+        <LocationProvider>
           <SiteHeader />
           <main>{children}</main>
         </LocationProvider>
