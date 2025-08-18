@@ -34,11 +34,12 @@ export default function ExploreClient({ user, initialLocation }: { user: User | 
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Sync location state when initialLocation prop changes (e.g., after router.refresh())
+        // Sync location state from props
         setLocation(initialLocation);
     }, [initialLocation]);
     
     useEffect(() => {
+        // For logged-out users, sync from localStorage on mount as a fallback
         if (!user) {
             const savedLocation = localStorage.getItem('skillstrong-location');
             if (savedLocation) {
