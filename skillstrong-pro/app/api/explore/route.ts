@@ -12,8 +12,8 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 
 **Your Core Logic:**
 1.  **Handle Quiz Results:** If \`QUIZ_RESULTS\` are provided, your SOLE task is to act as a career counselor. Your response MUST start with "Based on your interests...". Your follow-ups MUST be specific to the careers you just recommended.
-2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty or contains "No results found", state that you couldn't find any specific openings and then suggest broader search terms or alternative resources as a helpful next step.
-3.  **Ask for Location:** If a user asks for local information but NO location has been established in the conversation, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
+2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find any specific openings and then suggest broader search terms or alternative resources as a helpful next step.
+3.  **Ask for Location:** If a user asks for local information but NO location is provided in the context, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
 4.  **Always Provide Follow-ups:** Every response (except when asking for a location) must include relevant follow-up choices.
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys. For Gemini, your ENTIRE output must be ONLY the raw JSON object.
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
         const provider = searchParams.get('provider') || 'openai';
-        const { messages, quiz_results } = await req.json();
+        const { messages, quiz_results, location } = await req.json();
         const latestUserMessage = messages[messages.length - 1]?.content || '';
 
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -61,17 +61,16 @@ export async function POST(req: NextRequest) {
             }
 
             if (decision === 'YES') {
-                const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
-                const locationExtractionPrompt = `From the following conversation, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nConversation:\n${fullConversation}`;
-                
+                const effectiveLocation = location || messages.map(m => m.content).join('\n');
+                const locationExtractionPrompt = `From the following text, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nText:\n${effectiveLocation}`;
                 const locationResponse = await openai.chat.completions.create({
                     model: 'gpt-4o',
                     messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
                 });
-                let location = locationResponse.choices[0].message?.content?.trim();
+                let extractedLocation = locationResponse.choices[0].message?.content?.trim();
 
-                if (location && location.toUpperCase() !== 'NONE') {
-                    const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${location}".`;
+                if (extractedLocation && extractedLocation.toUpperCase() !== 'NONE') {
+                    const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${extractedLocation}".`;
                     const queryGenResponse = await openai.chat.completions.create({
                         model: 'gpt-4o',
                         messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
@@ -114,27 +113,20 @@ export async function POST(req: NextRequest) {
             const textResponse = result.response.text();
             
             try {
-                JSON.parse(textResponse);
-                content = textResponse;
+                content = textResponse.match(/{[\s\S]*}/)![0];
+                JSON.parse(content);
             } catch (e) {
-                const jsonMatch = textResponse.match(/{[\s\S]*}/);
-                if (jsonMatch) {
-                    content = jsonMatch[0];
-                } else {
-                    const escapedAnswer = textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-                    content = `{ "answer": "${escapedAnswer}", "followups": [] }`;
-                }
+                const escapedAnswer = textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                content = `{ "answer": "${escapedAnswer}", "followups": [] }`;
             }
         }
         
         const parsedContent = JSON.parse(content);
-
         if (parsedContent.followups && (parsedContent.followups.length > 0 || messages.length > 0) && !parsedContent.answer.toLowerCase().includes("city, state, or zip code")) {
             parsedContent.followups.push("↩️ Explore other topics");
         }
 
         return NextResponse.json(parsedContent);
-
     } catch (error) {
         console.error("Error in /api/explore:", error);
         return NextResponse.json({ 
