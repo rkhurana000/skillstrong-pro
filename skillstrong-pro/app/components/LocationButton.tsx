@@ -1,46 +1,27 @@
-// /app/contexts/LocationContext.tsx
+// /app/components/LocationButton.tsx
 'use client'
 
-import { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import { useRouter } from 'next/navigation'
+import { MapPin } from 'lucide-react'
+import { useLocation } from '@/app/contexts/LocationContext'
 
-interface LocationContextType {
-  location: string | null;
-  setLocation: (location: string | null) => void;
-}
+export default function LocationButton() {
+  const { location, setLocation } = useLocation(); // Use the global context
+  const router = useRouter();
 
-const LocationContext = createContext<LocationContextType | undefined>(undefined);
+  const handleSetLocation = () => {
+    const newLocation = prompt("Please enter your City, State, or ZIP code:", location || "");
 
-export function LocationProvider({ children }: { children: ReactNode }) {
-  const [location, setLocationState] = useState<string | null>(null);
-
-  useEffect(() => {
-    // On initial load, try to get the location from localStorage
-    const savedLocation = localStorage.getItem('skillstrong-location');
-    if (savedLocation) {
-      setLocationState(savedLocation);
-    }
-  }, []);
-
-  const setLocation = (newLocation: string | null) => {
-    setLocationState(newLocation);
-    if (newLocation) {
-      localStorage.setItem('skillstrong-location', newLocation);
-    } else {
-      localStorage.removeItem('skillstrong-location');
+    if (newLocation && newLocation.trim() !== "") {
+      setLocation(newLocation.trim());
+      router.refresh(); 
     }
   };
 
   return (
-    <LocationContext.Provider value={{ location, setLocation }}>
-      {children}
-    </LocationContext.Provider>
+    <button onClick={handleSetLocation} className="flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors">
+      <MapPin className="w-4 h-4 mr-1.5" />
+      {location ? <span>{location}</span> : <span>Set Location</span>}
+    </button>
   );
-}
-
-export function useLocation() {
-  const context = useContext(LocationContext);
-  if (context === undefined) {
-    throw new Error('useLocation must be used within a LocationProvider');
-  }
-  return context;
 }
