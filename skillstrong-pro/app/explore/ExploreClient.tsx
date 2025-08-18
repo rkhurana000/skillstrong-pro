@@ -50,8 +50,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 const { answers } = JSON.parse(quizResultsString);
                 const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
-                const newHistory = [newChat, ...chatHistory];
-                updateAndSaveHistory(newHistory);
+                updateAndSaveHistory([newChat, ...chatHistory]);
                 setActiveChatId(newChat.id);
                 sendMessage(userMessage, newChat.id, { quiz_results: answers });
             } else {
@@ -117,8 +116,9 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const handleChangeLocation = () => {
         const newLocation = prompt("Please enter your City, State, or ZIP code for local searches:", location || "");
         if (newLocation && newLocation.trim() !== "") {
-            setLocation(newLocation.trim());
-            localStorage.setItem('skillstrong-location', newLocation.trim());
+            const trimmedLocation = newLocation.trim();
+            setLocation(trimmedLocation);
+            localStorage.setItem('skillstrong-location', trimmedLocation);
         }
     };
     
@@ -257,7 +257,9 @@ export default function ExploreClient({ user }: { user: User | null }) {
                                 <MapPin className="w-3 h-3 mr-1"/> Searching near {location} (Change)
                             </button>
                         ) : (
-                           <span/>
+                           <button onClick={handleChangeLocation} className="hover:text-gray-800">
+                                Set Location for Local Results
+                           </button>
                         )}
                     </div>
                 </div>
