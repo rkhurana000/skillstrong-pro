@@ -162,26 +162,12 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
             updatedHistory = updatedHistory.map(chat => {
                 if (chat.id === chatId) {
-                    return { ...chat, messages: [...chat.messages, assistantMessage] };
+                    const isFirstUserMessage = chat.messages.length === 1;
+                    const newTitle = isFirstUserMessage ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 35) + '...' : chat.title);
+                    return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
                 }
                 return chat;
             });
-            
-            const isFirstExchange = (updatedHistory.find(c => c.id === chatId)?.messages.length || 0) === 2;
-            if (isFirstExchange) {
-                try {
-                    const titleResponse = await fetch('/api/title', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ messages: updatedHistory.find(c => c.id === chatId)?.messages }),
-                    });
-                    if (titleResponse.ok) {
-                        const { title } = await titleResponse.json();
-                        updatedHistory = updatedHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat);
-                    }
-                } catch (e) { console.error("Title generation failed", e); }
-            }
-
             updateAndSaveHistory(updatedHistory);
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
@@ -266,13 +252,13 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50" />
                         <button type="submit" disabled={isLoading || !inputValue.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors"> <Send className="w-5 h-5" /> </button>
                     </form>
-                    <div className="text-center mt-2 h-4 text-xs text-gray-500">
+                    <div className="text-center mt-3 h-4 text-sm font-medium text-gray-600">
                         {location ? (
-                            <button onClick={handleChangeLocation} className="hover:text-gray-800 flex items-center justify-center mx-auto">
-                                <MapPin className="w-3 h-3 mr-1"/> Searching near {location} (Change)
+                            <button onClick={handleChangeLocation} className="hover:text-blue-600 flex items-center justify-center mx-auto transition-colors">
+                                <MapPin className="w-4 h-4 mr-1.5"/> Searching near: {location} (Change)
                             </button>
                         ) : (
-                           <button onClick={handleChangeLocation} className="hover:text-gray-800">
+                           <button onClick={handleChangeLocation} className="hover:text-blue-600">
                                 Set Location for Local Results
                            </button>
                         )}
