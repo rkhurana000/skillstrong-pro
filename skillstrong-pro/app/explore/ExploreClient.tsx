@@ -112,17 +112,16 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        let updatedHistory = chatHistory.map(chat => 
+        const optimisticHistory = chatHistory.map(chat => 
             chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
         );
-        updateAndSaveHistory(updatedHistory);
-        
+        setChatHistory(optimisticHistory);
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
         try {
-            const currentChat = updatedHistory.find(c => c.id === chatId);
+            const currentChat = optimisticHistory.find(c => c.id === chatId);
             const body = {
                 messages: currentChat?.messages || [],
                 ...additionalData
@@ -139,23 +138,37 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            updatedHistory = updatedHistory.map(chat => {
-                if (chat.id === chatId) {
-                    const isFirstUserMessage = chat.messages.length === 1;
-                    const newTitle = isFirstUserMessage ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 35) + '...' : chat.title);
-                    return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
-                }
-                return chat;
-            });
-            updateAndSaveHistory(updatedHistory);
+            // Update state with the assistant's message first
+            let historyWithAssistantMessage = optimisticHistory.map(chat => 
+                chat.id === chatId ? { ...chat, messages: [...chat.messages, assistantMessage] } : chat
+            );
+            updateAndSaveHistory(historyWithAssistantMessage);
             setCurrentFollowUps(data.followups || []);
+            
+            // --- RESTORED: Intelligent Title Generation ---
+            const isFirstExchange = (historyWithAssistantMessage.find(c => c.id === chatId)?.messages.length || 0) === 2;
+            if (isFirstExchange) {
+                try {
+                    const titleResponse = await fetch('/api/title', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messages: historyWithAssistantMessage.find(c => c.id === chatId)?.messages }),
+                    });
+                    if (titleResponse.ok) {
+                        const { title } = await titleResponse.json();
+                        // Final state update with the new title
+                        setChatHistory(prevHistory => prevHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat));
+                    }
+                } catch (e) { console.error("Title generation failed", e); }
+            }
+
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            updatedHistory = updatedHistory.map(chat => 
+            const errorHistory = optimisticHistory.map(chat => 
                 chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
             );
-            updateAndSaveHistory(updatedHistory);
+            updateAndSaveHistory(errorHistory);
         } finally {
             setIsLoading(false);
         }
@@ -193,16 +206,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'max-w-xl bg-slate-800 text-white rounded-br-none' : 'max-w-4xl bg-white text-gray-800 border rounded-bl-none'}`}>
                                     <article className={`prose prose-sm lg:prose-base max-w-none prose-headings:font-semibold ${msg.role === 'user' ? 'prose-invert prose-a:text-blue-400' : 'prose-a:text-blue-600'}`}>
-                                        <ReactMarkdown
-                                            remarkPlugins={[remarkGfm]}
-                                            components={{
-                                                a: ({ node, ...props }) => (
-                                                    <a {...props} target="_blank" rel="noopener noreferrer" />
-                                                ),
-                                            }}
-                                        >
-                                            {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
-                                        </ReactMarkdown>
+                                        <ReactMarkdown components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" /> }} remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
                                     </article>
                                 </div>
                             </div>
