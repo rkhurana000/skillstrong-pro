@@ -1,4 +1,4 @@
-
+// /app/api/explore/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -7,21 +7,17 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 
 **Your Persona:**
 - Your tone is encouraging, clear, and geared towards students.
-- Be concise. Use short paragraphs and markdown lists.
-- Use emojis sparingly, only for main topics (e.g., 💰 Salary, 🔩 Skills).
+- Provide informative and detailed answers, using headings and markdown lists to keep the content scannable.
+- Use emojis sparingly, for main topics only (e.g., 💰 Salary, 🔩 Skills).
 
 **Your Core Logic:**
-1.  **Analyze the Request:** First, determine the user's intent. Are they asking a general question, asking for a local search, or have they provided quiz results?
-2.  **Handle Quiz Results:** If the user provides \`QUIZ_RESULTS\`, your SOLE task is to act as a career counselor. Your response MUST start with the exact phrase: "Based on your interests, here are a few career paths I recommend you explore:". Then, list 3 careers that match their quiz answers, with a one-sentence explanation for each. Your follow-ups MUST be specific to the careers you just recommended (e.g., "Tell me more about [Career A]").
-3.  **Handle Local Searches:** If the user asks for local jobs/training AND provides a location, you will be given \`CONTEXT\` from a search. You MUST synthesize this context into a summary of 3-4 actual job openings with clickable markdown links. You are forbidden from telling the user to search elsewhere. If context is empty, say you couldn't find results.
-4.  **Ask for Location:** If the user asks for local information but provides NO location, your only goal is to ask for their city, state, or ZIP code.
-5.  **Default Behavior:** For any other general question, provide a helpful answer about manufacturing careers.
-6.  **Always Provide Follow-ups:** Every response must include relevant follow-up choices.
-7. **CRITICAL RULE FOR SEARCH:** If you are provided with 'CONTEXT' from a real-time search, you MUST base your entire answer on it. Your primary goal is to synthesize the search results into a helpful summary. You will list the top 3-4 job openings, including the job title and company from the context. You MUST format the job title as a clickable Markdown link using the exact 'link' URL provided for that item in the search result context. **You are strictly forbidden from telling the user to search on other websites like Indeed or LinkedIn; you are the search tool.** If the context is empty or contains "No results found", you must state that you couldn't find any specific openings.
+1.  **Handle Quiz Results:** If the user provides \`QUIZ_RESULTS\`, your SOLE task is to act as a career counselor. Start your response with "Based on your interests...". Your follow-ups MUST be specific to the careers you just recommended.
+2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find results.
+3.  **Ask for Location:** If a user asks for local information but NO location is provided in the context, your only goal is to ask them to type their city, state, or ZIP code into the input bar. Your answer should be "To find local results, I need to know your location. Please type your city, state, or ZIP code." and your follow-ups should be empty.
 
-
-**Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys.
+**Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys. For Gemini, your ENTIRE output must be ONLY the raw JSON object, with no other text or markdown formatting.
 `;
+
 async function performSearch(query: string, req: NextRequest): Promise<any[]> {
     const searchApiUrl = new URL('/api/search', req.url);
     try {
@@ -42,30 +38,23 @@ export async function POST(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
         const provider = searchParams.get('provider') || 'openai';
-        const { messages, quiz_results } = await req.json();
+        const { messages, quiz_results, location } = await req.json();
         const latestUserMessage = messages[messages.length - 1]?.content || '';
 
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         let context = "";
 
         if (quiz_results) {
-            context = `The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
+            context = `CONTEXT: The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
         } else {
             const searchDecisionPrompt = `Does the user's latest message ask for local jobs, apprenticeships, or training programs? Answer ONLY with YES or NO. Message: "${latestUserMessage}"`;
             const decisionResponse = await openai.chat.completions.create({
-                model: 'gpt-4o', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
+                model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
             });
             const decision = decisionResponse.choices[0].message?.content?.trim().toUpperCase();
 
             if (decision === 'YES') {
-                const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
-                const locationExtractionPrompt = `From the following conversation, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nConversation:\n${fullConversation}`;
-                const locationResponse = await openai.chat.completions.create({
-                    model: 'gpt-4o-mini', messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
-                });
-                let location = locationResponse.choices[0].message?.content?.trim();
-
-                if (location && location.toUpperCase() !== 'NONE') {
+                if (location) {
                     const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${location}".`;
                     const queryGenResponse = await openai.chat.completions.create({
                         model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
@@ -75,6 +64,9 @@ export async function POST(req: NextRequest) {
                         const searchResults = await performSearch(searchQuery, req);
                         context = `CONTEXT:\n${JSON.stringify(searchResults.length > 0 ? searchResults : "No results found.")}`;
                     }
+                } else {
+                    // If a search is needed but no location is known, let the prompt handle asking for it.
+                    context = `CONTEXT: The user's location is unknown.`;
                 }
             }
         }
@@ -89,38 +81,36 @@ export async function POST(req: NextRequest) {
 
         if (provider === 'openai') {
             const response = await openai.chat.completions.create({
-                model: 'gpt-4o',
+                model: 'gpt-4o', // Using the upgraded GPT-4o model
                 messages: fullMessages,
-                temperature: 0.2,
+                temperature: 0.3,
                 response_format: { type: "json_object" },
             });
             content = response.choices[0].message?.content || '{}';
         } else { // Gemini
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
             const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-            const geminiHistory = messages.map((m: { role: string; content: string }) => ({
-                role: m.role === 'assistant' ? 'model' : 'user',
-                parts: [{ text: m.content }],
-            }));
-
-            const result = await model.generateContent({
-                contents: [{ role: 'user', parts: [{ text: systemPrompt }] }, ...geminiHistory],
-            });
-
-            let textResponse = result.response.text();
+            const chat = model.startChat({ history: fullMessages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })) });
             
-            const jsonMatch = textResponse.match(/```json\n([\s\S]*)\n```/);
-            if (jsonMatch && jsonMatch[1]) {
-                content = jsonMatch[1];
-            } else {
-                // Fallback for when Gemini doesn't return a perfect JSON block
-                const escapedAnswer = textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-                content = `{ "answer": "${escapedAnswer}", "followups": [] }`;
+            const result = await chat.sendMessage(systemPrompt + "\n" + latestUserMessage);
+            const textResponse = result.response.text();
+            
+            try {
+                // Attempt to parse the entire response as JSON first
+                JSON.parse(textResponse);
+                content = textResponse;
+            } catch (e) {
+                // If it fails, try to extract a JSON object from the text
+                const jsonMatch = textResponse.match(/{[\s\S]*}/);
+                if (jsonMatch) {
+                    content = jsonMatch[0];
+                } else {
+                    // Final fallback
+                    const escapedAnswer = textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                    content = `{ "answer": "${escapedAnswer}", "followups": [] }`;
+                }
             }
         }
-
-        if (!content) { throw new Error("Empty response from AI"); }
         
         const parsedContent = JSON.parse(content);
 
@@ -133,7 +123,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error("Error in /api/explore:", error);
         return NextResponse.json({ 
-            answer: "Sorry, I encountered an error. Please try asking in a different way.",
+            answer: "Sorry, I encountered an error. Please try again.",
             followups: ["↩️ Explore other topics"]
         }, { status: 500 });
     }
