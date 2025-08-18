@@ -7,13 +7,14 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 
 **Your Persona:**
 - Your tone is encouraging, clear, and geared towards students.
-- Provide informative and detailed answers, using headings and markdown lists to keep the content scannable.
-- Use emojis sparingly, for main topics only (e.g., 💰 Salary, 🔩 Skills).
+- Provide informative and detailed answers, using headings and markdown lists to keep the content scannable and easy to read. Avoid single-paragraph responses for broad topics.
+- Use emojis sparingly, only for main topics (e.g., 💰 Salary, 🔩 Skills).
 
 **Your Core Logic:**
-1.  **Handle Quiz Results:** If the user provides \`QUIZ_RESULTS\`, your SOLE task is to act as a career counselor. Start your response with "Based on your interests...". Your follow-ups MUST be specific to the careers you just recommended.
-2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find results.
-3.  **Ask for Location:** If a user asks for local information but NO location is provided in the context, your only goal is to ask them to type their city, state, or ZIP code into the input bar. Your answer should be "To find local results, I need to know your location. Please type your city, state, or ZIP code." and your follow-ups should be empty.
+1.  **Handle Quiz Results:** If the user provides \`QUIZ_RESULTS\`, your SOLE task is to act as a career counselor. Your response MUST start with "Based on your interests...". Your follow-ups MUST be specific to the careers you recommended.
+2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, say you couldn't find results.
+3.  **Ask for Location:** If a user asks for local info but provides NO location, your only goal is to ask for their city, state, or ZIP code.
+4.  **Always Provide Follow-ups:** Every response must include relevant follow-up choices.
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys. For Gemini, your ENTIRE output must be ONLY the raw JSON object, with no other text or markdown formatting.
 `;
@@ -65,7 +66,6 @@ export async function POST(req: NextRequest) {
                         context = `CONTEXT:\n${JSON.stringify(searchResults.length > 0 ? searchResults : "No results found.")}`;
                     }
                 } else {
-                    // If a search is needed but no location is known, let the prompt handle asking for it.
                     context = `CONTEXT: The user's location is unknown.`;
                 }
             }
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
 
         if (provider === 'openai') {
             const response = await openai.chat.completions.create({
-                model: 'gpt-4o', // Using the upgraded GPT-4o model
+                model: 'gpt-4o',
                 messages: fullMessages,
                 temperature: 0.3,
                 response_format: { type: "json_object" },
@@ -90,22 +90,23 @@ export async function POST(req: NextRequest) {
         } else { // Gemini
             const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
             const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-            const chat = model.startChat({ history: fullMessages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.content }] })) });
             
-            const result = await chat.sendMessage(systemPrompt + "\n" + latestUserMessage);
+            // For Gemini, we combine the system prompt and history in a specific way
+            const chat = model.startChat({
+                history: fullMessages.filter(m => m.role !== 'system' && m.role !== 'user').map(m => ({ role: 'model', parts: [{ text: m.content }] })),
+                generationConfig: { temperature: 0.4 }
+            });
+            const result = await chat.sendMessage(systemPrompt + "\n\n" + fullMessages.filter(m => m.role === 'user').map(m => m.content).join("\n"));
             const textResponse = result.response.text();
             
             try {
-                // Attempt to parse the entire response as JSON first
                 JSON.parse(textResponse);
                 content = textResponse;
             } catch (e) {
-                // If it fails, try to extract a JSON object from the text
                 const jsonMatch = textResponse.match(/{[\s\S]*}/);
                 if (jsonMatch) {
                     content = jsonMatch[0];
                 } else {
-                    // Final fallback
                     const escapedAnswer = textResponse.replace(/"/g, '\\"').replace(/\n/g, '\\n');
                     content = `{ "answer": "${escapedAnswer}", "followups": [] }`;
                 }
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
     } catch (error) {
         console.error("Error in /api/explore:", error);
         return NextResponse.json({ 
-            answer: "Sorry, I encountered an error. Please try again.",
+            answer: "Sorry, I encountered an error. Please try asking in a different way.",
             followups: ["↩️ Explore other topics"]
         }, { status: 500 });
     }
