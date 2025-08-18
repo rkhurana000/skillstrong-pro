@@ -1,4 +1,4 @@
-// /app/api/explore/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -17,6 +17,8 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 4.  **Ask for Location:** If the user asks for local information but provides NO location, your only goal is to ask for their city, state, or ZIP code.
 5.  **Default Behavior:** For any other general question, provide a helpful answer about manufacturing careers.
 6.  **Always Provide Follow-ups:** Every response must include relevant follow-up choices.
+7. **CRITICAL RULE FOR SEARCH:** If you are provided with 'CONTEXT' from a real-time search, you MUST base your entire answer on it. Your primary goal is to synthesize the search results into a helpful summary. You will list the top 3-4 job openings, including the job title and company from the context. You MUST format the job title as a clickable Markdown link using the exact 'link' URL provided for that item in the search result context. **You are strictly forbidden from telling the user to search on other websites like Indeed or LinkedIn; you are the search tool.** If the context is empty or contains "No results found", you must state that you couldn't find any specific openings.
+
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys.
 `;
