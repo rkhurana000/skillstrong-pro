@@ -12,7 +12,7 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 
 **Your Core Logic:**
 1.  **Handle Quiz Results:** If \`QUIZ_RESULTS\` are provided, your SOLE task is to act as a career counselor. Your response MUST start with "Based on your interests...". Your follow-ups MUST be specific to the careers you just recommended.
-2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find results.
+2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty or contains "No results found", state that you couldn't find any specific openings and then suggest broader search terms or alternative resources as a helpful next step.
 3.  **Ask for Location:** If a user asks for local information but NO location has been established in the conversation, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
 4.  **Always Provide Follow-ups:** Every response (except when asking for a location) must include relevant follow-up choices.
 
@@ -64,18 +64,16 @@ export async function POST(req: NextRequest) {
                 const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
                 const locationExtractionPrompt = `From the following conversation, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nConversation:\n${fullConversation}`;
                 
-                // --- UPGRADED MODEL ---
                 const locationResponse = await openai.chat.completions.create({
-                    model: 'gpt-4o', // Using gpt-4o for maximum accuracy
+                    model: 'gpt-4o',
                     messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
                 });
                 let location = locationResponse.choices[0].message?.content?.trim();
 
                 if (location && location.toUpperCase() !== 'NONE') {
                     const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${location}".`;
-                    // --- UPGRADED MODEL ---
                     const queryGenResponse = await openai.chat.completions.create({
-                        model: 'gpt-4o', // Using gpt-4o for maximum accuracy
+                        model: 'gpt-4o',
                         messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
                     });
                     const searchQuery = queryGenResponse.choices[0].message?.content?.trim();
