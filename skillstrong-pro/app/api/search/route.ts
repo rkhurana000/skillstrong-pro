@@ -15,10 +15,8 @@ export async function POST(req: Request) {
   const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
 
   if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) {
-    return NextResponse.json(
-      { error: 'Google Search API keys are not configured.' },
-      { status: 500 }
-    );
+    console.error('Google Search API keys are not configured.');
+    return NextResponse.json({ error: 'Search API is not configured.' }, { status: 500 });
   }
 
   if (!query) {
@@ -32,18 +30,17 @@ export async function POST(req: Request) {
     if (!response.ok) {
       const errorData = await response.json();
       console.error('Google Search API Error:', errorData);
-      return NextResponse.json(
-        { error: 'Failed to fetch search results.', details: errorData },
-        { status: response.status }
-      );
+      return NextResponse.json({ error: 'Failed to fetch search results.' }, { status: response.status });
     }
 
     const data = await response.json();
-    const results: SearchResult[] = data.items?.slice(0, 5).map((item: any) => ({
+    
+    // Filter out results that don't have a title, link, or snippet
+    const results: SearchResult[] = data.items?.map((item: any) => ({
       title: item.title,
       link: item.link,
       snippet: item.snippet,
-    })) || [];
+    })).filter((item: SearchResult) => item.title && item.link && item.snippet).slice(0, 5) || [];
 
     return NextResponse.json(results);
   } catch (error) {
