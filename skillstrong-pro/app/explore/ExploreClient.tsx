@@ -21,13 +21,7 @@ const exploreContent = {
   training: { title: "Explore by Training Length", prompts: ["Programs under 3 months", "Training of 6-12 months", "Apprenticeships (1-2 years)"]}
 };
 
-const TypingIndicator = () => (
-    <div className="flex items-center space-x-2">
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div>
-    </div>
-);
+const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
 
 export default function ExploreClient({ user }: { user: User | null }) {
     const router = useRouter();
@@ -162,7 +156,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                     });
                     if (titleResponse.ok) {
                         const { title } = await titleResponse.json();
-                        // Use functional update for setting title to avoid race conditions
                         setChatHistory(prevHistory => prevHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat));
                     }
                 } catch (e) { console.error("Title generation failed", e); }
@@ -195,7 +188,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
         <div className="flex flex-1 flex-col h-screen">
             <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
-                {/* The model toggle was removed for stability, focusing on a single reliable provider */}
+                {/* The model toggle was removed for stability */}
             </header>
             
             <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
