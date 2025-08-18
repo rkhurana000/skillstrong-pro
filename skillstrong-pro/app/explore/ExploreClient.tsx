@@ -4,14 +4,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, MapPin } from 'lucide-react';
+import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 // Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
-interface ChatSession { id: string; title: string; messages: Message[]; }
+interface ChatSession { id: string; title: string; messages: Message[]; provider: 'openai' | 'gemini'; }
 type ExploreTab = 'skills' | 'salary' | 'training';
 
 const exploreContent = {
@@ -20,15 +20,9 @@ const exploreContent = {
   training: { title: "Explore by Training Length", prompts: ["Programs under 3 months", "Training of 6-12 months", "Apprenticeships (1-2 years)"]}
 };
 
-const TypingIndicator = () => (
-    <div className="flex items-center space-x-2">
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div>
-        <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div>
-    </div>
-);
+const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
 
-export default function ExploreClient({ user }: { user: User | null }) {
+export default function ExploreClient({ user, initialLocation }: { user: User | null, initialLocation: string | null }) {
     const router = useRouter();
     const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -36,14 +30,22 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [isLoading, setIsLoading] = useState(false);
     const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
     const [inputValue, setInputValue] = useState("");
-    const [location, setLocation] = useState<string | null>(null);
-    const [pendingQuery, setPendingQuery] = useState<string | null>(null);
+    const [location, setLocation] = useState<string | null>(initialLocation);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const savedLocation = localStorage.getItem('skillstrong-location');
-        if (savedLocation) setLocation(savedLocation);
-        
+        // Sync location state when initialLocation prop changes (e.g., after router.refresh())
+        setLocation(initialLocation);
+    }, [initialLocation]);
+    
+    useEffect(() => {
+        if (!user) {
+            const savedLocation = localStorage.getItem('skillstrong-location');
+            if (savedLocation) {
+                setLocation(savedLocation);
+            }
+        }
+
         const initialize = () => {
             const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
             if (quizResultsString) {
@@ -95,13 +97,21 @@ export default function ExploreClient({ user }: { user: User | null }) {
     };
     
     const createNewChat = (setActive = true): ChatSession => {
-        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [] };
+        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [], provider: 'openai' };
         if (setActive) {
             updateAndSaveHistory([newChat, ...chatHistory]);
             setActiveChatId(newChat.id);
             setCurrentFollowUps([]);
         }
         return newChat;
+    };
+
+    const handleProviderChange = (provider: 'openai' | 'gemini') => {
+        if (!activeChatId) return;
+        const newHistory = chatHistory.map(chat => 
+            chat.id === activeChatId ? { ...chat, provider } : chat
+        );
+        updateAndSaveHistory(newHistory);
     };
 
     const handleResetActiveChat = () => {
@@ -118,25 +128,13 @@ export default function ExploreClient({ user }: { user: User | null }) {
         }
         if (isLoading || !chatId) return;
 
-        // If we are waiting for a location, this query IS the location.
-        if (pendingQuery) {
-            const newLocation = query.trim();
-            setLocation(newLocation);
-            localStorage.setItem('skillstrong-location', newLocation);
-            
-            const originalQuery = pendingQuery;
-            setPendingQuery(null);
-            
-            // Re-run the original query, now with the location context.
-            sendMessage(originalQuery, chatId);
-            return;
-        }
-
         const newUserMessage: Message = { role: 'user', content: query };
-        const updatedHistory = chatHistory.map(chat => 
+        
+        let updatedHistory = chatHistory.map(chat => 
             chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
         );
         updateAndSaveHistory(updatedHistory);
+        
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
@@ -149,36 +147,48 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 ...additionalData
             };
 
-            const response = await fetch('/api/explore', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+            const response = await fetch(`/api/explore?provider=${currentChat?.provider || 'openai'}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
             });
-            if (!response.ok) throw new Error("API response not ok.");
+
+            if (!response.ok) throw new Error("API response was not ok.");
 
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            // Check if the backend is asking for a location
-            if (data.location_request) {
-                setPendingQuery(query); // Remember the query that prompted this
-            }
-
-            const finalHistory = updatedHistory.map(chat => {
+            updatedHistory = updatedHistory.map(chat => {
                 if (chat.id === chatId) {
-                    const isFirstUserMessage = chat.messages.length === 1;
-                    const newTitle = isFirstUserMessage ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 35) + '...' : chat.title);
-                    return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
+                    return { ...chat, messages: [...chat.messages, assistantMessage] };
                 }
                 return chat;
             });
-            updateAndSaveHistory(finalHistory);
+            
+            const isFirstExchange = (updatedHistory.find(c => c.id === chatId)?.messages.length || 0) === 2;
+            if (isFirstExchange) {
+                try {
+                    const titleResponse = await fetch('/api/title', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messages: updatedHistory.find(c => c.id === chatId)?.messages }),
+                    });
+                    if (titleResponse.ok) {
+                        const { title } = await titleResponse.json();
+                        updatedHistory = updatedHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat);
+                    }
+                } catch (e) { console.error("Title generation failed", e); }
+            }
+
+            updateAndSaveHistory(updatedHistory);
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            const errorHistory = updatedHistory.map(chat => 
+            updatedHistory = updatedHistory.map(chat => 
                 chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
             );
-            updateAndSaveHistory(errorHistory);
+            updateAndSaveHistory(updatedHistory);
         } finally {
             setIsLoading(false);
         }
@@ -197,6 +207,16 @@ export default function ExploreClient({ user }: { user: User | null }) {
         <div className="flex flex-1 flex-col h-screen">
             <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
+                {activeChat && (
+                  <div className="flex items-center space-x-2 p-1 bg-gray-100 rounded-full">
+                    <button onClick={() => handleProviderChange('openai')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'openai' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
+                      <OpenAIIcon className="w-4 h-4 inline-block mr-1" /> GPT-4o
+                    </button>
+                    <button onClick={() => handleProviderChange('gemini')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'gemini' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
+                      <Gem className="w-4 h-4 inline-block mr-1" /> Gemini
+                    </button>
+                  </div>
+                )}
             </header>
             
             <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
@@ -244,13 +264,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50" />
                         <button type="submit" disabled={isLoading || !inputValue.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors"> <Send className="w-5 h-5" /> </button>
                     </form>
-                    <div className="text-center mt-3 h-4 text-sm font-medium text-gray-700">
-                        {location && (
-                            <button onClick={() => setLocation(null)} className="hover:text-red-600 flex items-center justify-center mx-auto transition-colors px-3 py-1 bg-gray-100 rounded-full">
-                                <MapPin className="w-4 h-4 mr-1.5"/> Searching near: {location} (Clear)
-                            </button>
-                        )}
-                    </div>
                 </div>
             </footer>
         </div>
