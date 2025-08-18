@@ -30,11 +30,10 @@ export default function ExploreClient({ user }: { user: User | null }) {
     const [isLoading, setIsLoading] = useState(false);
     const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
     const [inputValue, setInputValue] = useState("");
-    const [location, setLocation] = useState<string | null>(null); // ADDED: State for location
+    const [location, setLocation] = useState<string | null>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // ADDED: Load saved location from storage on initial startup
         const savedLocation = localStorage.getItem('skillstrong-location');
         if (savedLocation) {
             setLocation(savedLocation);
@@ -51,7 +50,8 @@ export default function ExploreClient({ user }: { user: User | null }) {
                 const { answers } = JSON.parse(quizResultsString);
                 const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
-                updateAndSaveHistory([newChat, ...chatHistory]);
+                const newHistory = [newChat, ...chatHistory];
+                updateAndSaveHistory(newHistory);
                 setActiveChatId(newChat.id);
                 sendMessage(userMessage, newChat.id, { quiz_results: answers });
             } else {
@@ -65,7 +65,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
                         const newChat = createNewChat(true);
                         setChatHistory([newChat]);
                     }
-                } catch (error) { console.error("Failed to load or parse chat history:", error); createNewChat(true); }
+                } catch (error) { 
+                    console.error("Failed to load history:", error); 
+                    const newChat = createNewChat(true);
+                    setChatHistory([newChat]);
+                }
             }
         };
         initialize();
@@ -109,8 +113,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
         updateAndSaveHistory(newHistory);
         setCurrentFollowUps([]);
     };
-    
-    // ADDED: Function to change location
+
     const handleChangeLocation = () => {
         const newLocation = prompt("Please enter your City, State, or ZIP code for local searches:", location || "");
         if (newLocation && newLocation.trim() !== "") {
@@ -128,19 +131,20 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        const optimisticHistory = chatHistory.map(chat => 
+        let updatedHistory = chatHistory.map(chat => 
             chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
         );
-        setChatHistory(optimisticHistory);
+        updateAndSaveHistory(updatedHistory);
+        
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
         try {
-            const currentChat = optimisticHistory.find(c => c.id === chatId);
+            const currentChat = updatedHistory.find(c => c.id === chatId);
             const body = {
                 messages: currentChat?.messages || [],
-                location: location, // Pass the saved location
+                location: location,
                 ...additionalData
             };
 
@@ -155,34 +159,23 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            let historyWithAssistantMessage = optimisticHistory.map(chat => 
-                chat.id === chatId ? { ...chat, messages: [...chat.messages, assistantMessage] } : chat
-            );
-            updateAndSaveHistory(historyWithAssistantMessage);
+            updatedHistory = updatedHistory.map(chat => {
+                if (chat.id === chatId) {
+                    const isFirstUserMessage = chat.messages.length === 1;
+                    const newTitle = isFirstUserMessage ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 35) + '...' : chat.title);
+                    return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
+                }
+                return chat;
+            });
+            updateAndSaveHistory(updatedHistory);
             setCurrentFollowUps(data.followups || []);
-            
-            const isFirstExchange = (historyWithAssistantMessage.find(c => c.id === chatId)?.messages.length || 0) === 2;
-            if (isFirstExchange) {
-                try {
-                    const titleResponse = await fetch('/api/title', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ messages: historyWithAssistantMessage.find(c => c.id === chatId)?.messages }),
-                    });
-                    if (titleResponse.ok) {
-                        const { title } = await titleResponse.json();
-                        setChatHistory(prevHistory => prevHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat));
-                    }
-                } catch (e) { console.error("Title generation failed", e); }
-            }
-
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            const errorHistory = optimisticHistory.map(chat => 
+            updatedHistory = updatedHistory.map(chat => 
                 chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
             );
-            updateAndSaveHistory(errorHistory);
+            updateAndSaveHistory(updatedHistory);
         } finally {
             setIsLoading(false);
         }
@@ -258,7 +251,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
                             className="w-full px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50" />
                         <button type="submit" disabled={isLoading || !inputValue.trim()} className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:bg-gray-400 transition-colors"> <Send className="w-5 h-5" /> </button>
                     </form>
-                    {/* ADDED: Location management UI in the footer */}
                     <div className="text-center mt-2 h-4 text-xs text-gray-500">
                         {location ? (
                             <button onClick={handleChangeLocation} className="hover:text-gray-800 flex items-center justify-center mx-auto">
