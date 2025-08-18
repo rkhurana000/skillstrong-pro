@@ -48,17 +48,13 @@ export async function POST(req: NextRequest) {
         if (quiz_results) {
             context = `CONTEXT: The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
         } else {
-            // --- THIS IS THE DEFINITIVE FIX ---
-            // Replaced the unreliable AI decision with deterministic code.
             let decision = 'NO';
             const searchKeywords = ['near me', 'in my area', 'jobs', 'openings', 'apprenticeships', 'local'];
             const lowerCaseMessage = latestUserMessage.toLowerCase();
 
-            // Check for keywords
             if (searchKeywords.some(keyword => lowerCaseMessage.includes(keyword))) {
                 decision = 'YES';
             }
-            // Check for patterns like a 5-digit ZIP code or a 2-letter state code
             const locationRegex = /\b\d{5}\b|\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/i;
             if (locationRegex.test(latestUserMessage)) {
                 decision = 'YES';
@@ -67,15 +63,20 @@ export async function POST(req: NextRequest) {
             if (decision === 'YES') {
                 const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
                 const locationExtractionPrompt = `From the following conversation, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nConversation:\n${fullConversation}`;
+                
+                // --- UPGRADED MODEL ---
                 const locationResponse = await openai.chat.completions.create({
-                    model: 'gpt-4o-mini', messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
+                    model: 'gpt-4o', // Using gpt-4o for maximum accuracy
+                    messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
                 });
                 let location = locationResponse.choices[0].message?.content?.trim();
 
                 if (location && location.toUpperCase() !== 'NONE') {
                     const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${location}".`;
+                    // --- UPGRADED MODEL ---
                     const queryGenResponse = await openai.chat.completions.create({
-                        model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
+                        model: 'gpt-4o', // Using gpt-4o for maximum accuracy
+                        messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
                     });
                     const searchQuery = queryGenResponse.choices[0].message?.content?.trim();
                     if (searchQuery) {
