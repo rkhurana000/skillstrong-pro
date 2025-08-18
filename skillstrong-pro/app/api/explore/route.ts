@@ -13,7 +13,7 @@ const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor f
 **Your Core Logic:**
 1.  **Handle Quiz Results:** If \`QUIZ_RESULTS\` are provided, your SOLE task is to act as a career counselor. Your response MUST start with "Based on your interests...". Your follow-ups MUST be specific to the careers you just recommended.
 2.  **Handle Local Searches:** If you are given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find any specific openings and then suggest broader search terms or alternative resources as a helpful next step.
-3.  **Ask for Location:** If a user asks for local information but NO location has been established in the conversation, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
+3.  **Ask for Location:** If a user asks for local information but NO location is provided in the context, your only goal is to ask for their city, state, or ZIP code. Your answer must be ONLY the question, and the followups array MUST be empty.
 4.  **Always Provide Follow-ups:** Every response (except when asking for a location) must include relevant follow-up choices.
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys. For Gemini, your ENTIRE output must be ONLY the raw JSON object.
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);
         const provider = searchParams.get('provider') || 'openai';
-        const { messages, quiz_results } = await req.json();
+        const { messages, quiz_results, location } = await req.json(); // Correctly gets location
         const latestUserMessage = messages[messages.length - 1]?.content || '';
 
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -48,33 +48,22 @@ export async function POST(req: NextRequest) {
         if (quiz_results) {
             context = `CONTEXT: The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
         } else {
-            // --- THIS IS THE DEFINITIVE FIX ---
-            // Replaced the unreliable AI decision with deterministic code.
-            let decision = 'NO';
             const searchKeywords = ['near me', 'in my area', 'jobs', 'openings', 'apprenticeships', 'local'];
             const lowerCaseMessage = latestUserMessage.toLowerCase();
+            const isLocalSearch = searchKeywords.some(keyword => lowerCaseMessage.includes(keyword)) || /\b\d{5}\b|\b[A-Z]{2}\b/i.test(latestUserMessage);
 
-            // Check for keywords
-            if (searchKeywords.some(keyword => lowerCaseMessage.includes(keyword))) {
-                decision = 'YES';
-            }
-            // Check for patterns like a 5-digit ZIP code or a 2-letter state code
-            const locationRegex = /\b\d{5}\b|\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/i;
-            if (locationRegex.test(latestUserMessage)) {
-                decision = 'YES';
-            }
-
-            if (decision === 'YES') {
-                const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
-                const locationExtractionPrompt = `From the following conversation, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nConversation:\n${fullConversation}`;
+            if (isLocalSearch) {
+                const effectiveLocation = location || messages.map((m: { content: string }) => m.content).join('\n');
+                
+                const locationExtractionPrompt = `From the following text, extract the US city, state, or ZIP code. If no location is present, respond with "NONE".\n\nText:\n${effectiveLocation}`;
                 const locationResponse = await openai.chat.completions.create({
                     model: 'gpt-4o',
                     messages: [{ role: 'user', content: locationExtractionPrompt }], max_tokens: 20,
                 });
-                let location = locationResponse.choices[0].message?.content?.trim();
+                let extractedLocation = locationResponse.choices[0].message?.content?.trim();
 
-                if (location && location.toUpperCase() !== 'NONE') {
-                    const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${location}".`;
+                if (extractedLocation && extractedLocation.toUpperCase() !== 'NONE') {
+                    const searchQueryGenPrompt = `Generate a concise Google search query for: "${latestUserMessage}" in the location "${extractedLocation}".`;
                     const queryGenResponse = await openai.chat.completions.create({
                         model: 'gpt-4o',
                         messages: [{ role: 'user', content: searchQueryGenPrompt }], max_tokens: 30,
@@ -126,8 +115,7 @@ export async function POST(req: NextRequest) {
         }
         
         const parsedContent = JSON.parse(content);
-
-        if (parsedContent.followups && (parsedContent.followups.length > 0 || messages.length > 0) && !parsedContent.answer.toLowerCase().includes("city, state, or zip code")) {
+        if (parsedContent.followups && (parsedContent.followups.length > 0 || messages.length > 0) && !parsedContent.answer.toLowerCase().includes("please set your location")) {
             parsedContent.followups.push("↩️ Explore other topics");
         }
 
