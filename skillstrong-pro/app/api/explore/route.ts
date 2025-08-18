@@ -48,14 +48,21 @@ export async function POST(req: NextRequest) {
         if (quiz_results) {
             context = `CONTEXT: The user has provided these QUIZ_RESULTS: ${JSON.stringify(quiz_results)}. Analyze them now.`;
         } else {
-            // --- THIS IS THE FIX ---
-            // A much stricter prompt to prevent false positives for local searches.
-            const searchDecisionPrompt = `Analyze the user's message. Does it contain explicit keywords for a local search like 'near me', 'in my area', 'openings', 'jobs', a city, a state, or a ZIP code? Answer ONLY with YES or NO. A simple job title like "Welder" or "CNC Machinist" is NOT a local search. Message: "${latestUserMessage}"`;
-            
-            const decisionResponse = await openai.chat.completions.create({
-                model: 'gpt-4o-mini', messages: [{ role: 'user', content: searchDecisionPrompt }], max_tokens: 3,
-            });
-            const decision = decisionResponse.choices[0].message?.content?.trim().toUpperCase();
+            // --- THIS IS THE DEFINITIVE FIX ---
+            // Replaced the unreliable AI decision with deterministic code.
+            let decision = 'NO';
+            const searchKeywords = ['near me', 'in my area', 'jobs', 'openings', 'apprenticeships', 'local'];
+            const lowerCaseMessage = latestUserMessage.toLowerCase();
+
+            // Check for keywords
+            if (searchKeywords.some(keyword => lowerCaseMessage.includes(keyword))) {
+                decision = 'YES';
+            }
+            // Check for patterns like a 5-digit ZIP code or a 2-letter state code
+            const locationRegex = /\b\d{5}\b|\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/i;
+            if (locationRegex.test(latestUserMessage)) {
+                decision = 'YES';
+            }
 
             if (decision === 'YES') {
                 const fullConversation = messages.map((msg: { content: any; }) => msg.content).join('\n');
@@ -123,7 +130,6 @@ export async function POST(req: NextRequest) {
         
         const parsedContent = JSON.parse(content);
 
-        // Add the reset button, but only if there are other followups or it's not asking for a location
         if (parsedContent.followups && (parsedContent.followups.length > 0 || messages.length > 0) && !parsedContent.answer.toLowerCase().includes("city, state, or zip code")) {
             parsedContent.followups.push("↩️ Explore other topics");
         }
