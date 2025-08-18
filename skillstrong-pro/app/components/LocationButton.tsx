@@ -1,7 +1,7 @@
 // /app/components/LocationButton.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MapPin } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
@@ -14,6 +14,18 @@ interface LocationButtonProps {
 export default function LocationButton({ initialLocation, user }: LocationButtonProps) {
   const [location, setLocation] = useState(initialLocation);
   const router = useRouter();
+
+  useEffect(() => {
+    // Sync with localStorage for logged out users on initial load
+    if (!user) {
+      const savedLocation = localStorage.getItem('skillstrong-location');
+      if (savedLocation) {
+        setLocation(savedLocation);
+      }
+    } else {
+      setLocation(initialLocation);
+    }
+  }, [initialLocation, user]);
 
   const handleSetLocation = async () => {
     const newLocation = prompt("Please enter your City, State, or ZIP code:", location || "");
@@ -33,7 +45,7 @@ export default function LocationButton({ initialLocation, user }: LocationButton
         // If logged out, save to browser storage
         localStorage.setItem('skillstrong-location', trimmedLocation);
       }
-      // Refresh the page to make the new location available to all components
+      // Refresh the page's server components to get the new location
       router.refresh();
     }
   };
