@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { Factory } from 'lucide-react';
 import { createClient } from '@/utils/supabase/server';
-import LocationButton from './LocationButton'; // Import the new component
+import LocationButton from './LocationButton';
 
 export default async function SiteHeader() {
   const supabase = createClient();
@@ -33,7 +33,6 @@ export default async function SiteHeader() {
           <Link href="/explore" className="text-gray-500 hover:text-gray-900 font-medium">Explore Careers</Link>
           <Link href="/quiz" className="text-gray-500 hover:text-gray-900 font-medium">Interest Quiz</Link>
           
-          {/* ADDED LOCATION BUTTON TO HEADER */}
           <LocationButton initialLocation={initialLocation} user={user} />
           
           {user ? (
