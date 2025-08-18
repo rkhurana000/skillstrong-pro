@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
             const response = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 messages: fullMessages,
-                temperature: 0.3,
+                temperature: 0.2,
                 response_format: { type: "json_object" },
             });
             content = response.choices[0].message?.content || '{}';
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
             // For Gemini, we combine the system prompt and history in a specific way
             const chat = model.startChat({
                 history: fullMessages.filter(m => m.role !== 'system' && m.role !== 'user').map(m => ({ role: 'model', parts: [{ text: m.content }] })),
-                generationConfig: { temperature: 0.4 }
+                generationConfig: { temperature: 0.2 }
             });
             const result = await chat.sendMessage(systemPrompt + "\n\n" + fullMessages.filter(m => m.role === 'user').map(m => m.content).join("\n"));
             const textResponse = result.response.text();
