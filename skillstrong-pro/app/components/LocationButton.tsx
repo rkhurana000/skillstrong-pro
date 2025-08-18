@@ -1,62 +1,46 @@
-// /app/components/LocationButton.tsx
+// /app/contexts/LocationContext.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { MapPin } from 'lucide-react'
-import type { User } from '@supabase/supabase-js'
+import { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 
-// --- THIS IS THE FIX ---
-// This interface defines the props that the component expects. It was missing.
-interface LocationButtonProps {
-  initialLocation: string | null;
-  user: User | null;
+interface LocationContextType {
+  location: string | null;
+  setLocation: (location: string | null) => void;
 }
 
-export default function LocationButton({ initialLocation, user }: LocationButtonProps) {
-  const [location, setLocation] = useState(initialLocation);
-  const router = useRouter();
+const LocationContext = createContext<LocationContextType | undefined>(undefined);
+
+export function LocationProvider({ children }: { children: ReactNode }) {
+  const [location, setLocationState] = useState<string | null>(null);
 
   useEffect(() => {
-    // Sync with localStorage for logged out users on initial load
-    if (!user) {
-      const savedLocation = localStorage.getItem('skillstrong-location');
-      if (savedLocation) {
-        setLocation(savedLocation);
-      }
-    } else {
-      // For logged-in users, the location comes from the server prop
-      setLocation(initialLocation);
+    // On initial load, try to get the location from localStorage
+    const savedLocation = localStorage.getItem('skillstrong-location');
+    if (savedLocation) {
+      setLocationState(savedLocation);
     }
-  }, [initialLocation, user]);
+  }, []);
 
-  const handleSetLocation = async () => {
-    const newLocation = prompt("Please enter your City, State, or ZIP code:", location || "");
-
-    if (newLocation && newLocation.trim() !== "") {
-      const trimmedLocation = newLocation.trim();
-      setLocation(trimmedLocation);
-
-      if (user) {
-        // If logged in, save to database
-        await fetch('/api/user/update-location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ location: trimmedLocation }),
-        });
-      } else {
-        // If logged out, save to browser storage
-        localStorage.setItem('skillstrong-location', trimmedLocation);
-      }
-      // Refresh the page's server components to get the new location
-      router.refresh();
+  const setLocation = (newLocation: string | null) => {
+    setLocationState(newLocation);
+    if (newLocation) {
+      localStorage.setItem('skillstrong-location', newLocation);
+    } else {
+      localStorage.removeItem('skillstrong-location');
     }
   };
 
   return (
-    <button onClick={handleSetLocation} className="flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors">
-      <MapPin className="w-4 h-4 mr-1.5" />
-      {location ? <span>{location}</span> : <span>Set Location</span>}
-    </button>
+    <LocationContext.Provider value={{ location, setLocation }}>
+      {children}
+    </LocationContext.Provider>
   );
+}
+
+export function useLocation() {
+  const context = useContext(LocationContext);
+  if (context === undefined) {
+    throw new Error('useLocation must be used within a LocationProvider');
+  }
+  return context;
 }
