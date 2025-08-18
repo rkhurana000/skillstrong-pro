@@ -2,7 +2,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import SiteHeader from "@/app/components/SiteHeader"; // Make sure you're importing the header
+import SiteHeader from "@/app/components/SiteHeader";
+import { LocationProvider } from "@/app/contexts/LocationContext"; // Import the provider
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,9 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SiteHeader /> {/* The sticky header goes here */}
-        <main>{children}</main>
-        {/* You can add a site-wide footer here if you wish */}
+        <LocationProvider> {/* Wrap the content with the provider */}
+          <SiteHeader />
+          <main>{children}</main>
+        </LocationProvider>
       </body>
     </html>
   );
