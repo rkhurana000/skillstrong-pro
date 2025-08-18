@@ -162,12 +162,26 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
             updatedHistory = updatedHistory.map(chat => {
                 if (chat.id === chatId) {
-                    const isFirstUserMessage = chat.messages.length === 1;
-                    const newTitle = isFirstUserMessage ? "Quiz Results" : (chat.title === "New Chat" ? data.answer.substring(0, 35) + '...' : chat.title);
-                    return { ...chat, messages: [...chat.messages, assistantMessage], title: newTitle };
+                    return { ...chat, messages: [...chat.messages, assistantMessage] };
                 }
                 return chat;
             });
+            
+            const isFirstExchange = (updatedHistory.find(c => c.id === chatId)?.messages.length || 0) === 2;
+            if (isFirstExchange) {
+                try {
+                    const titleResponse = await fetch('/api/title', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messages: updatedHistory.find(c => c.id === chatId)?.messages }),
+                    });
+                    if (titleResponse.ok) {
+                        const { title } = await titleResponse.json();
+                        updatedHistory = updatedHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat);
+                    }
+                } catch (e) { console.error("Title generation failed", e); }
+            }
+
             updateAndSaveHistory(updatedHistory);
             setCurrentFollowUps(data.followups || []);
         } catch (error) {
