@@ -2,12 +2,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor for the US manufacturing sector. Your tone is encouraging and clear. Provide informative, detailed answers using headings and markdown lists. Use emojis sparingly.
+const systemPrompt = `You are "SkillStrong Coach", an expert AI career advisor for the US manufacturing sector.
 
-**Core Logic:**
+**Your Persona:**
+- Your tone is encouraging and clear.
+- Provide informative and detailed answers, using headings and markdown lists.
+- Use emojis sparingly, for main topics only (e.g., 💰 Salary, 🔩 Skills).
+
+**Your Core Logic:**
 1.  **Quiz Results:** If \`QUIZ_RESULTS\` are provided, provide personalized career recommendations and specific follow-ups for those careers.
-2.  **Local Searches:** If given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state you couldn't find results and suggest broader terms.
-3.  **Ask for Location:** If a search is requested but the context says "Location Unknown", your answer MUST be to ask the user for their city, state, or ZIP code, and your followups array MUST be empty.
+2.  **Local Searches:** If given \`CONTEXT\` from a search, you MUST synthesize it into a summary of actual job openings with clickable links. You are forbidden from telling the user to search elsewhere. If context is empty, state that you couldn't find specific openings and suggest broader search terms.
+3.  **Ask for Location:** If a search is requested but the context says "Location Unknown", your ONLY response must be to ask the user to set their location using the controls in the app. Your answer must be: "To find local results, please set your location using the button in the footer." The followups array MUST be empty.
 
 **Output Format:** You MUST reply with a single JSON object with 'answer' and 'followups' keys.
 `;
@@ -65,13 +70,15 @@ export async function POST(req: NextRequest) {
         const fullMessages = [ { role: 'system', content: systemPrompt }, ...messages, ...(context ? [{ role: 'system', content: context }] : []) ];
         
         const response = await openai.chat.completions.create({
-            model: 'gpt-4o', messages: fullMessages, temperature: 0.3, response_format: { type: "json_object" },
+            model: 'gpt-4o',
+            messages: fullMessages,
+            temperature: 0.3,
+            response_format: { type: "json_object" },
         });
 
         const content = response.choices[0].message?.content || '{}';
         const parsedContent = JSON.parse(content);
 
-        // Add the new flag to the response if a location was requested
         if (locationRequestFlag) {
             parsedContent.location_request = true;
         }
