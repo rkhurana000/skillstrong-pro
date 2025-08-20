@@ -1,6 +1,6 @@
 // /app/careers/welder/page.tsx
 import Link from 'next/link';
-import { ArrowRight, Bot, DollarSign, ListChecks, Map, ShieldCheck, Star } from 'lucide-react';
+import { ArrowRight, Bot, DollarSign, ListChecks, ShieldCheck } from 'lucide-react';
 
 export default function WelderCareerPage() {
   return (
@@ -84,7 +84,9 @@ export default function WelderCareerPage() {
               <p className="mt-2 text-slate-600 text-sm">
                 Median Pay: **$50,460 per year**
                 <br />
-                Top 10% Earn: **>$72,970 per year**
+                {/* --- THIS IS THE FIX --- */}
+                {/* Replaced > with its HTML entity &gt; to fix the build error */}
+                Top 10% Earn: **&gt;$72,970 per year**
               </p>
               <p className="text-xs text-slate-400 mt-2">(Source: U.S. Bureau of Labor Statistics, 2023)</p>
             </div>
