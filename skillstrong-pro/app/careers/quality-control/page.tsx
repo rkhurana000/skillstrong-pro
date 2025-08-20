@@ -33,7 +33,14 @@ export default function QualityControlPage() {
           </div>
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ListChecks className="w-5 h-5 mr-2 text-blue-600"/>Skills Required</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Attention to Detail</li><li>Using Measurement Tools</li><li>Reading Blueprints</li><li>Understanding of GD&T</li><li>Data Analysis</li></ul></div>
-            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$45,950 per year**<br/>Top 10% Earn: **&gt$75,340 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, QC Inspectors)</p></div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3>
+              <p className="mt-2 text-slate-600 text-sm">
+                Median Pay: **$45,950 per year**<br/>
+                Top 10% Earn: **&gt;$75,340 per year**
+              </p>
+              <p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, QC Inspectors)</p>
+            </div>
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ShieldCheck className="w-5 h-5 mr-2 text-blue-600"/>Top Certifications</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Certified Quality Inspector (CQI)</li><li>Six Sigma Belts (Yellow, Green)</li><li>Certified Quality Technician (CQT)</li></ul></div>
           </div>
         </div>
