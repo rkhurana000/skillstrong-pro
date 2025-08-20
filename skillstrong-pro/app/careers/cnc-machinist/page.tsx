@@ -22,7 +22,7 @@ export default function CncMachinistPage() {
                 <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Machinists Career Video</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
-                    src="https://youtu.be/OWNXI09WI14?si=RXRR4kDPDYibOBas" 
+                    src="https://www.youtube.com/embed/OWNXI09WI14?si=DbtL5QX45pQwvPuP" 
                     title="YouTube video player: Machinists Career Video" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
@@ -32,7 +32,6 @@ export default function CncMachinistPage() {
                 </div>
               </div>
             </section>
-            
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">Career Roadmap</h2>
               <div className="space-y-4">
