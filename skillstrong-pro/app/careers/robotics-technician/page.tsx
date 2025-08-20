@@ -23,7 +23,7 @@ export default function RoboticsTechnicianPage() {
                 <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: What is a Robotics Technician?</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
-                    src="https://youtu.be/oD9AMiCYl8s?si=R-PhW0Dw_QEHE3rX" 
+                    src="https://www.youtube.com/embed/oD9AMiCYl8s?si=gjqnjXiZqfa6NODL" 
                     title="YouTube video player: What is a Robotics Technician?" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
