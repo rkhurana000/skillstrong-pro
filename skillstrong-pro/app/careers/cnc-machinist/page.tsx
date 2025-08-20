@@ -17,14 +17,13 @@ export default function CncMachinistPage() {
               <p className="text-slate-700">
                 As a CNC Machinist, you are at the intersection of technology and craftsmanship. Your day involves interpreting complex blueprints and 3D models from CAD/CAM software. You'll set up and calibrate computer-controlled machines, selecting the right tools and materials for the job. You will oversee the automated cutting process, making precise adjustments to ensure every part meets exact specifications, often within fractions of a millimeter. It's a role that requires a keen eye for detail, strong technical aptitude, and the satisfaction of creating essential components for industries like aerospace, medical, and automotive.
               </p>
-            </section>
               {/* --- NEW VIDEO SECTION --- */}
               <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: A Day in the Life of a Welder</h3>
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Machinists Career Video</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
                     src="https://youtu.be/OWNXI09WI14?si=RXRR4kDPDYibOBas" 
-                    title="YouTube video player: A Day in the Life of a Welder" 
+                    title="YouTube video player: Machinists Career Video" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                     allowFullScreen
@@ -32,7 +31,7 @@ export default function CncMachinistPage() {
                   ></iframe>
                 </div>
               </div>
-
+            </section>
             
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">Career Roadmap</h2>
