@@ -40,3 +40,4 @@
     "@types/node": "^20",
     "@tailwindcss/aspect-ratio": "^0.4.2"
   }
+}
