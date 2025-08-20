@@ -33,7 +33,7 @@ export default function CncMachinistPage() {
           </div>
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ListChecks className="w-5 h-5 mr-2 text-blue-600"/>Skills Required</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Blueprint Reading</li><li>G-Code/M-Code Programming</li><li>CAD/CAM Software</li><li>Precision Measurement</li><li>Problem-Solving</li></ul></div>
-            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$54,380 per year**<br/>Top 10% Earn: **>$79,330 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, 2023)</p></div>
+            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$54,380 per year**<br/>Top 10% Earn: **&gt$79,330 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, 2023)</p></div>
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ShieldCheck className="w-5 h-5 mr-2 text-blue-600"/>Top Certifications</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>NIMS Certifications</li><li>Mastercam Certification</li><li>FANUC CNC Certification</li></ul></div>
           </div>
         </div>
