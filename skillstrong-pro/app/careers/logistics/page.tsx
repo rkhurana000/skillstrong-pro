@@ -17,6 +17,21 @@ export default function LogisticsPage() {
               <p className="text-slate-700">
                 As a Logistics and Supply Chain Associate, you are a master coordinator. Your role is to ensure that materials, parts, and final products move efficiently from origin to destination. A typical day involves tracking shipments, managing warehouse inventory using advanced software, and coordinating with suppliers and transportation companies. You'll analyze data to identify bottlenecks and find ways to make the supply chain faster and more cost-effective. It's a fast-paced, problem-solving role that requires excellent organizational skills and is essential to every manufacturing operation.
               </p>
+       {/* --- NEW VIDEO SECTION --- */}
+              <div className="bg-white p-4 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Top Careers in Logistics and Supply Chain Management</h3>
+                <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
+                  <iframe 
+                    src="https://www.youtube.com/embed/Jb3mOIb24io?si=DiQMocXlKGMl3tcE" 
+                    title="YouTube video player: Top Careers in Logistics and Supply Chain Management" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    allowFullScreen
+                    className="w-full h-full"
+                  ></iframe>
+                </div>
+              </div>
+
             </section>
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">Career Roadmap</h2>
