@@ -17,6 +17,20 @@ export default function IndustrialMaintenancePage() {
               <p className="text-slate-700">
                 As an Industrial Maintenance Mechanic, you're the backbone of any manufacturing facility. No two days are the same. One moment you might be performing scheduled preventative maintenance on a conveyor system, and the next you're racing to diagnose and fix a critical machine that has unexpectedly stopped. Your work involves troubleshooting mechanical, electrical, hydraulic, and pneumatic systems. You'll read technical manuals, use diagnostic tools, and get hands-on with repairs, ensuring that the entire plant operates safely and efficiently with minimal downtime.
               </p>
+                     {/* --- NEW VIDEO SECTION --- */}
+              <div className="bg-white p-4 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Frito Lay Industrial Mechanic </h3>
+                <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
+                  <iframe 
+                    src="https://www.youtube.com/embed/FJUnib976WA?si=xMQpxnwGX7t-9BjI" 
+                    title="YouTube video player: Frito Lay Industrial Mechanic" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    allowFullScreen
+                    className="w-full h-full"
+                  ></iframe>
+                </div>
+              </div>
             </section>
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">Career Roadmap</h2>
