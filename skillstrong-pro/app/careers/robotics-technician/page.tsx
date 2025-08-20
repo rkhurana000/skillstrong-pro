@@ -18,6 +18,20 @@ export default function RoboticsTechnicianPage() {
                 As a Robotics Technician, you are on the front lines of automation. Your day is a dynamic mix of building, testing, and maintaining robotic equipment. You might spend the morning assembling a new robotic arm on a production line, then shift to troubleshooting and repairing an existing one. A large part of your role involves programming—writing or modifying code to control a robot's movements and tasks. You'll perform preventative maintenance to keep systems running efficiently and work closely with engineers to improve robotic processes, making manufacturing smarter, faster, and safer.
               </p>
             </section>
+             {/* --- NEW VIDEO SECTION --- */}
+              <div className="bg-white p-4 rounded-lg shadow">
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: What is a Robotics Technician?</h3>
+                <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
+                  <iframe 
+                    src="https://youtu.be/oD9AMiCYl8s?si=R-PhW0Dw_QEHE3rX" 
+                    title="YouTube video player: What is a Robotics Technician?" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    allowFullScreen
+                    className="w-full h-full"
+                  ></iframe>
+                </div>
+              </div>
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">Career Roadmap</h2>
               <div className="space-y-4">
