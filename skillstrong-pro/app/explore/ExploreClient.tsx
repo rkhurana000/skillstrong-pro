@@ -16,6 +16,16 @@ interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; provider: 'openai' | 'gemini'; }
 type ExploreTab = 'skills' | 'salary' | 'training';
 
+// Map career names to their URL slugs for clean routing
+const careerSlugMap: { [key: string]: string } = {
+    'cnc machinist': 'cnc-machinist',
+    'welder': 'welder',
+    'robotics technician': 'robotics-technician',
+    'industrial maintenance': 'industrial-maintenance',
+    'quality control': 'quality-control',
+    'logistics & supply chain': 'logistics'
+};
+
 const exploreContent = {
   skills: { title: "Explore by Job Category", prompts: ["CNC Machinist", "Welder", "Robotics Technician", "Industrial Maintenance", "Quality Control", "Logistics & Supply Chain"]},
   salary: { title: "Explore by Salary Range", prompts: ["What jobs pay $40k-$60k?", "Find roles making $60k-$80k", "What careers make $80k+?"]},
@@ -24,11 +34,9 @@ const exploreContent = {
 
 const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
 
-// It's better to wrap the component that uses useSearchParams in a Suspense boundary
-// as per Next.js best practices. So we create a small wrapper.
 export default function ExplorePageWrapper({ user }: { user: User | null }) {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div className="flex-1 p-8 text-center">Loading...</div>}>
             <ExploreClient user={user} />
         </Suspense>
     )
@@ -242,27 +250,21 @@ function ExploreClient({ user }: { user: User | null }) {
                         <div className="bg-white p-4 rounded-lg border">
                             <h3 className="font-semibold mb-3">{exploreContent[activeExploreTab].title}</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {/* --- THIS IS THE FIX --- */}
                                 {exploreContent[activeExploreTab].prompts.map((prompt, pIdx) => {
-                                    // Special handling for the "Welder" prompt ONLY on the "Skills" tab
-                                    if (activeExploreTab === 'skills' && prompt.toLowerCase().includes('welder')) {
+                                    if (activeExploreTab === 'skills') {
+                                        const slug = careerSlugMap[prompt.toLowerCase()];
                                         return (
                                             <Link
                                                 key={pIdx}
-                                                href="/careers/welder"
+                                                href={slug ? `/careers/${slug}` : '#'}
                                                 className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors block"
                                             >
                                                 {prompt}
                                             </Link>
                                         );
                                     }
-                                    // All other prompts remain buttons that start a chat
                                     return (
-                                        <button
-                                            key={pIdx}
-                                            onClick={() => sendMessage(prompt, activeChatId)}
-                                            className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                                        >
+                                        <button key={pIdx} onClick={() => sendMessage(prompt, activeChatId)} className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">
                                             {prompt}
                                         </button>
                                     );
