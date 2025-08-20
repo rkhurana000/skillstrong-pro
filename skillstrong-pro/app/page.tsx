@@ -13,7 +13,6 @@ export default function HomePage() {
       {/* --- Hero Section --- */}
       <section className="relative bg-slate-900 text-white">
         <div className="absolute inset-0">
-            <img src={heroImage} alt="Modern manufacturing environment" className="w-full h-full object-cover opacity-30" />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
         </div>
         <div className="relative container mx-auto px-6 lg:px-8 py-24 md:py-32 text-center">
