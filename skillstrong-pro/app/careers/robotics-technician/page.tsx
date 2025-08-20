@@ -33,7 +33,7 @@ export default function RoboticsTechnicianPage() {
           </div>
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ListChecks className="w-5 h-5 mr-2 text-blue-600"/>Skills Required</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Electronics & Circuitry</li><li>Mechanical Aptitude</li><li>PLC Programming</li><li>Troubleshooting</li><li>Computer Skills</li></ul></div>
-            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$65,150 per year**<br/>Top 10% Earn: **>$99,570 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, Electro-Mechanical Techs)</p></div>
+            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$65,150 per year**<br/>Top 10% Earn: **&gt$99,570 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, Electro-Mechanical Techs)</p></div>
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ShieldCheck className="w-5 h-5 mr-2 text-blue-600"/>Top Certifications</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Robotics Certification (SME)</li><li>FANUC Certified Robot Operator</li><li>PMMI Mechatronics</li></ul></div>
           </div>
         </div>
