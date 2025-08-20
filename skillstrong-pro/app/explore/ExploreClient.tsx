@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem, MapPin } from 'lucide-react';
+import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
@@ -105,7 +105,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
         setCurrentFollowUps([]);
     };
     
-    // --- REWRITTEN FOR STABILITY ---
     const sendMessage = async (query: string, chatId: string | null, additionalData = {}) => {
         if (!user) {
             router.push('/account?message=Please sign up or sign in to start a chat.');
@@ -115,7 +114,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        // 1. Optimistic UI update using functional form to prevent race conditions
         setChatHistory(prevHistory => 
             prevHistory.map(chat => 
                 chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
@@ -139,15 +137,16 @@ export default function ExploreClient({ user }: { user: User | null }) {
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            // 2. Final state update with assistant message
             setChatHistory(prevHistory => 
-                prevHistory.map(chat => 
-                    chat.id === chatId ? { ...chat, messages: [...chat.messages, assistantMessage] } : chat
-                )
+                prevHistory.map(chat => {
+                    if (chat.id === chatId) {
+                        return { ...chat, messages: [...chat.messages, assistantMessage] };
+                    }
+                    return chat;
+                })
             );
             setCurrentFollowUps(data.followups || []);
 
-            // 3. Asynchronous title generation
             const isFirstExchange = messagesForApi.length === 1;
             if (isFirstExchange) {
                 fetch('/api/title', {
