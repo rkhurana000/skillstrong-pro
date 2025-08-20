@@ -61,7 +61,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- Featured Careers Section --- */}
+      {/* --- Featured Careers Section (UPDATED WITH ALL LINKS) --- */}
       <section className="py-20">
         <div className="container mx-auto px-6 lg:px-8">
           <div className="text-center">
@@ -69,45 +69,36 @@ export default function HomePage() {
             <p className="mt-2 text-slate-600">These aren't your parents' factory jobs. Work with cutting-edge technology.</p>
           </div>
           <div className="mt-12 grid md:grid-cols-3 gap-8">
-            {/* Card 1 */}
-            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+            <Link href="/careers/robotics-technician" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
               <Bot className="w-16 h-16 mx-auto text-blue-600"/>
               <h3 className="mt-5 text-xl font-semibold">Robotics Technician</h3>
               <p className="mt-2 text-slate-600">Install, maintain, and repair the robotic systems that power modern industry.</p>
-            </div>
-            {/* Card 2 */}
-            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+            </Link>
+            <Link href="/careers/cnc-machinist" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
               <Cpu className="w-16 h-16 mx-auto text-blue-600"/>
               <h3 className="mt-5 text-xl font-semibold">CNC Machinist</h3>
               <p className="mt-2 text-slate-600">Turn digital blueprints into precision parts for everything from aerospace to medical devices.</p>
-            </div>
-            {/* Card 3 */}
-            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+            </Link>
+            <Link href="/careers/logistics" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
               <Printer className="w-16 h-16 mx-auto text-blue-600"/>
               <h3 className="mt-5 text-xl font-semibold">Additive Manufacturing</h3>
               <p className="mt-2 text-slate-600">Use industrial 3D printers to create complex components and innovative prototypes.</p>
-            </div>
-            
-            {/* --- THIS IS THE FIX --- */}
-            {/* The entire card is now wrapped in a Link component */}
+            </Link>
             <Link href="/careers/welder" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
               <Flame className="w-16 h-16 mx-auto text-blue-600"/>
               <h3 className="mt-5 text-xl font-semibold">Welding Technologist</h3>
               <p className="mt-2 text-slate-600">Fuse metals using advanced techniques, including robotic and laser welding systems.</p>
             </Link>
-
-            {/* Card 5 */}
-            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+            <Link href="/careers/industrial-maintenance" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
               <Wrench className="w-16 h-16 mx-auto text-blue-600"/>
               <h3 className="mt-5 text-xl font-semibold">Maintenance Technician</h3>
               <p className="mt-2 text-slate-600">Be the problem-solver who keeps the high-tech machinery of a facility running smoothly.</p>
-            </div>
-            {/* Card 6 */}
-            <div className="group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow">
+            </Link>
+            <Link href="/careers/quality-control" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
               <ScanSearch className="w-16 h-16 mx-auto text-blue-600"/>
               <h3 className="mt-5 text-xl font-semibold">Quality Control Inspector</h3>
               <p className="mt-2 text-slate-600">Use precision instruments and technology to ensure products meet the highest standards.</p>
-            </div>
+            </Link>
           </div>
         </div>
       </section>
