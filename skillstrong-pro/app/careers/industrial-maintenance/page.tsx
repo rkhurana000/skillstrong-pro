@@ -7,7 +7,7 @@ export default function IndustrialMaintenancePage() {
     <div className="bg-slate-50">
       <div className="container mx-auto max-w-4xl py-12 px-6">
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900"Career Pathway: Industrial Maintenance</h1
+          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Industrial Maintenance</h1>
           <p className="mt-3 text-lg text-slate-600">Be the hero who keeps the machines running and production flowing.</p>
         </div>
         <div className="grid md:grid-cols-3 gap-8">
@@ -33,7 +33,14 @@ export default function IndustrialMaintenancePage() {
           </div>
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ListChecks className="w-5 h-5 mr-2 text-blue-600"/>Skills Required</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Mechanical Systems</li><li>Electrical Troubleshooting</li><li>Hydraulics & Pneumatics</li><li>Welding & Fabrication</li><li>Critical Thinking</li></ul></div>
-            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$62,280 per year**<br/>Top 10% Earn: **&gt$97,090 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, Industrial Machinery Mechanics)</p></div>
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3>
+              <p className="mt-2 text-slate-600 text-sm">
+                Median Pay: **$62,280 per year**<br/>
+                Top 10% Earn: **&gt;$97,090 per year**
+              </p>
+              <p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, Industrial Machinery Mechanics)</p>
+            </div>
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ShieldCheck className="w-5 h-5 mr-2 text-blue-600"/>Top Certifications</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Certified Maintenance & Reliability Technician (CMRT)</li><li>Certified Maintenance & Reliability Professional (CMRP)</li></ul></div>
           </div>
         </div>
