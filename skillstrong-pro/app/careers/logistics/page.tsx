@@ -33,7 +33,7 @@ export default function LogisticsPage() {
           </div>
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ListChecks className="w-5 h-5 mr-2 text-blue-600"/>Skills Required</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Organization</li><li>Inventory Management</li><li>Data Analysis</li><li>Communication</li><li>Problem-Solving</li></ul></div>
-            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$77,520 per year**<br/>Top 10% Earn: **>$129,570 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, Logisticians)</p></div>
+            <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><DollarSign className="w-5 h-5 mr-2 text-blue-600"/>Earning Potential</h3><p className="mt-2 text-slate-600 text-sm">Median Pay: **$77,520 per year**<br/>Top 10% Earn: **&gt$129,570 per year**</p><p className="text-xs text-slate-400 mt-2">(Source: U.S. BLS, Logisticians)</p></div>
             <div className="bg-white p-6 rounded-lg shadow"><h3 className="text-lg font-bold flex items-center"><ShieldCheck className="w-5 h-5 mr-2 text-blue-600"/>Top Certifications</h3><ul className="mt-3 list-disc list-inside text-slate-600 text-sm space-y-1"><li>Certified in Logistics, Transportation and Distribution (CLTD)</li><li>Certified Supply Chain Professional (CSCP)</li></ul></div>
           </div>
         </div>
