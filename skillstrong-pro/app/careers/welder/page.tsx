@@ -30,7 +30,7 @@ export default function WelderCareerPage() {
                 <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: A Day in the Life of a Welder</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
-                    src="https://www.youtube.com/embed/S3eD8n6f5iU?si=G7Fa7ZTKrv_nwAKT" 
+                    src="https://www.youtube.com/embed/CuDwydMjgGg?si=C2lh_IyjMrlRPNKI" 
                     title="YouTube video player: A Day in the Life of a Welder" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
@@ -40,7 +40,6 @@ export default function WelderCareerPage() {
                 </div>
               </div>
             </section>
-
             {/* Career Roadmap Section */}
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4 mt-8">Career Roadmap</h2>
