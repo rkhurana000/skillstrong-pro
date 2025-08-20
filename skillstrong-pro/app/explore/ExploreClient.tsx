@@ -1,13 +1,14 @@
 // /app/explore/ExploreClient.tsx
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
+import Link from 'next/link';
 
 // Type Definitions
 type Role = "user" | "assistant";
@@ -23,8 +24,19 @@ const exploreContent = {
 
 const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
 
-export default function ExploreClient({ user }: { user: User | null }) {
+// It's better to wrap the component that uses useSearchParams in a Suspense boundary
+// as per Next.js best practices. So we create a small wrapper.
+export default function ExplorePageWrapper({ user }: { user: User | null }) {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <ExploreClient user={user} />
+        </Suspense>
+    )
+}
+
+function ExploreClient({ user }: { user: User | null }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
@@ -36,14 +48,27 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
     useEffect(() => {
         const initialize = () => {
-            const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
-            if (quizResultsString) {
+            const initialPrompt = searchParams.get('prompt');
+
+            if (initialPrompt) {
+                if (!user) {
+                    router.push('/account?message=Please sign in to continue.');
+                    return;
+                }
+                const newChat = createNewChat(true);
+                setChatHistory(prev => [newChat, ...prev]);
+                sendMessage(initialPrompt, newChat.id);
+
+                const newUrl = window.location.pathname;
+                window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+            } else if (localStorage.getItem('skillstrong-quiz-results')) {
+                const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
                 localStorage.removeItem('skillstrong-quiz-results');
                 if (!user) {
                     router.push('/account?message=Please sign up or sign in to see your quiz results.');
                     return;
                 }
-                const { answers } = JSON.parse(quizResultsString);
+                const { answers } = JSON.parse(quizResultsString!);
                 const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
                 updateAndSaveHistory([newChat, ...chatHistory]);
@@ -128,10 +153,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
         try {
             const body = { messages: messagesForApi, location, ...additionalData };
             const provider = activeChat?.provider || 'openai';
-
-            const response = await fetch(`/api/explore?provider=${provider}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-            });
+            const response = await fetch(`/api/explore?provider=${provider}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (!response.ok) throw new Error("API response was not ok.");
             
             const data = await response.json();
@@ -149,17 +171,11 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
             const isFirstExchange = messagesForApi.length === 1;
             if (isFirstExchange) {
-                fetch('/api/title', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }),
-                })
+                fetch('/api/title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }) })
                 .then(res => res.json())
                 .then(titleData => {
                     setChatHistory(prevHistory => 
-                        prevHistory.map(chat => 
-                            chat.id === chatId ? { ...chat, title: titleData.title } : chat
-                        )
+                        prevHistory.map(chat => chat.id === chatId ? { ...chat, title: titleData.title } : chat )
                     );
                 })
                 .catch(e => console.error("Title generation failed", e));
@@ -169,9 +185,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
             setChatHistory(prevHistory => 
-                prevHistory.map(chat => 
-                    chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
-                )
+                prevHistory.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat )
             );
         } finally {
             setIsLoading(false);
@@ -228,7 +242,31 @@ export default function ExploreClient({ user }: { user: User | null }) {
                         <div className="bg-white p-4 rounded-lg border">
                             <h3 className="font-semibold mb-3">{exploreContent[activeExploreTab].title}</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {exploreContent[activeExploreTab].prompts.map((prompt, pIdx) => ( <button key={pIdx} onClick={() => sendMessage(prompt, activeChatId)} className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">{prompt}</button>))}
+                                {/* --- THIS IS THE FIX --- */}
+                                {exploreContent[activeExploreTab].prompts.map((prompt, pIdx) => {
+                                    // Special handling for the "Welder" prompt ONLY on the "Skills" tab
+                                    if (activeExploreTab === 'skills' && prompt.toLowerCase().includes('welder')) {
+                                        return (
+                                            <Link
+                                                key={pIdx}
+                                                href="/careers/welder"
+                                                className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors block"
+                                            >
+                                                {prompt}
+                                            </Link>
+                                        );
+                                    }
+                                    // All other prompts remain buttons that start a chat
+                                    return (
+                                        <button
+                                            key={pIdx}
+                                            onClick={() => sendMessage(prompt, activeChatId)}
+                                            className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                                        >
+                                            {prompt}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
