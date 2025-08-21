@@ -1,12 +1,13 @@
 // /app/components/SiteHeader.tsx
-import Link from "next/link";
-import { Factory } from 'lucide-react';
-import { createClient } from "@/utils/supabase/server";
-import LocationButton from "./LocationButton";
+'use client' // This now becomes a client component to use the context
 
-export default async function SiteHeader() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+import Link from "next/link";
+import { Factory } from "lucide-react";
+import LocationButton from "./LocationButton";
+import { useLocation } from "@/app/contexts/LocationContext";
+
+export default function SiteHeader() {
+  const { user } = useLocation(); // Get user from context
   const userInitial = user?.email?.charAt(0).toUpperCase();
 
   return (
