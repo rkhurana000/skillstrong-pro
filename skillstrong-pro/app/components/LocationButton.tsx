@@ -6,7 +6,7 @@ import { MapPin } from 'lucide-react'
 import { useLocation } from '@/app/contexts/LocationContext'
 
 export default function LocationButton() {
-  const { location, setLocation } = useLocation(); // Use the global context
+  const { location, setLocation } = useLocation();
   const router = useRouter();
 
   const handleSetLocation = () => {
@@ -14,7 +14,8 @@ export default function LocationButton() {
 
     if (newLocation && newLocation.trim() !== "") {
       setLocation(newLocation.trim());
-      router.refresh(); 
+      // A slight delay to ensure state has time to update before refresh
+      setTimeout(() => router.refresh(), 100);
     }
   };
 
