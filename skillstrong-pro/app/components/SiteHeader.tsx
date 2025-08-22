@@ -1,5 +1,5 @@
 // /app/components/SiteHeader.tsx
-'use client' // This now becomes a client component to use the context
+'use client' // This must be a client component to use the context hook
 
 import Link from "next/link";
 import { Factory } from "lucide-react";
@@ -7,7 +7,7 @@ import LocationButton from "./LocationButton";
 import { useLocation } from "@/app/contexts/LocationContext";
 
 export default function SiteHeader() {
-  const { user } = useLocation(); // Get user from context
+  const { user } = useLocation(); // Get user from the global context
   const userInitial = user?.email?.charAt(0).toUpperCase();
 
   return (
@@ -22,8 +22,10 @@ export default function SiteHeader() {
           <Link href="/quiz">Quiz</Link>
           <LocationButton />
           {user ? (
-            <Link href="/account" className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full font-bold text-sm">
-              {userInitial}
+            <Link href="/account" className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-blue-500">
+               <div className="flex items-center justify-center w-[28px] h-[28px] bg-white rounded-full">
+                  <span className="text-sm font-bold text-slate-700">{userInitial}</span>
+                </div>
             </Link>
           ) : (
             <Link href="/account">Account</Link>
