@@ -1,19 +1,29 @@
 // /app/explore/ExploreClient.tsx
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
+import Link from 'next/link';
 
 // Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
 interface ChatSession { id: string; title: string; messages: Message[]; }
 type ExploreTab = 'skills' | 'salary' | 'training';
+
+const careerSlugMap: { [key: string]: string } = {
+    'cnc machinist': 'cnc-machinist',
+    'welder': 'welder',
+    'robotics technician': 'robotics-technician',
+    'industrial maintenance': 'industrial-maintenance',
+    'quality control': 'quality-control',
+    'logistics & supply chain': 'logistics'
+};
 
 const exploreContent = {
   skills: { title: "Explore by Job Category", prompts: ["CNC Machinist", "Welder", "Robotics Technician", "Industrial Maintenance", "Quality Control", "Logistics & Supply Chain"]},
@@ -23,31 +33,51 @@ const exploreContent = {
 
 const TypingIndicator = () => ( <div className="flex items-center space-x-2"> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.2s]"></div> <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse [animation-delay:0.4s]"></div> </div> );
 
-export default function ExploreClient({ user }: { user: User | null }) {
+// This wrapper is necessary for useSearchParams to work with Next.js App Router
+export default function ExplorePageWrapper({ user }: { user: User | null }) {
+    return (
+        <Suspense fallback={<div className="flex-1 p-8 text-center">Loading...</div>}>
+            <ExploreClient user={user} />
+        </Suspense>
+    )
+}
+
+function ExploreClient({ user }: { user: User | null }) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [chatHistory, setChatHistory] = useState<ChatSession[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
     const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
     const [inputValue, setInputValue] = useState("");
-    const { location } = useLocation(); // Use the global location from context
+    const { location } = useLocation();
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const initialize = () => {
-            const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
-            if (quizResultsString) {
+            const initialPrompt = searchParams.get('prompt');
+            if (initialPrompt) {
+                if (!user) {
+                    router.push('/account?message=Please sign in to continue.');
+                    return;
+                }
+                const newChat = createNewChat(true);
+                setChatHistory(prev => [newChat, ...prev]);
+                sendMessage(initialPrompt, newChat.id);
+                const newUrl = window.location.pathname;
+                window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+            } else if (localStorage.getItem('skillstrong-quiz-results')) {
+                const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
                 localStorage.removeItem('skillstrong-quiz-results');
                 if (!user) {
                     router.push('/account?message=Please sign up or sign in to see your quiz results.');
                     return;
                 }
-                const { answers } = JSON.parse(quizResultsString);
+                const { answers } = JSON.parse(quizResultsString!);
                 const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
-                const newHistory = [newChat, ...chatHistory];
-                updateAndSaveHistory(newHistory);
+                updateAndSaveHistory([newChat, ...chatHistory]);
                 setActiveChatId(newChat.id);
                 sendMessage(userMessage, newChat.id, { quiz_results: answers });
             } else {
@@ -97,8 +127,7 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
     const handleResetActiveChat = () => {
         if (!activeChatId) return;
-        const newHistory = chatHistory.map(chat => chat.id === activeChatId ? { ...chat, messages: [] } : chat);
-        updateAndSaveHistory(newHistory);
+        updateAndSaveHistory(chatHistory.map(chat => chat.id === activeChatId ? { ...chat, messages: [] } : chat));
         setCurrentFollowUps([]);
     };
     
@@ -111,65 +140,53 @@ export default function ExploreClient({ user }: { user: User | null }) {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        let updatedHistory = chatHistory.map(chat => 
-            chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
+        setChatHistory(prevHistory => 
+            prevHistory.map(chat => 
+                chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
+            )
         );
-        updateAndSaveHistory(updatedHistory);
-        
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
+        const messagesForApi = [...(activeChat?.messages || []), newUserMessage];
+        
         try {
-            const currentChat = updatedHistory.find(c => c.id === chatId);
-            const body = {
-                messages: currentChat?.messages || [],
-                location: location,
-                ...additionalData
-            };
-
-            const response = await fetch('/api/explore', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            });
-
+            const body = { messages: messagesForApi, location, ...additionalData };
+            const response = await fetch('/api/explore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (!response.ok) throw new Error("API response was not ok.");
-
+            
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            updatedHistory = updatedHistory.map(chat => {
-                if (chat.id === chatId) {
-                    return { ...chat, messages: [...chat.messages, assistantMessage] };
-                }
-                return chat;
-            });
-            
-            const isFirstExchange = (updatedHistory.find(c => c.id === chatId)?.messages.length || 0) === 2;
-            if (isFirstExchange) {
-                try {
-                    const titleResponse = await fetch('/api/title', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ messages: updatedHistory.find(c => c.id === chatId)?.messages }),
-                    });
-                    if (titleResponse.ok) {
-                        const { title } = await titleResponse.json();
-                        setChatHistory(prevHistory => prevHistory.map(chat => chat.id === chatId ? { ...chat, title } : chat));
+            setChatHistory(prevHistory => 
+                prevHistory.map(chat => {
+                    if (chat.id === chatId) {
+                        return { ...chat, messages: [...chat.messages, assistantMessage] };
                     }
-                } catch (e) { console.error("Title generation failed", e); }
+                    return chat;
+                })
+            );
+            setCurrentFollowUps(data.followups || []);
+
+            const isFirstExchange = messagesForApi.length === 1;
+            if (isFirstExchange) {
+                fetch('/api/title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }) })
+                .then(res => res.json())
+                .then(titleData => {
+                    setChatHistory(prevHistory => 
+                        prevHistory.map(chat => chat.id === chatId ? { ...chat, title: titleData.title } : chat )
+                    );
+                })
+                .catch(e => console.error("Title generation failed", e));
             }
 
-            updateAndSaveHistory(updatedHistory);
-            setCurrentFollowUps(data.followups || []);
         } catch (error) {
             console.error("Error sending message:", error);
             const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-            updatedHistory = updatedHistory.map(chat => 
-                chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat
+            setChatHistory(prevHistory => 
+                prevHistory.map(chat => chat.id === chatId ? { ...chat, messages: [...chat.messages, errorMessage] } : chat )
             );
-            updateAndSaveHistory(updatedHistory);
         } finally {
             setIsLoading(false);
         }
@@ -188,7 +205,6 @@ export default function ExploreClient({ user }: { user: User | null }) {
         <div className="flex flex-1 flex-col h-screen">
             <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
-                {/* The model toggle was removed for stability */}
             </header>
             
             <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
@@ -216,7 +232,25 @@ export default function ExploreClient({ user }: { user: User | null }) {
                         <div className="bg-white p-4 rounded-lg border">
                             <h3 className="font-semibold mb-3">{exploreContent[activeExploreTab].title}</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                {exploreContent[activeExploreTab].prompts.map((prompt, pIdx) => ( <button key={pIdx} onClick={() => sendMessage(prompt, activeChatId)} className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">{prompt}</button>))}
+                                {exploreContent[activeExploreTab].prompts.map((prompt, pIdx) => {
+                                    if (activeExploreTab === 'skills') {
+                                        const slug = careerSlugMap[prompt.toLowerCase()];
+                                        return (
+                                            <Link
+                                                key={pIdx}
+                                                href={slug ? `/careers/${slug}` : '#'}
+                                                className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors block"
+                                            >
+                                                {prompt}
+                                            </Link>
+                                        );
+                                    }
+                                    return (
+                                        <button key={pIdx} onClick={() => sendMessage(prompt, activeChatId)} className="text-left text-sm p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">
+                                            {prompt}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
