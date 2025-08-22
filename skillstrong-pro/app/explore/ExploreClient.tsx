@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send } from 'lucide-react';
+import { Sparkles, MessageSquarePlus, MessageSquareText, ArrowRight, Send, Bot as OpenAIIcon, Gem } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
@@ -13,9 +13,10 @@ import Link from 'next/link';
 // Type Definitions
 type Role = "user" | "assistant";
 interface Message { role: Role; content: string; }
-interface ChatSession { id: string; title: string; messages: Message[]; }
+interface ChatSession { id: string; title: string; messages: Message[]; provider: 'openai' | 'gemini'; }
 type ExploreTab = 'skills' | 'salary' | 'training';
 
+// Map career names to their URL slugs for clean routing
 const careerSlugMap: { [key: string]: string } = {
     'cnc machinist': 'cnc-machinist',
     'welder': 'welder',
@@ -57,16 +58,21 @@ function ExploreClient({ user }: { user: User | null }) {
     useEffect(() => {
         const initialize = () => {
             const initialPrompt = searchParams.get('prompt');
+
             if (initialPrompt) {
                 if (!user) {
                     router.push('/account?message=Please sign in to continue.');
                     return;
                 }
                 const newChat = createNewChat(true);
-                setChatHistory(prev => [newChat, ...prev]);
-                sendMessage(initialPrompt, newChat.id);
+                // Directly set history here to ensure it's available for sendMessage
+                const newHistory = [newChat, ...chatHistory];
+                setChatHistory(newHistory);
+                sendMessage(initialPrompt, newChat.id, {}, newHistory);
+
                 const newUrl = window.location.pathname;
                 window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+
             } else if (localStorage.getItem('skillstrong-quiz-results')) {
                 const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
                 localStorage.removeItem('skillstrong-quiz-results');
@@ -77,9 +83,10 @@ function ExploreClient({ user }: { user: User | null }) {
                 const { answers } = JSON.parse(quizResultsString!);
                 const userMessage = "I just took the quiz. Based on my results, what careers do you recommend?";
                 const newChat = createNewChat(false);
-                updateAndSaveHistory([newChat, ...chatHistory]);
+                const newHistory = [newChat, ...chatHistory];
+                updateAndSaveHistory(newHistory);
                 setActiveChatId(newChat.id);
-                sendMessage(userMessage, newChat.id, { quiz_results: answers });
+                sendMessage(userMessage, newChat.id, { quiz_results: answers }, newHistory);
             } else {
                 try {
                     const savedHistory = localStorage.getItem('skillstrong-chathistory');
@@ -116,7 +123,7 @@ function ExploreClient({ user }: { user: User | null }) {
     };
     
     const createNewChat = (setActive = true): ChatSession => {
-        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [] };
+        const newChat: ChatSession = { id: `chat-${Date.now()}`, title: "New Chat", messages: [], provider: 'openai' };
         if (setActive) {
             updateAndSaveHistory([newChat, ...chatHistory]);
             setActiveChatId(newChat.id);
@@ -125,13 +132,18 @@ function ExploreClient({ user }: { user: User | null }) {
         return newChat;
     };
 
+    const handleProviderChange = (provider: 'openai' | 'gemini') => {
+        if (!activeChatId) return;
+        updateAndSaveHistory(chatHistory.map(chat => chat.id === activeChatId ? { ...chat, provider } : chat));
+    };
+
     const handleResetActiveChat = () => {
         if (!activeChatId) return;
         updateAndSaveHistory(chatHistory.map(chat => chat.id === activeChatId ? { ...chat, messages: [] } : chat));
         setCurrentFollowUps([]);
     };
     
-    const sendMessage = async (query: string, chatId: string | null, additionalData = {}) => {
+    const sendMessage = async (query: string, chatId: string | null, additionalData = {}, initialHistory?: ChatSession[]) => {
         if (!user) {
             router.push('/account?message=Please sign up or sign in to start a chat.');
             return;
@@ -140,46 +152,50 @@ function ExploreClient({ user }: { user: User | null }) {
 
         const newUserMessage: Message = { role: 'user', content: query };
         
-        setChatHistory(prevHistory => 
-            prevHistory.map(chat => 
-                chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
-            )
+        const historyToUpdate = initialHistory || chatHistory;
+        const optimisticHistory = historyToUpdate.map(chat => 
+            chat.id === chatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat
         );
+        setChatHistory(optimisticHistory);
+        
         setInputValue("");
         setCurrentFollowUps([]);
         setIsLoading(true);
 
-        const messagesForApi = [...(activeChat?.messages || []), newUserMessage];
+        const messagesForApi = optimisticHistory.find(c => c.id === chatId)?.messages || [];
         
         try {
             const body = { messages: messagesForApi, location, ...additionalData };
-            const response = await fetch('/api/explore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            const provider = optimisticHistory.find(c => c.id === chatId)?.provider || 'openai';
+            const response = await fetch(`/api/explore?provider=${provider}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (!response.ok) throw new Error("API response was not ok.");
             
             const data = await response.json();
             const assistantMessage: Message = { role: 'assistant', content: data.answer };
 
-            setChatHistory(prevHistory => 
-                prevHistory.map(chat => {
+            // Use functional update to avoid race conditions
+            setChatHistory(prevHistory => {
+                let historyWithAnswer = prevHistory.map(chat => {
                     if (chat.id === chatId) {
                         return { ...chat, messages: [...chat.messages, assistantMessage] };
                     }
                     return chat;
-                })
-            );
-            setCurrentFollowUps(data.followups || []);
+                });
 
-            const isFirstExchange = messagesForApi.length === 1;
-            if (isFirstExchange) {
-                fetch('/api/title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }) })
-                .then(res => res.json())
-                .then(titleData => {
-                    setChatHistory(prevHistory => 
-                        prevHistory.map(chat => chat.id === chatId ? { ...chat, title: titleData.title } : chat )
-                    );
-                })
-                .catch(e => console.error("Title generation failed", e));
-            }
+                const isFirstExchange = (historyWithAnswer.find(c => c.id === chatId)?.messages.length || 0) === 2;
+                if (isFirstExchange) {
+                    fetch('/api/title', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }) })
+                    .then(res => res.json())
+                    .then(titleData => {
+                        setChatHistory(prev => prev.map(chat => chat.id === chatId ? { ...chat, title: titleData.title } : chat ));
+                    })
+                    .catch(e => console.error("Title generation failed", e));
+                }
+                updateAndSaveHistory(historyWithAnswer);
+                return historyWithAnswer;
+            });
+
+            setCurrentFollowUps(data.followups || []);
 
         } catch (error) {
             console.error("Error sending message:", error);
@@ -194,7 +210,7 @@ function ExploreClient({ user }: { user: User | null }) {
     
     return (
       <div className="flex h-screen bg-gray-100 text-gray-800">
-        <aside className="w-64 bg-gray-800 text-white flex flex-col p-2">
+        <aside className="w-64 bg-gray-800 text-white flex-col p-2 hidden md:flex">
             <button onClick={() => createNewChat()} className="flex items-center w-full px-4 py-2 mb-4 text-sm font-semibold rounded-md bg-blue-600 hover:bg-blue-700 transition-colors"> <MessageSquarePlus className="w-5 h-5 mr-2" /> New Chat </button>
             <div className="flex-1 overflow-y-auto">
                 <h2 className="px-4 text-xs font-bold tracking-wider uppercase text-gray-400 mb-2">Recent</h2>
@@ -205,6 +221,16 @@ function ExploreClient({ user }: { user: User | null }) {
         <div className="flex flex-1 flex-col h-screen">
             <header className="p-4 border-b bg-white shadow-sm flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-800 flex items-center"> <Sparkles className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach </h1>
+                {activeChat && (
+                  <div className="flex items-center space-x-2 p-1 bg-gray-100 rounded-full">
+                    <button onClick={() => handleProviderChange('openai')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'openai' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
+                      <OpenAIIcon className="w-4 h-4 inline-block mr-1" /> GPT-4o
+                    </button>
+                    <button onClick={() => handleProviderChange('gemini')} disabled={isLoading} className={`px-3 py-1 rounded-full text-sm font-semibold transition-colors ${activeChat.provider === 'gemini' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:bg-gray-200'} disabled:opacity-50`}>
+                      <Gem className="w-4 h-4 inline-block mr-1" /> Gemini
+                    </button>
+                  </div>
+                )}
             </header>
             
             <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
