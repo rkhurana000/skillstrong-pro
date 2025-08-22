@@ -80,8 +80,7 @@ export async function POST(req: NextRequest) {
         // --- SAFETY NET FOR MISSING FOLLOW-UPS ---
         // If the AI generated an answer but no follow-ups, generate them now.
         if (parsedContent.answer && (!parsedContent.followups || parsedContent.followups.length === 0)) {
-            const followUpPrompt = `Based on the following AI answer, generate a JSON object with a "followups" key containing an array of 3-4 relevant, action-oriented follow-up questions.
-
+            const followUpPrompt = `Based on the following AI answer, generate a JSON object with a key followups containing an array of 3–4 concise, engaging, and contextually relevant follow-up topics. These topics should encourage the user to explore related ideas or dive deeper into the previous answer, not ask them to provide information. Each topic should be a short phrase or title (not a question), suitable for use as a clickable option. Avoid yes/no phrasing and avoid making them sound like interrogative questions.
 AI Answer: "${parsedContent.answer}"
 
 JSON object with followups:`;
