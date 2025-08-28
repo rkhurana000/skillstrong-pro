@@ -1,136 +1,113 @@
-// /app/page.tsx
+// /app/page.tsx (updated homepage copy and CTAs; Chat with Coach Mach opens a new chat in Explore)
 import Link from 'next/link';
-import { 
-    ArrowRight, Bot, Compass, Briefcase, Zap, ShieldCheck, DollarSign,
-    Cpu, Printer, Flame, Wrench, ScanSearch 
-} from 'lucide-react';
-
-const heroImage = "https://images.unsplash.com/photo-1581092921462-2052714a8993?q=80&w=2940&auto=format&fit=crop";
+import { ArrowRight, Bot, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Briefcase } from 'lucide-react';
 
 export default function HomePage() {
   return (
     <div className="bg-white text-slate-800">
-      {/* --- Hero Section --- */}
+      {/* Hero */}
       <section className="relative bg-slate-900 text-white">
         <div className="absolute inset-0">
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" />
         </div>
-        <div className="relative container mx-auto px-6 lg:px-8 py-24 md:py-32 text-center">
+        <div className="relative container mx-auto px-6 lg:px-8 py-20 md:py-28 text-center">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-            Build What's Next.
+            Want a High‑Tech Career That Pays — Without the 4‑Year College Price Tag?
           </h1>
-          <p className="mt-4 max-w-2xl mx-auto text-lg md:text-xl text-slate-300">
-            Don't just get a job. Start a high-demand, high-tech career in modern manufacturing—no four-year degree required.
+          <p className="mt-5 max-w-3xl mx-auto text-lg md:text-xl text-slate-200">
+            A vocational career in modern manufacturing is the way to go! It’s more about robotics, artificial intelligence,
+            and precision automation — less about repetitive tasks, manual machinery operation, or inventory handling.
           </p>
-          <div className="mt-8 flex justify-center gap-4">
-            <Link href="/explore" className="inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
-              Explore Careers <ArrowRight className="w-5 h-5 ml-2" />
+          <p className="mt-3 max-w-3xl mx-auto text-base md:text-lg text-slate-300">
+            These careers are in <strong>high demand</strong>, pay <strong>well</strong>. And the best part —
+            <strong> no four‑year degree needed!</strong>
+          </p>
+
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Link href="/quiz" className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+              Take the Interest Quiz <ArrowRight className="w-5 h-5 ml-2" />
             </Link>
-            <Link href="/quiz" className="inline-flex items-center justify-center px-8 py-3 bg-slate-700/50 text-white font-semibold rounded-full backdrop-blur-sm hover:bg-slate-600/50 transition-transform hover:scale-105">
-              Take the Interest Quiz
+            <Link href="/explore?newChat=1" className="inline-flex items-center rounded-lg bg-white/10 backdrop-blur px-5 py-3 font-semibold text-white hover:bg-white/20 border border-white/20 transition-transform hover:scale-105">
+              Chat with Coach Mach <Bot className="w-5 h-5 ml-2" />
             </Link>
+          </div>
+
+          <p className="mt-6 max-w-3xl mx-auto text-base md:text-lg text-slate-300">
+            Learn more about these jobs — the skills you’ll need, the kinds of companies that will hire you, and the salaries they offer.
+          </p>
+
+          <div className="mt-3 text-slate-300">
+            Already know what skills you want? <span className="font-semibold">Chat with Coach Mach</span> to learn about programs that will help you get there.
+          </div>
+          <div className="mt-1 text-slate-300">
+            Already have the skills? Get started right away — work with Coach Mach to find paid apprenticeships and job openings.
           </div>
         </div>
       </section>
 
-      {/* --- How It Works Section --- */}
-      <section className="py-20 bg-slate-50">
+      {/* Careers of the Future */}
+      <section className="py-16">
         <div className="container mx-auto px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold">Your Career Journey in 3 Steps</h2>
-            <p className="mt-2 text-slate-600">Discover, explore, and launch your future.</p>
+          <div className="text-center mb-10">
+            <h2 className="text-3xl md:text-4xl font-bold">Careers of the Future — Today</h2>
+            <p className="mt-2 text-slate-600">From wrench to robotic grippers — manufacturing just leveled up. Work with cutting‑edge technology.</p>
           </div>
-          <div className="mt-12 grid md:grid-cols-3 gap-8 text-center">
-            <div className="p-8 bg-white rounded-xl shadow-lg">
-              <Compass className="w-12 h-12 mx-auto text-blue-600" />
-              <h3 className="mt-4 text-xl font-semibold">1. Discover Your Fit</h3>
-              <p className="mt-2 text-slate-600">Take a 2-minute quiz to match your interests with high-demand skilled careers.</p>
-            </div>
-            <div className="p-8 bg-white rounded-xl shadow-lg">
-              <Bot className="w-12 h-12 mx-auto text-blue-600" />
-              <h3 className="mt-4 text-xl font-semibold">2. Explore Your Options</h3>
-              <p className="mt-2 text-slate-600">Chat with our AI Coach to learn about skills, salaries, and local training programs.</p>
-            </div>
-            <div className="p-8 bg-white rounded-xl shadow-lg">
-              <Briefcase className="w-12 h-12 mx-auto text-blue-600" />
-              <h3 className="mt-4 text-xl font-semibold">3. Launch Your Career</h3>
-              <p className="mt-2 text-slate-600">Find paid apprenticeships and job openings to get started in the industry right away.</p>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* --- Featured Careers Section (UPDATED WITH ALL LINKS) --- */}
-      <section className="py-20">
-        <div className="container mx-auto px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold">Careers of the Future, Available Today</h2>
-            <p className="mt-2 text-slate-600">These aren't your parents' factory jobs. Work with cutting-edge technology.</p>
-          </div>
-          <div className="mt-12 grid md:grid-cols-3 gap-8">
-            <Link href="/careers/robotics-technician" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
-              <Bot className="w-16 h-16 mx-auto text-blue-600"/>
-              <h3 className="mt-5 text-xl font-semibold">Robotics Technician</h3>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="p-6 bg-white rounded-xl shadow border">
+              <Cpu className="w-10 h-10 text-blue-600" />
+              <h3 className="mt-4 text-xl font-semibold">Robotics Technologist</h3>
               <p className="mt-2 text-slate-600">Install, maintain, and repair the robotic systems that power modern industry.</p>
-            </Link>
-            <Link href="/careers/cnc-machinist" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
-              <Cpu className="w-16 h-16 mx-auto text-blue-600"/>
-              <h3 className="mt-5 text-xl font-semibold">CNC Machinist</h3>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow border">
+              <ScanSearch className="w-10 h-10 text-blue-600" />
+              <h3 className="mt-4 text-xl font-semibold">CNC Machinist</h3>
               <p className="mt-2 text-slate-600">Turn digital blueprints into precision parts for everything from aerospace to medical devices.</p>
-            </Link>
-            <Link href="/careers/logistics" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
-              <Printer className="w-16 h-16 mx-auto text-blue-600"/>
-              <h3 className="mt-5 text-xl font-semibold">Additive Manufacturing</h3>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow border">
+              <Printer className="w-10 h-10 text-blue-600" />
+              <h3 className="mt-4 text-xl font-semibold">Additive Manufacturing</h3>
               <p className="mt-2 text-slate-600">Use industrial 3D printers to create complex components and innovative prototypes.</p>
-            </Link>
-            <Link href="/careers/welder" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
-              <Flame className="w-16 h-16 mx-auto text-blue-600"/>
-              <h3 className="mt-5 text-xl font-semibold">Welding Technologist</h3>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow border">
+              <Flame className="w-10 h-10 text-blue-600" />
+              <h3 className="mt-4 text-xl font-semibold">Welding Programmer</h3>
               <p className="mt-2 text-slate-600">Fuse metals using advanced techniques, including robotic and laser welding systems.</p>
-            </Link>
-            <Link href="/careers/industrial-maintenance" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
-              <Wrench className="w-16 h-16 mx-auto text-blue-600"/>
-              <h3 className="mt-5 text-xl font-semibold">Maintenance Technician</h3>
-              <p className="mt-2 text-slate-600">Be the problem-solver who keeps the high-tech machinery of a facility running smoothly.</p>
-            </Link>
-            <Link href="/careers/quality-control" className="block group text-center p-8 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow hover:-translate-y-1">
-              <ScanSearch className="w-16 h-16 mx-auto text-blue-600"/>
-              <h3 className="mt-5 text-xl font-semibold">Quality Control Inspector</h3>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow border">
+              <Wrench className="w-10 h-10 text-blue-600" />
+              <h3 className="mt-4 text-xl font-semibold">Maintenance Tech</h3>
+              <p className="mt-2 text-slate-600">Be the problem‑solver who keeps the high‑tech machinery of a facility running smoothly.</p>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow border">
+              <Handshake className="w-10 h-10 text-blue-600" />
+              <h3 className="mt-4 text-xl font-semibold">Quality Control Specialist</h3>
               <p className="mt-2 text-slate-600">Use precision instruments and technology to ensure products meet the highest standards.</p>
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            <Link href="/quiz" className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white shadow hover:bg-blue-700">
+              Take the Interest Quiz <ArrowRight className="w-5 h-5 ml-2" />
+            </Link>
+            <Link href="/explore?newChat=1" className="inline-flex items-center rounded-lg bg-slate-900 px-5 py-3 font-semibold text-white hover:bg-black">
+              Chat with Coach Mach <Bot className="w-5 h-5 ml-2" />
             </Link>
           </div>
         </div>
       </section>
 
-       {/* --- Value Proposition Section --- */}
-       <section className="py-20 bg-slate-900 text-white">
-        <div className="container mx-auto px-6 lg:px-8 grid md:grid-cols-3 gap-12 text-center">
-          <div>
-            <Zap className="w-10 h-10 mx-auto text-blue-400"/>
-            <h3 className="mt-4 text-xl font-semibold">High-Demand Skills</h3>
-            <p className="mt-1 text-slate-300">The US is rebuilding its industrial core. Your skills will be essential and in high demand.</p>
-          </div>
-          <div>
-            <DollarSign className="w-10 h-10 mx-auto text-blue-400"/>
-            <h3 className="mt-4 text-xl font-semibold">Earn While You Learn</h3>
-            <p className="mt-1 text-slate-300">Discover paid apprenticeships that get you into the workforce faster, without the debt.</p>
-          </div>
-          <div>
-            <ShieldCheck className="w-10 h-10 mx-auto text-blue-400"/>
-            <h3 className="mt-4 text-xl font-semibold">A Secure Future</h3>
-            <p className="mt-1 text-slate-300">Build a long-term, lucrative career in an industry that's critical to the nation's success.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* --- Final CTA Section --- */}
-      <section className="py-24 bg-slate-50">
+      {/* (Optional) Quick CTA band */}
+      <section className="py-12 bg-slate-50 border-t">
         <div className="container mx-auto px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold">Ready to Build Your Future?</h2>
-          <p className="mt-3 max-w-xl mx-auto text-slate-600">Your next step is just a click away. Start exploring or get matched with careers that fit your interests.</p>
-          <div className="mt-8">
-             <Link href="/explore" className="inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
-              Start Exploring Now <ArrowRight className="w-5 h-5 ml-2" />
+          <h3 className="text-2xl font-semibold">Ready to get started?</h3>
+          <p className="mt-2 text-slate-600">Two ways in: take the quiz or jump straight into a conversation with Coach Mach.</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link href="/quiz" className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
+              Start the Quiz
+            </Link>
+            <Link href="/explore?newChat=1" className="inline-flex items-center rounded-lg bg-white px-5 py-3 font-semibold text-slate-900 border hover:bg-slate-100">
+              Chat with Coach Mach
             </Link>
           </div>
         </div>
