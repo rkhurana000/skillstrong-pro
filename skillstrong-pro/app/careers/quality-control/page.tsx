@@ -7,7 +7,7 @@ export default function QualityControlPage() {
     <div className="bg-slate-50">
       <div className="container mx-auto max-w-4xl py-12 px-6">
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Quality Control Inspector</h1>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Quality Control Specialist </h1>
           <p className="mt-3 text-lg text-slate-600">Be the guardian of excellence, ensuring every product meets the highest standards.</p>
         </div>
         <div className="grid md:grid-cols-3 gap-8">
@@ -15,15 +15,15 @@ export default function QualityControlPage() {
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">A Day in the Life</h2>
               <p className="text-slate-700">
-                As a Quality Control (QC) Inspector, your role is defined by precision. You spend your day examining products and materials for defects or deviations from exact specifications. This involves using advanced measuring instruments like calipers, micrometers, and Coordinate Measuring Machines (CMM). You'll read blueprints and technical documents, conduct tests, and meticulously record your findings. When a product doesn't meet the standard, you are the one who flags it and works with the production team to identify the root cause of the problem, ensuring that only perfect products leave the facility.
+                As a Quality Control (QC) Specialist, your role is defined by precision. You spend your day examining products and materials for defects or deviations from exact specifications. This involves using advanced measuring instruments like calipers, micrometers, and Coordinate Measuring Machines (CMM). You'll read blueprints and technical documents, conduct tests, and meticulously record your findings. When a product doesn't meet the standard, you are the one who flags it and works with the production team to identify the root cause of the problem, ensuring that only perfect products leave the facility.
               </p>
                             {/* --- NEW VIDEO SECTION --- */}
               <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Quality Control Inspector Job Duties</h3>
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Quality Control Specialist Job Duties</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
-                    src="https://www.youtube.com/embed/8lajhra4aoQ?si=bNAn5SSOtk7WMn3z" 
-                    title="YouTube video player: Quality Control Inspector Job Duties" 
+                    src="https://www.youtube.com/embed/Aj5m6mkGDTA?si=zBbA-KcszxuBsXdk"
+                    title="YouTube video player: Quality Control Specialist Job Duties" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                     allowFullScreen
