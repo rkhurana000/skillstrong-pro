@@ -23,7 +23,7 @@ export default function RoboticsTechnicianPage() {
                 <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: What is a Robotics Technician?</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
-                    src="https://www.youtube.com/embed/oD9AMiCYl8s?si=gjqnjXiZqfa6NODL" 
+                    src="https://www.youtube.com/embed/oD9AMiCYl8s?si=2UEPmhO81xgN4Mmy"
                     title="YouTube video player: What is a Robotics Technician?" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
@@ -60,7 +60,7 @@ export default function RoboticsTechnicianPage() {
         </div>
         <div className="mt-16 text-center">
             <h2 className="text-2xl font-bold">Ready to Learn More?</h2>
-            <Link href="/explore?prompt=Tell me more about becoming a Robotics Technician" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">Chat with the AI Coach <Bot className="w-5 h-5 ml-2" /></Link>
+            <Link href="/explore?prompt=Tell me more about becoming a Robotics Technician" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">Chat with Coach Mach <Bot className="w-5 h-5 ml-2" /></Link>
         </div>
       </div>
     </div>
