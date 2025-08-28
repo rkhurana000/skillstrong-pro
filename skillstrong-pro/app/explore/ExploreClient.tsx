@@ -453,7 +453,7 @@ function ExploreClient({ user }: { user: User | null }) {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!inputValue.trim()) return;
-                sendMessage(inputValue, activeChatId ?? undefined);
+                sendMessage(inputValue, activeChatId);
                 setInputValue('');
               }}
               className="flex items-center space-x-2"
