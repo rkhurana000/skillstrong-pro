@@ -60,7 +60,7 @@ export default function QualityControlPage() {
         </div>
         <div className="mt-16 text-center">
             <h2 className="text-2xl font-bold">Ready to Learn More?</h2>
-            <Link href="/explore?prompt=Tell me more about Quality Control careers" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">Chat with the AI Coach <Bot className="w-5 h-5 ml-2" /></Link>
+            <Link href="/explore?prompt=Tell me more about Quality Control careers" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">Chat with Coach Mach <Bot className="w-5 h-5 ml-2" /></Link>
         </div>
       </div>
     </div>
