@@ -9,7 +9,7 @@ export default function WelderCareerPage() {
         
         {/* Header Section */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Welder</h1>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Welding Programmer</h1>
           <p className="mt-3 text-lg text-slate-600">Fuse the future by mastering the art and science of joining metals.</p>
         </div>
 
@@ -22,7 +22,7 @@ export default function WelderCareerPage() {
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">A Day in the Life</h2>
               <p className="text-slate-700 mb-6">
-                As a welder, you're a skilled artisan of the industrial world. Your day might start by reviewing blueprints to understand the scope of a project. You'll spend time preparing materials—cutting, grinding, and cleaning metal surfaces to ensure a perfect join. The core of your work involves using advanced equipment, like TIG or MIG welders, to fuse components for everything from skyscrapers and bridges to precision aerospace parts. Safety is paramount, so you'll always be equipped with protective gear. It’s a hands-on, focused role that leaves you with the satisfaction of having built something real and durable.
+                As a Welding programmer, you're a skilled artisan of the industrial world. Your day might start by reviewing blueprints to understand the scope of a project. You'll spend time preparing materials—cutting, grinding, and cleaning metal surfaces to ensure a perfect join. The core of your work involves using advanced equipment, like TIG or MIG welders, to fuse components for everything from skyscrapers and bridges to precision aerospace parts. Safety is paramount, so you'll always be equipped with protective gear. It’s a hands-on, focused role that leaves you with the satisfaction of having built something real and durable.
               </p>
               
               {/* --- NEW VIDEO SECTION --- */}
@@ -30,8 +30,8 @@ export default function WelderCareerPage() {
                 <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: A Day in the Life of a Welder</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
-                    src="https://www.youtube.com/embed/CuDwydMjgGg?si=C2lh_IyjMrlRPNKI" 
-                    title="YouTube video player: A Day in the Life of a Welder" 
+                    src="https://www.youtube.com/embed/oEzP46PwYqQ?si=XdlgdvganhtIkx2v"
+                    title="YouTube video player: A Day in the Life of a Welding Programmer" 
                     frameBorder="0" 
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
                     allowFullScreen
@@ -71,7 +71,7 @@ export default function WelderCareerPage() {
                 href="/explore?prompt=Tell me more about becoming a welder"
                 className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105"
             >
-              Chat with the AI Coach <Bot className="w-5 h-5 ml-2" />
+              Chat with Coach Mach <Bot className="w-5 h-5 ml-2" />
             </Link>
         </div>
       </div>
