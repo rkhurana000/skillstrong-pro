@@ -7,7 +7,7 @@ export default function RoboticsTechnicianPage() {
     <div className="bg-slate-50">
       <div className="container mx-auto max-w-4xl py-12 px-6">
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Robotics Technician</h1>
+          <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900">Career Pathway: Robotics Technologist</h1>
           <p className="mt-3 text-lg text-slate-600">Build, maintain, and program the automated systems of the future.</p>
         </div>
         <div className="grid md:grid-cols-3 gap-8">
@@ -15,7 +15,7 @@ export default function RoboticsTechnicianPage() {
             <section>
               <h2 className="text-2xl font-bold text-slate-800 border-b pb-2 mb-4">A Day in the Life</h2>
               <p className="text-slate-700">
-                As a Robotics Technician, you are on the front lines of automation. Your day is a dynamic mix of building, testing, and maintaining robotic equipment. You might spend the morning assembling a new robotic arm on a production line, then shift to troubleshooting and repairing an existing one. A large part of your role involves programming—writing or modifying code to control a robot's movements and tasks. You'll perform preventative maintenance to keep systems running efficiently and work closely with engineers to improve robotic processes, making manufacturing smarter, faster, and safer.
+                As a Robotics Technologist, you are on the front lines of automation. Your day is a dynamic mix of building, testing, and maintaining robotic equipment. You might spend the morning assembling a new robotic arm on a production line, then shift to troubleshooting and repairing an existing one. A large part of your role involves programming—writing or modifying code to control a robot's movements and tasks. You'll perform preventative maintenance to keep systems running efficiently and work closely with engineers to improve robotic processes, making manufacturing smarter, faster, and safer.
               </p>
             </section>
              {/* --- NEW VIDEO SECTION --- */}
