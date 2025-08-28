@@ -1,89 +1,70 @@
-// /app/page.tsx — Gen Z refresh: bold gradient hero, punchy microcopy, chips, modern cards
+// /app/page.tsx — Hybrid: classic hero from your old layout + our neon dark theme
 import Link from 'next/link';
 import {
   ArrowRight,
   Bot,
-  Sparkles,
   Cpu,
   Printer,
   Flame,
   Wrench,
   ScanSearch,
   Handshake,
-  BadgeDollarSign,
-  School,
-  Stars,
+  Briefcase,
+  Compass,
 } from 'lucide-react';
 
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Hero */}
+      {/* HERO — classic structure, modern styling */}
       <section className="relative overflow-hidden">
-        {/* Subtle light blobs */}
+        {/* Glow blobs to keep the new color vibe */}
         <div className="pointer-events-none absolute -top-32 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-blue-600/30 blur-3xl" />
         <div className="pointer-events-none absolute top-24 -left-24 h-72 w-72 rounded-full bg-fuchsia-600/20 blur-3xl" />
         <div className="pointer-events-none absolute top-48 -right-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
 
         <div className="relative container mx-auto px-6 lg:px-8 py-20 md:py-28 text-center">
-          <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200 backdrop-blur">
-            <Stars className="h-4 w-4" /> Future‑Ready Careers
+          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">Build What\'s Next.</h1>
+          <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-slate-300">
+            Don\'t just get a job. Start a high‑demand, high‑tech career in modern manufacturing—no four‑year degree required.
           </p>
-          <h1 className="mt-5 text-4xl md:text-6xl font-extrabold leading-[1.05] tracking-tight">
-            <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-fuchsia-400 bg-clip-text text-transparent">
-              High‑Tech Careers. No 4‑Year Debt.
-            </span>
-          </h1>
-          <p className="mt-5 max-w-3xl mx-auto text-lg md:text-xl text-slate-300">
-            Modern manufacturing = robotics, AI, and precision automation — not boring, repetitive work. Break in fast, level up fast, get paid.
-          </p>
-
-          {/* Value props */}
-          <div className="mt-6 flex flex-wrap justify-center gap-2 text-sm">
-            <span className="rounded-full bg-white/5 px-3 py-1 text-slate-200 border border-white/10">No 4‑year degree required</span>
-            <span className="rounded-full bg-white/5 px-3 py-1 text-slate-200 border border-white/10">
-              <BadgeDollarSign className="inline h-4 w-4 -mt-0.5 mr-1" /> $55k–$90k+ pathways
-            </span>
-            <span className="rounded-full bg-white/5 px-3 py-1 text-slate-200 border border-white/10">Paid apprenticeships</span>
-            <span className="rounded-full bg-white/5 px-3 py-1 text-slate-200 border border-white/10">Hands‑on skills → real jobs</span>
-          </div>
-
-          {/* CTAs */}
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 font-semibold text-white shadow-lg hover:opacity-95 active:scale-[.99]">
-              Take the Interest Quiz <ArrowRight className="w-5 h-5 ml-2" />
+            <Link href="/explore" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-blue-700">
+              Explore Careers <ArrowRight className="w-5 h-5 ml-2" />
             </Link>
-            <Link href="/explore?newChat=1" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white hover:bg-white/15 border border-white/15 backdrop-blur">
-              Chat with Coach Mach <Bot className="w-5 h-5 ml-2" />
+            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white border border-white/15 hover:bg-white/15 backdrop-blur">
+              Take the Interest Quiz
             </Link>
-          </div>
-
-          {/* Helper copy */}
-          <p className="mt-6 max-w-3xl mx-auto text-base md:text-lg text-slate-300">
-            Learn what skills you need, who’s hiring, and what they pay. Already know your direction? Chat with Coach Mach to pick the right program — or jump straight to apprenticeships and jobs.
-          </p>
-
-          {/* Quick topic chips */}
-          <div className="mt-8 flex flex-wrap justify-center gap-2 text-sm">
-            {[
-              { label: 'CNC Machinist', href: '/careers/cnc-machinist' },
-              { label: 'Robotics Tech', href: '/careers/robotics-technician' },
-              { label: 'Welding Programmer', href: '/careers/welder' },
-              { label: 'Additive (3D Print)', href: '/careers/additive-manufacturing' },
-            ].map((c) => (
-              <Link
-                key={c.label}
-                href={c.href}
-                className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-slate-200 hover:bg-white/10"
-              >
-                {c.label}
-              </Link>
-            ))}
           </div>
         </div>
       </section>
 
-      {/* Careers grid */}
+      {/* 3‑STEP JOURNEY — mirrors old page but keeps dark theme */}
+      <section className="bg-slate-900/40 border-t border-white/10">
+        <div className="container mx-auto px-6 lg:px-8 py-14 text-center">
+          <h2 className="text-2xl md:text-3xl font-bold">Your Career Journey in 3 Steps</h2>
+          <p className="mt-2 text-slate-300">Discover, explore, and launch your future.</p>
+          <div className="mt-8 grid gap-5 md:grid-cols-3 text-left">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <Compass className="h-8 w-8 text-cyan-400" />
+              <h3 className="mt-3 text-lg font-semibold">1. Discover Your Fit</h3>
+              <p className="mt-1 text-slate-300">Take a 2‑minute quiz to match your interests with high‑demand skilled careers.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <Bot className="h-8 w-8 text-cyan-400" />
+              <h3 className="mt-3 text-lg font-semibold">2. Explore Your Options</h3>
+              <p className="mt-1 text-slate-300">Chat with our AI Coach to learn about skills, salaries, and local programs.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+              <Briefcase className="h-8 w-8 text-cyan-400" />
+              <h3 className="mt-3 text-lg font-semibold">3. Launch Your Career</h3>
+              <p className="mt-1 text-slate-300">Find paid apprenticeships and job openings to start right away.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CAREERS GRID */}
       <section className="py-16 md:py-20">
         <div className="container mx-auto px-6 lg:px-8">
           <div className="text-center mb-10">
@@ -104,41 +85,27 @@ export default function HomePage() {
                 <Icon className="h-10 w-10 text-cyan-400" />
                 <h3 className="mt-4 text-xl font-semibold text-white">{title}</h3>
                 <p className="mt-2 text-slate-300">{blurb}</p>
-                <Link href="/explore?newChat=1" className="mt-4 inline-flex items-center text-cyan-300 hover:text-cyan-200">
+                <Link href="/explore" className="mt-4 inline-flex items-center text-cyan-300 hover:text-cyan-200">
                   Ask Coach Mach about this <ArrowRight className="ml-1 h-4 w-4" />
                 </Link>
               </div>
             ))}
           </div>
-
-          <div className="mt-10 flex flex-wrap justify-center gap-3">
-            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 font-semibold text-white shadow hover:opacity-95">
-              Take the Interest Quiz <ArrowRight className="w-5 h-5 ml-2" />
-            </Link>
-            <Link href="/explore?newChat=1" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white hover:bg-white/15 border border-white/15">
-              Chat with Coach Mach <Bot className="w-5 h-5 ml-2" />
-            </Link>
-          </div>
         </div>
       </section>
 
-      {/* Proof points / Why this works */}
+      {/* SINGLE CTA BAND — keep only once to avoid duplication */}
       <section className="border-t border-white/10 bg-slate-900/40">
         <div className="container mx-auto px-6 lg:px-8 py-14 text-center">
           <h3 className="text-2xl font-bold">Ready to get started?</h3>
-          <p className="mt-2 text-slate-300">Two ways in: take the quiz or jump straight into a convo with Coach Mach.</p>
+          <p className="mt-2 text-slate-300">Pick your path: explore careers or take the interest quiz.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
-              Start the Quiz
+            <Link href="/explore" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
+              Explore Careers
             </Link>
-            <Link href="/explore?newChat=1" className="inline-flex items-center rounded-xl bg-white px-5 py-3 font-semibold text-slate-900 border hover:bg-slate-100">
-              Chat with Coach Mach
+            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-white px-5 py-3 font-semibold text-slate-900 border hover:bg-slate-100">
+              Take the Interest Quiz
             </Link>
-          </div>
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm text-slate-300">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><School className="inline h-4 w-4 mr-1" /> Community‑college friendly</div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><Sparkles className="inline h-4 w-4 mr-1" /> Skills → Portfolio → Job</div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4"><BadgeDollarSign className="inline h-4 w-4 mr-1" /> Earn while you learn</div>
           </div>
         </div>
       </section>
