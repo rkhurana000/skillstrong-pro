@@ -1,11 +1,10 @@
-// /app/explore/ExploreClient.tsx (updated: removes sidebar, supports ?newChat=1, adds New Chat button)
-'use client'
+// /app/explore/ExploreClient.tsx
+'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import {
-  Sparkles,
   MessageSquarePlus,
   MessageSquareText,
   ArrowRight,
@@ -16,20 +15,19 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
-import Link from 'next/link';
 
 // Type Definitions
- type Role = 'user' | 'assistant';
- interface Message { role: Role; content: string }
- interface ChatSession {
-   id: string;
-   title: string;
-   messages: Message[];
-   provider: 'openai' | 'gemini';
- }
- type ExploreTab = 'skills' | 'salary' | 'training';
+type Role = 'user' | 'assistant';
+interface Message { role: Role; content: string }
+interface ChatSession {
+  id: string;
+  title: string;
+  messages: Message[];
+  provider: 'openai' | 'gemini';
+}
+type ExploreTab = 'skills' | 'salary' | 'training';
 
-// Map career names to their URL slugs for clean routing
+// Map career names to URL slugs (kept for future use if you want to deep-link)
 const careerSlugMap: { [key: string]: string } = {
   'cnc machinist': 'cnc-machinist',
   welder: 'welder',
@@ -77,7 +75,7 @@ const TypingIndicator = () => (
   </div>
 );
 
-// Wrapper needed so useSearchParams works with App Router
+// Wrapper so useSearchParams works with App Router
 export default function ExplorePageWrapper({ user }: { user: User | null }) {
   return (
     <Suspense fallback={<div className="flex-1 p-8 text-center">Loading...</div>}>
@@ -93,22 +91,20 @@ function ExploreClient({ user }: { user: User | null }) {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [priming, setPriming] = useState(false);               // NEW: we’re silently seeding a prompt
+  const [showChatView, setShowChatView] = useState(false);      // NEW: force chat view immediately
   const [activeExploreTab, setActiveExploreTab] = useState<ExploreTab>('skills');
   const [inputValue, setInputValue] = useState('');
   const { location } = useLocation();
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Helpers
   const activeChat = chatHistory.find((c) => c.id === activeChatId) || null;
 
+  // Helpers
   const updateAndSaveHistory = (newHistory: ChatSession[]) => {
     const limited = newHistory.slice(0, 30);
     setChatHistory(limited);
-    try {
-      localStorage.setItem('skillstrong-chathistory', JSON.stringify(limited));
-    } catch (e) {
-      console.error('Failed to save history:', e);
-    }
+    try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(limited)); } catch {}
   };
 
   const createNewChat = (setActive = true): ChatSession => {
@@ -121,9 +117,7 @@ function ExploreClient({ user }: { user: User | null }) {
     setChatHistory((prev) => {
       const next = [newChat, ...prev];
       if (setActive) setActiveChatId(newChat.id);
-      try {
-        localStorage.setItem('skillstrong-chathistory', JSON.stringify(next));
-      } catch (e) {}
+      try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(next)); } catch {}
       return next;
     });
     return newChat;
@@ -131,32 +125,39 @@ function ExploreClient({ user }: { user: User | null }) {
 
   const handleProviderChange = (provider: 'openai' | 'gemini') => {
     if (!activeChatId) return;
-    setChatHistory((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, provider } : c)));
+    setChatHistory((prev) =>
+      prev.map((c) => (c.id === activeChatId ? { ...c, provider } : c)),
+    );
   };
 
-// Seed a hidden overview for known categories; otherwise just chat the text
-const handleExplorePromptClick = (prompt: string) => {
-  const p = (prompt || '').toLowerCase().trim();
-  const catMap: Record<string, string> = {
-    'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
-    'welder': 'Welder', 'welding programmer': 'Welding Programmer',
-    'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
-    'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
-    'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
-    'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain',
-  };
-  const canonical = catMap[p];
+  // ALWAYS seed a category overview silently and flip to chat view right away
+  const handleExplorePromptClick = (prompt: string) => {
+    const p = (prompt || '').toLowerCase().trim();
+    const catMap: Record<string, string> = {
+      'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
+      'welder': 'Welder', 'welding programmer': 'Welding Programmer',
+      'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
+      'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
+      'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
+      'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain',
+    };
+    const canonical = catMap[p];
 
-  if (!canonical) {
-    // Not a category → normal visible message
+    // Create or reuse a chat and SHOW chat view immediately
     const id = activeChatId ?? createNewChat(true).id;
-    setTimeout(() => sendMessage(prompt, id), 0);
-    return;
-  }
+    setActiveChatId(id);
+    setShowChatView(true);
+    setPriming(true);
 
-  // CATEGORY: send a SILENT seed so the template isn't shown in the UI
-  const id = activeChatId ?? createNewChat(true).id;
-  const overviewPrompt = `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
+    // update URL so user sees they're in chat mode
+    try {
+      const newUrl = `${window.location.pathname}?chat=1`;
+      window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+    } catch {}
+
+    // Build hidden overview seed if it's a known category; otherwise just send prompt
+    const overviewPrompt = canonical
+      ? `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
 
 🔎 **Overview** — what the role is and where they work.
 🧭 **Day-to-Day** — typical tasks.
@@ -167,68 +168,78 @@ const handleExplorePromptClick = (prompt: string) => {
 📜 **Helpful Certs** — 2–4 recognized credentials.
 🚀 **Next Steps** — 2–3 actions the student can take.
 
-Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
+Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`
+      : prompt;
 
-  // SILENT send (don’t add the user prompt bubble)
-  (async () => {
-    const provider = (chatHistory.find(c => c.id === id)?.provider) || 'openai';
-    setIsLoading(true);
-    try {
-      const body = {
-        messages: [...(chatHistory.find(c => c.id === id)?.messages || []), { role: 'user', content: overviewPrompt }],
-        provider,
-        location,
-      };
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await res.json();
+    // SILENT send: do not add a visible user bubble
+    (async () => {
+      const provider = (chatHistory.find(c => c.id === id)?.provider) || 'openai';
+      setIsLoading(true);
+      try {
+        const body = {
+          messages: [...(chatHistory.find(c => c.id === id)?.messages || []), { role: 'user', content: overviewPrompt }],
+          provider,
+          location,
+        };
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
 
-      const assistantMessage: Message = { role: 'assistant', content: data.answer };
-      setChatHistory(prev =>
-        prev.map(c =>
-          c.id === id
-            ? {
-                ...c,
-                title: c.messages.length === 0 ? `Overview: ${canonical}` : c.title,
-                messages: [...c.messages, assistantMessage],
-              }
-            : c
-        )
-      );
-      setCurrentFollowUps((data.followups as string[]) || []);
-    } catch {
-      const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-      setChatHistory(prev => prev.map(c => (c.id === id ? { ...c, messages: [...c.messages, errorMessage] } : c)));
-    } finally {
-      setIsLoading(false);
-    }
-  })();
-};
+        const assistantMessage: Message = { role: 'assistant', content: data.answer };
+        setChatHistory(prev =>
+          prev.map(c =>
+            c.id === id
+              ? {
+                  ...c,
+                  title: c.messages.length === 0 && canonical ? `Overview: ${canonical}` : c.title,
+                  messages: [...c.messages, assistantMessage],
+                }
+              : c,
+          ),
+        );
+        setCurrentFollowUps((data.followups as string[]) || []);
+      } catch {
+        const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
+        setChatHistory(prev => prev.map(c => (c.id === id ? { ...c, messages: [...c.messages, errorMessage] } : c)));
+      } finally {
+        setIsLoading(false);
+        setPriming(false);
+      }
+    })();
+  };
 
-
-  const sendMessage = async (
+  async function sendMessage(
     text: string,
-    chatId?: string,
+    chatId?: string | undefined,
     extraPayload: Record<string, unknown> = {},
     historyOverride?: ChatSession[],
-  ) => {
-    const targetChatId = chatId || activeChatId;
+  ) {
+    const targetChatId = chatId ?? activeChatId ?? undefined;
     if (!targetChatId) return;
 
-    const provider = (historyOverride || chatHistory).find((c) => c.id === targetChatId)?.provider || 'openai';
+    const provider =
+      (historyOverride || chatHistory).find((c) => c.id === targetChatId)?.provider || 'openai';
 
     const newUserMessage: Message = { role: 'user', content: text };
     setIsLoading(true);
+    setShowChatView(true);
 
-    // Append the user message
     setChatHistory((prev) =>
-      prev.map((chat) => (chat.id === targetChatId ? { ...chat, messages: [...chat.messages, newUserMessage] } : chat)),
+      prev.map((chat) =>
+        chat.id === targetChatId
+          ? { ...chat, messages: [...chat.messages, newUserMessage] }
+          : chat,
+      ),
     );
 
     try {
       const body = {
-        messages: (historyOverride || chatHistory).find((c) => c.id === targetChatId)?.messages.concat(newUserMessage) || [
-          newUserMessage,
-        ],
+        messages:
+          (historyOverride || chatHistory)
+            .find((c) => c.id === targetChatId)?.messages.concat(newUserMessage) || [newUserMessage],
         provider,
         location,
         ...extraPayload,
@@ -239,18 +250,16 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-
       if (!response.ok) throw new Error('API response was not ok');
       const data = await response.json();
 
       const assistantMessage: Message = { role: 'assistant', content: data.answer };
-
       setChatHistory((prev) => {
-        let next = prev.map((c) => (c.id === targetChatId ? { ...c, messages: [...c.messages, assistantMessage] } : c));
-
+        let next = prev.map((c) =>
+          c.id === targetChatId ? { ...c, messages: [...c.messages, assistantMessage] } : c,
+        );
         const isFirst = (next.find((c) => c.id === targetChatId)?.messages.length || 0) === 2;
         if (isFirst) {
-          // Title the chat
           fetch('/api/title', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -258,113 +267,82 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
           })
             .then((r) => r.json())
             .then((t) => {
-              setChatHistory((prev2) => prev2.map((c) => (c.id === targetChatId ? { ...c, title: t.title } : c)));
+              setChatHistory((prev2) =>
+                prev2.map((c) => (c.id === targetChatId ? { ...c, title: t.title } : c)),
+              );
             })
             .catch(() => {});
         }
-
-        try {
-          localStorage.setItem('skillstrong-chathistory', JSON.stringify(next));
-        } catch {}
+        try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(next)); } catch {}
         return next;
       });
 
-      setCurrentFollowUps(data.followups || []);
+      setCurrentFollowUps((data.followups as string[]) || []);
     } catch (e) {
-      console.error('Error sending message:', e);
       const errorMessage: Message = {
         role: 'assistant',
         content: "Sorry, I couldn't get a response. Please try again.",
       };
-      setChatHistory((prev) => prev.map((c) => (c.id === targetChatId ? { ...c, messages: [...c.messages, errorMessage] } : c)));
+      setChatHistory((prev) =>
+        prev.map((c) => (c.id === targetChatId ? { ...c, messages: [...c.messages, errorMessage] } : c)),
+      );
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  // Initialize: handle ?prompt=..., quiz results, saved history, and ?newChat=1
+  // init — handle ?chat=1 / ?newChat=1 and saved history
   useEffect(() => {
-    const initialPrompt = searchParams.get('prompt');
     const newChatFlag = searchParams.get('newChat');
-
-    // Auto-start with a brand new chat if coming from home CTA
-    if (newChatFlag && !initialPrompt) {
-      const newChat = createNewChat(true);
-      setActiveChatId(newChat.id);
-      // Clean the URL (remove query params)
-      const newUrl = window.location.pathname;
-      window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
-      return; // skip other initializers this render
-    }
-
-    if (initialPrompt) {
-      if (!user) {
-        router.push('/account?message=Please sign in to continue.');
-        return;
-      }
-      const newChat = createNewChat(true);
-      const newHistory = [newChat, ...chatHistory];
-      setChatHistory(newHistory);
-      sendMessage(initialPrompt, newChat.id, {}, newHistory);
-
-      const newUrl = window.location.pathname;
+    const chatMode = searchParams.get('chat');
+    if (newChatFlag || chatMode === '1') {
+      const nc = createNewChat(true);
+      setActiveChatId(nc.id);
+      setShowChatView(true);
+      // clean URL
+      const newUrl = window.location.pathname + (newChatFlag ? '' : '?chat=1');
       window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
       return;
     }
 
-    const quizResultsString = localStorage.getItem('skillstrong-quiz-results');
-    if (quizResultsString) {
-      localStorage.removeItem('skillstrong-quiz-results');
-      if (!user) {
-        router.push('/account?message=Please sign up or sign in to see your quiz results.');
-        return;
-      }
-      const { answers } = JSON.parse(quizResultsString);
-      const userMessage = 'I just took the quiz. Based on my results, what careers do you recommend?';
-      const newChat = createNewChat(false);
-      setActiveChatId(newChat.id);
-      updateAndSaveHistory([newChat, ...chatHistory]);
-      sendMessage(userMessage, newChat.id, { quiz_results: answers }, [newChat, ...chatHistory]);
-      return;
-    }
-
-    // Load any saved chat; otherwise start a fresh one
     try {
       const saved = localStorage.getItem('skillstrong-chathistory');
       const history = saved ? (JSON.parse(saved) as ChatSession[]) : [];
       if (history.length > 0) {
         setChatHistory(history);
         setActiveChatId(history[0].id);
+        setShowChatView((history[0].messages?.length || 0) > 0);
       } else {
-        const newChat = createNewChat(true);
-        setChatHistory([newChat]);
+        const nc = createNewChat(true);
+        setChatHistory([nc]);
+        setShowChatView(false);
       }
-    } catch (e) {
-      console.error('Failed to load history:', e);
-      const newChat = createNewChat(true);
-      setChatHistory([newChat]);
+    } catch {
+      const nc = createNewChat(true);
+      setChatHistory([nc]);
+      setShowChatView(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-scroll on new messages
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [activeChat?.messages, isLoading]);
+  }, [activeChat?.messages, isLoading, priming]);
 
+  // ----------------- RENDER -----------------
   return (
     <div className="flex h-screen bg-gray-100 text-gray-800">
-      {/* Main column (sidebar removed) */}
       <div className="flex flex-1 flex-col h-screen">
         <header className="p-4 border-b bg-white shadow-sm flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-800 flex items-center">
             <MessageSquareText className="w-6 h-6 mr-2 text-blue-500" /> SkillStrong Coach
           </h1>
           <div className="flex items-center gap-2">
+            {/* New Chat still available in header */}
             <button
-              onClick={() => createNewChat(true)}
+              onClick={() => { const nc = createNewChat(true); setShowChatView(true); router.replace('/explore?chat=1'); }}
               className="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
               title="Start a new chat"
             >
@@ -374,21 +352,13 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
               <div className="flex items-center space-x-1 p-1 bg-gray-100 rounded-full">
                 <button
                   onClick={() => handleProviderChange('openai')}
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    (activeChat?.provider || 'openai') === 'openai'
-                      ? 'bg-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${(activeChat?.provider || 'openai') === 'openai' ? 'bg-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'}`}
                 >
                   <OpenAIIcon className="w-4 h-4 inline-block mr-1" /> GPT-4o
                 </button>
                 <button
                   onClick={() => handleProviderChange('gemini')}
-                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    (activeChat?.provider || 'openai') === 'gemini'
-                      ? 'bg-white shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${(activeChat?.provider || 'openai') === 'gemini' ? 'bg-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'}`}
                 >
                   <Gem className="w-4 h-4 inline-block mr-1" /> Gemini
                 </button>
@@ -398,30 +368,33 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
         </header>
 
         <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          {activeChat && activeChat.messages.length > 0 ? (
-            <div className="space-y-6">
-              {activeChat.messages.map((msg, idx) => (
-                <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={`p-3 rounded-2xl max-w-4xl ${
-                      msg.role === 'user'
-                        ? 'bg-blue-600 text-white rounded-br-none'
-                        : 'bg-white text-gray-800 border rounded-bl-none'
-                    }`}
-                  >
-                    <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''} prose-a:text-blue-600`}>
-<ReactMarkdown
-  remarkPlugins={[remarkGfm]}
-  components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}
->
-  {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
-</ReactMarkdown>
+          {showChatView ? (
+            <div className="space-y-6 max-w-4xl mx-auto">
+              {/* If priming and no messages yet, show an immediate typing bubble */}
+              {priming && (!activeChat || activeChat.messages.length === 0) && (
+                <div className="flex justify-start">
+                  <div className="p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none">
+                    <TypingIndicator />
+                  </div>
+                </div>
+              )}
 
+              {activeChat?.messages.map((msg, idx) => (
+                <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`p-3 rounded-2xl max-w-4xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border rounded-bl-none'}`}>
+                    <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''} prose-a:text-blue-600`}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}
+                      >
+                        {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
+                      </ReactMarkdown>
                     </article>
                   </div>
                 </div>
               ))}
-              {isLoading && (
+
+              {isLoading && activeChat?.messages.length !== 0 && (
                 <div className="flex justify-start">
                   <div className="p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none">
                     <TypingIndicator />
@@ -430,19 +403,14 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
               )}
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto">
-              <h2 className="text-2xl font-bold text-center text-gray-800">Explore Careers or Chat with Coach Mach</h2>
+            // ---------- EXPLORE VIEW (no chat) ----------
+            <div className="max-w-5xl mx-auto">
+              <h2 className="text-3xl font-extrabold text-center text-gray-800">Explore Careers or Chat with Coach Mach</h2>
               <p className="mt-2 text-center text-gray-500 mb-6">
                 Select a category to begin exploring, or start a conversation with our AI coach.
               </p>
-              <div className="flex justify-center mb-8">
-                <button
-                  onClick={() => createNewChat(true)}
-                  className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" /> Chat with AI Coach
-                </button>
-              </div>
+
+              {/* Removed the big “Chat with AI Coach” button per your request */}
 
               <div className="border-b border-gray-200 mb-6">
                 <nav className="-mb-px flex justify-center space-x-8" aria-label="Tabs">
@@ -466,67 +434,66 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
                 <h3 className="font-semibold mb-3">{exploreContent[activeExploreTab].title}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {exploreContent[activeExploreTab].prompts.map((prompt, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleExplorePromptClick(prompt)}
-                    className="text-left p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                  >
-                    {prompt}
-                  </button>
-                ))}
+                    <button
+                      key={idx}
+                      onClick={() => handleExplorePromptClick(prompt)}
+                      className="text-left p-4 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors text-lg font-semibold"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           )}
         </main>
 
-        <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
-          <div className="w-full max-w-3xl mx-auto">
-            <div className="flex flex-wrap gap-3 justify-center mb-4">
-              {!isLoading &&
-                currentFollowUps.map((prompt, index) => {
-                  const isReset = prompt.toLowerCase().includes('explore other topics');
-                  return (
+        {/* Footer with follow-up chips is now ONLY visible in chat view AFTER there are messages */}
+        {showChatView && activeChat && activeChat.messages.length > 0 && (
+          <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
+            <div className="w-full max-w-3xl mx-auto">
+              <div className="flex flex-wrap gap-2 justify-center mb-4">
+                {!isLoading &&
+                  currentFollowUps.map((prompt, index) => (
                     <button
                       key={index}
-                      onClick={() => (isReset ? setCurrentFollowUps([]) : handleExplorePromptClick(prompt))}
-                      className={`group inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm ${
-                        isReset ? 'text-gray-500 hover:bg-gray-100' : 'text-blue-700 hover:bg-blue-50'
-                      }`}
+                      onClick={() => handleExplorePromptClick(prompt)}
+                      className="group inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm text-blue-700 hover:bg-blue-50"
                     >
                       <ArrowRight className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
                       {prompt}
                     </button>
-                  );
-                })}
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!inputValue.trim()) return;
-                sendMessage(inputValue, activeChatId ?? undefined);
-                setInputValue('');
-              }}
-              className="flex items-center space-x-2"
-            >
-              <input
-                type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Ask anything or enter your location..."
-                disabled={isLoading}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-40"
+                  ))}
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!inputValue.trim()) return;
+                  sendMessage(inputValue, activeChatId ?? undefined);
+                  setInputValue('');
+                }}
+                className="flex items-center space-x-2"
               >
-                <Send className="w-5 h-5" />
-              </button>
-            </form>
-          </div>
-        </footer>
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Ask anything..."
+                  disabled={isLoading}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-500/50 focus:border-blue-500 disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-40"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </form>
+            </div>
+          </footer>
+        )}
       </div>
     </div>
   );
