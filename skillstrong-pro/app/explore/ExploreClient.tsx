@@ -122,12 +122,12 @@ function ExploreClient({ user }: { user: User | null }) {
     setChatHistory((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, provider } : c)));
   };
 
-  const handleExplorePromptClick = (prompt: string) => {
-    const slug = careerSlugMap[prompt.toLowerCase?.() ?? ''];
-    if (slug) { router.push(`/careers/${slug}`); return; }
-    const newChat = createNewChat(true);
-    setTimeout(() => sendMessage(prompt, newChat.id), 0);
-  };
+// Always seed the chat with the chosen prompt (no routing)
+const handleExplorePromptClick = (prompt: string) => {
+  // Use current chat if present; otherwise create one
+  const id = activeChatId ?? createNewChat(true).id;
+  setTimeout(() => sendMessage(prompt, id), 0);
+};
 
   async function sendMessage(
     text: string,
