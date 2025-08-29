@@ -231,7 +231,14 @@ const handleExplorePromptClick = (prompt: string) => {
                 <div key={idx} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`p-3 rounded-2xl max-w-4xl ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-gray-800 border rounded-bl-none'}`}>
                     <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''} prose-a:text-blue-600`}>
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
+                                  <ReactMarkdown
+  remarkPlugins={[remarkGfm]}
+  components={{
+    a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />
+  }}
+>
+  {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
+</ReactMarkdown>
                     </article>
                   </div>
                 </div>
