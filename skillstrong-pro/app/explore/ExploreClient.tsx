@@ -262,19 +262,17 @@ const handleExplorePromptClick = (prompt: string) => {
               </div>
               <div className="bg-white p-4 rounded-lg border">
                 <h3 className="font-semibold mb-3">{exploreContent[activeExploreTab].title}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {exploreContent[activeExploreTab].prompts.map((prompt, idx) => {
-                    const slug = careerSlugMap[prompt.toLowerCase?.() ?? ''];
-                    if (slug) {
-                      return (
-                        <Link key={idx} href={`/careers/${slug}`} className="text-left p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors block">{prompt}</Link>
-                      );
-                    }
-                    return (
-                      <button key={idx} onClick={() => handleExplorePromptClick(prompt)} className="text-left p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors">{prompt}</button>
-                    );
-                  })}
-                </div>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+  {exploreContent[activeExploreTab].prompts.map((prompt, idx) => (
+    <button
+      key={idx}
+      onClick={() => handleExplorePromptClick(prompt)}
+      className="text-left p-3 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+    >
+      {prompt}
+    </button>
+  ))}
+</div>
               </div>
             </div>
           )}
