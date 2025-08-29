@@ -129,35 +129,18 @@ function ExploreClient({ user }: { user: User | null }) {
       prev.map((c) => (c.id === activeChatId ? { ...c, provider } : c)),
     );
   };
+// Visible "user bubble" right away (UI only)
+function pushUserBubble(text: string, id: string) {
+  setChatHistory(prev =>
+    prev.map(c =>
+      c.id === id ? { ...c, messages: [...c.messages, { role: 'user', content: text }] } : c
+    )
+  );
+}
 
-  // ALWAYS seed a category overview silently and flip to chat view right away
-  const handleExplorePromptClick = (prompt: string) => {
-    const p = (prompt || '').toLowerCase().trim();
-    const catMap: Record<string, string> = {
-      'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
-      'welder': 'Welder', 'welding programmer': 'Welding Programmer',
-      'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
-      'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
-      'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
-      'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain',
-    };
-    const canonical = catMap[p];
-
-    // Create or reuse a chat and SHOW chat view immediately
-    const id = activeChatId ?? createNewChat(true).id;
-    setActiveChatId(id);
-    setShowChatView(true);
-    setPriming(true);
-
-    // update URL so user sees they're in chat mode
-    try {
-      const newUrl = `${window.location.pathname}?chat=1`;
-      window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
-    } catch {}
-
-    // Build hidden overview seed if it's a known category; otherwise just send prompt
-    const overviewPrompt = canonical
-      ? `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
+// Build the hidden overview seed sent to the API
+function overviewSeed(canonical: string) {
+  return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
 
 🔎 **Overview** — what the role is and where they work.
 🧭 **Day-to-Day** — typical tasks.
@@ -168,48 +151,78 @@ function ExploreClient({ user }: { user: User | null }) {
 📜 **Helpful Certs** — 2–4 recognized credentials.
 🚀 **Next Steps** — 2–3 actions the student can take.
 
-Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`
-      : prompt;
+Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
+}
 
-    // SILENT send: do not add a visible user bubble
-    (async () => {
-      const provider = (chatHistory.find(c => c.id === id)?.provider) || 'openai';
-      setIsLoading(true);
-      try {
-        const body = {
-          messages: [...(chatHistory.find(c => c.id === id)?.messages || []), { role: 'user', content: overviewPrompt }],
-          provider,
-          location,
-        };
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        const data = await res.json();
 
-        const assistantMessage: Message = { role: 'assistant', content: data.answer };
-        setChatHistory(prev =>
-          prev.map(c =>
-            c.id === id
-              ? {
-                  ...c,
-                  title: c.messages.length === 0 && canonical ? `Overview: ${canonical}` : c.title,
-                  messages: [...c.messages, assistantMessage],
-                }
-              : c,
-          ),
-        );
-        setCurrentFollowUps((data.followups as string[]) || []);
-      } catch {
-        const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-        setChatHistory(prev => prev.map(c => (c.id === id ? { ...c, messages: [...c.messages, errorMessage] } : c)));
-      } finally {
-        setIsLoading(false);
-        setPriming(false);
-      }
-    })();
+// Click on category chips OR follow-up chips
+const handleExplorePromptClick = (prompt: string) => {
+  const p = (prompt || '').toLowerCase().trim();
+  const catMap: Record<string, string> = {
+    'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
+    'welder': 'Welder', 'welding programmer': 'Welding Programmer',
+    'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
+    'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
+    'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
+    'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain',
   };
+  const canonical = catMap[p];
+
+  // Create/reuse chat, flip to chat view immediately
+  const id = activeChatId ?? createNewChat(true).id;
+  setActiveChatId(id);
+  setShowChatView(true);
+  setPriming(true);
+
+  // Show a visible user bubble instantly
+  const visibleText = canonical ? `Explore: ${canonical}` : prompt;
+  pushUserBubble(visibleText, id);
+
+  // Update URL so it’s clear we’re in chat mode
+  try {
+    const newUrl = `${window.location.pathname}?chat=1`;
+    window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
+  } catch {}
+
+  // Build request body messages (include the visible bubble + hidden seed for categories)
+  (async () => {
+    const provider = (chatHistory.find(c => c.id === id)?.provider) || 'openai';
+    setIsLoading(true);
+    try {
+      const prior = chatHistory.find(c => c.id === id)?.messages || [];
+      const bodyMessages: Message[] = [...prior, { role: 'user', content: visibleText }];
+      if (canonical) bodyMessages.push({ role: 'user', content: overviewSeed(canonical) });
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: bodyMessages, provider, location }),
+      });
+      const data = await res.json();
+
+      const assistantMessage: Message = { role: 'assistant', content: data.answer };
+      setChatHistory(prev =>
+        prev.map(c =>
+          c.id === id
+            ? {
+                ...c,
+                title: c.messages.length <= 1 && canonical ? `Overview: ${canonical}` : c.title,
+                messages: [...c.messages, assistantMessage],
+              }
+            : c
+        )
+      );
+      setCurrentFollowUps((data.followups as string[]) || []);
+    } catch {
+      const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
+      setChatHistory(prev => prev.map(c => (c.id === id ? { ...c, messages: [...c.messages, errorMessage] } : c)));
+    } finally {
+      setIsLoading(false);
+      setPriming(false);
+    }
+  })();
+};
+
 
   async function sendMessage(
     text: string,
@@ -341,13 +354,21 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
           </h1>
           <div className="flex items-center gap-2">
             {/* New Chat still available in header */}
-            <button
-              onClick={() => { const nc = createNewChat(true); setShowChatView(true); router.replace('/explore?chat=1'); }}
-              className="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
-              title="Start a new chat"
-            >
-              <MessageSquarePlus className="w-4 h-4 mr-1" /> New Chat
-            </button>
+<button
+  onClick={() => {
+    const nc = createNewChat(true);
+    setActiveChatId(nc.id);
+    setShowChatView(false);    // go back to categories
+    setCurrentFollowUps([]);
+    setPriming(false);
+    router.replace('/explore'); // remove ?chat=1
+  }}
+  className="inline-flex items-center px-3 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+  title="Start a new chat"
+>
+  <MessageSquarePlus className="w-4 h-4 mr-1" /> New Chat
+</button>
+
             {activeChat && (
               <div className="flex items-center space-x-1 p-1 bg-gray-100 rounded-full">
                 <button
@@ -369,7 +390,7 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
 
         <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           {showChatView ? (
-            <div className="space-y-6 max-w-4xl mx-auto">
+<div className="space-y-4 max-w-3xl mx-auto">
               {/* If priming and no messages yet, show an immediate typing bubble */}
               {priming && (!activeChat || activeChat.messages.length === 0) && (
                 <div className="flex justify-start">
