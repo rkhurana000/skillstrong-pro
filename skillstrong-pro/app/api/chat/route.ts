@@ -14,10 +14,10 @@ export async function POST(req: Request) {
     }
     const { answer, followups } = await orchestrate({ messages, location: location ?? null });
     return NextResponse.json({ answer, followups });
-  } catch {
+  } catch (e) {
     return NextResponse.json(
       { answer: "Sorry, I couldn't process that.", followups: [] },
-      { status: 200 }
+      { status: 200 },
     );
   }
 }
