@@ -50,17 +50,16 @@ export default function HomePage() {
             <p className="max-w-4xl mx-auto text-lg md:text-xl text-slate-300">
               It’s more about robotics, artificial intelligence, and precision automation — less about repetitive tasks, manual machinery operation or inventory handling.
             </p>
-          <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-slate-300">
+            <p className="mt-3 max-w-3xl mx-auto text-base md:text-lg text-slate-300">
               These careers are in high demand, pay well. And the best part — no four-year degree needed!
-          </p>
-
-         </div>
+            </p>
+          </div>
 
           {/* Three info boxes */}
           <div className="grid gap-5 md:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
               <Compass className="h-8 w-8 text-cyan-400" />
-              <h3 className="mt-3 text-lg font-semibold">Learn more about these jobs ?</h3>
+              <h3 className="mt-3 text-lg font-semibold">Want to learn more about these jobs ?</h3>
               <p className="mt-2 text-slate-300">
                 The skills you will need, the kinds of companies that will hire you, the salaries they offer.
               </p>
