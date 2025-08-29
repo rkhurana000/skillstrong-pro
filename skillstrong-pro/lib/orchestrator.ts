@@ -1,84 +1,51 @@
 // /lib/orchestrator.ts
-// Orchestrates Coach Mach responses: domain guard → local LLM → optional Internet RAG → followups
-// NOTE: Wire your search provider in `searchWeb()` (SerpAPI, Bing, Tavily, etc.).
+// Coach Mach orchestration: domain guard → local answer → optional Internet RAG (Google CSE) → follow‑ups
+// Env: OPENAI_API_KEY, GOOGLE_CSE_ID, GOOGLE_CSE_KEY
 
 import OpenAI from 'openai';
+import { cseSearch, fetchReadable } from '@/lib/search';
 
 export type Role = 'system' | 'user' | 'assistant';
-export type FollowupAction =
-  | 'ask'            // send prompt back into chat
-  | 'openRoute'      // navigate to href
-  | 'openQuiz'       // /quiz
-  | 'jobsSearch'     // structured jobs/apprenticeship search prompt
-  | 'programsSearch' // structured training/program lookup
-  | 'salaryLookup'   // structured salary lookup
-  | 'setLocation';
-
 export interface Message { role: Role; content: string }
-export interface FollowupChip {
-  label: string;
-  action: FollowupAction;
-  href?: string;           // for openRoute
-  prompt?: string;         // for ask
-  params?: Record<string, any>;
-}
-
-export interface OrchestratorInput {
-  messages: Message[];
-  location?: string | null;
-}
-export interface OrchestratorOutput {
-  answer: string;
-  followups: FollowupChip[];
-}
+export interface OrchestratorInput { messages: Message[]; location?: string | null }
+export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const COACH_SYSTEM = `You are Coach Mach, an upbeat, practical AI career coach focused on modern manufacturing careers (CNC Machinist, Robotics Technician, Additive Manufacturing, Welding Programmer, Industrial Maintenance, Quality/QC, Logistics).
-- Stay strictly on manufacturing topics.
-- Be concise, specific, and actionable. Prefer bullet lists over long paragraphs.
-- When asked for programs or jobs, use the user's location if provided.
-- If you don't know, say so briefly and propose how to find out.
-- NEVER invent URLs or citations.`;
+const COACH_SYSTEM = `You are Coach Mach, an upbeat, practical AI career coach focused on modern manufacturing careers (CNC Machinist, Robotics Technician, Additive Manufacturing, Welding Programmer, Industrial Maintenance, Quality/QC, Logistics).\n- Stay strictly on manufacturing topics.\n- Be concise, specific, and actionable. Prefer bullet lists over long paragraphs.\n- When asked for programs or jobs, use the user's location if provided.\n- If you don't know, say so briefly and propose how to find out.\n- NEVER invent URLs or citations.`;
 
 export async function orchestrate(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const lastUser = [...input.messages].reverse().find(m => m.role === 'user')?.content ?? '';
 
-  // 1) Domain guard – keep it manufacturing-only
-  const inDomain = await domainGuard(lastUser);
-  if (!inDomain) {
-    const answer = `I focus on modern manufacturing careers. If you want, we can talk about roles like CNC Machinist, Robotics Technician, Welding Programmer, or Additive Manufacturing.`;
-    const followups: FollowupChip[] = defaultManufacturingChips();
-    return { answer, followups };
+  // 1) Domain guard – keep it manufacturing‑only
+  if (!(await domainGuard(lastUser))) {
+    return {
+      answer: `I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control. What would you like to dive into?`,
+      followups: defaultFollowups(),
+    };
   }
 
-  // 2) Local answer (primary)
+  // 2) Local answer first
   const local = await answerLocal(input.messages, input.location ?? undefined);
+  let finalAnswer = local;
 
-  // 3) Decide if we need Internet RAG (fresh facts, “latest”, local providers, etc.)
-  const needWeb = await needsInternetRag(lastUser, local.answer);
-  let finalAnswer = local.answer;
-  if (needWeb) {
-    const web = await internetRag(lastUser, input.location ?? undefined);
-    if (web) finalAnswer = web; // keep local if web returned null
+  // 3) Internet RAG if needed
+  if (await needsInternetRag(lastUser, local)) {
+    const web = await internetRagCSE(lastUser, input.location ?? undefined);
+    if (web) finalAnswer = web; // keep local if web fails
   }
 
-  // 4) Follow-ups, grounded in the answer & user location
+  // 4) Follow‑up prompts
   const followups = await generateFollowups(lastUser, finalAnswer, input.location ?? undefined);
-
   return { answer: finalAnswer, followups };
 }
 
 async function domainGuard(query: string): Promise<boolean> {
   if (!query.trim()) return true;
-  // quick heuristic first
-  const allowHints = /(manufact|cnc|robot|weld|machin|apprentice|factory|plant|quality|maintenance|mechatronic|additive|3d print)/i;
+  const allowHints = /(manufact|cnc|robot|weld|machin|apprentice|factory|plant|quality|maintenance|mechatronic|additive|3d\s*print|bls|o\*net|program|community\s*college|trade\s*school|career)/i;
   if (allowHints.test(query)) return true;
-
-  // cheap LLM classification backstop
   const res = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0,
+    model: 'gpt-4o-mini', temperature: 0,
     messages: [
       { role: 'system', content: 'Classify if the question is about MANUFACTURING careers/training/jobs. Answer only IN or OUT.' },
       { role: 'user', content: query },
@@ -88,23 +55,22 @@ async function domainGuard(query: string): Promise<boolean> {
   return out?.startsWith('IN') ?? false;
 }
 
-async function answerLocal(messages: Message[], location?: string) {
+async function answerLocal(messages: Message[], location?: string): Promise<string> {
   const msgs: Message[] = [{ role: 'system', content: COACH_SYSTEM }];
   if (location) msgs.push({ role: 'system', content: `User location: ${location}` });
   msgs.push(...messages);
   const res = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.3, messages: msgs });
-  return { answer: res.choices[0]?.message?.content ?? '' };
+  return res.choices[0]?.message?.content ?? '';
 }
 
-async function needsInternetRag(query: string, draftAnswer: string): Promise<boolean> {
-  const heuristics = /(latest|news|today|this year|202[3-9]|near me|nearby|in\\s+[A-Za-z]+|tuition|cost|programs|providers|openings|jobs|apprenticeships|statistics|market size|salary|median|BLS)/i;
+async function needsInternetRag(query: string, draft: string): Promise<boolean> {
+  const heuristics = /(latest|news|202[3-9]|today|near me|nearby|in\s+[A-Za-z]+|tuition|cost|programs|providers|community\s*college|openings|jobs|apprenticeships|statistics|market\s*size|salary|median|BLS|O-NET|OSHA|NIMS)/i;
   if (heuristics.test(query)) return true;
-  if (!draftAnswer || /i\\s+don\\'t\\s+know|not\\s+sure|no\\s+data/i.test(draftAnswer)) return true;
-  // cheap vote
+  if (!draft || /i\s+don\'t\s+know|not\s+sure|no\s+data/i.test(draft)) return true;
   const res = await openai.chat.completions.create({
     model: 'gpt-4o-mini', temperature: 0,
     messages: [
-      { role: 'system', content: 'Does this user question require up-to-date or external web info (programs, openings, current pay)? Answer YES or NO.' },
+      { role: 'system', content: 'Does this question require up-to-date web info (programs, openings, current pay, providers)? Answer YES or NO.' },
       { role: 'user', content: query },
     ],
   });
@@ -112,65 +78,72 @@ async function needsInternetRag(query: string, draftAnswer: string): Promise<boo
   return txt?.startsWith('Y') ?? false;
 }
 
-async function internetRag(query: string, location?: string): Promise<string | null> {
-  // TODO: Replace with your provider. Return concise answer (no invented links).
+/** Google CSE → fetch readable text → synthesize concise answer. */
+async function internetRagCSE(query: string, location?: string): Promise<string | null> {
   const q = location ? `${query} near ${location}` : query;
-  const results = await searchWeb(q); // -> [{title, url, snippet, content}]
-  if (!results.length) return null;
+  const res: any = await cseSearch(q);
+  const items: any[] = Array.isArray(res?.items) ? res.items : [];
+  if (!items.length) return null;
 
-  const context = results
-    .slice(0, 5)
-    .map((r, i) => `#${i + 1} ${r.title}\\n${r.snippet || ''}\\n${r.url}`)
-    .join('\\n\\n');
+  // Pull readable text from top sources
+  const pages = (await Promise.all(
+    items.slice(0, 3).map(async (it: any) => {
+      const url: string | undefined = it.url || it.link;
+      if (!url) return null;
+      try {
+        const doc = await fetchReadable(url); // expected: { title, url, text }
+        if (doc && doc.text) return doc;
+      } catch {}
+      return null;
+    })
+  )).filter(Boolean) as Array<{ title: string; url: string; text: string }>;
 
-  const res = await openai.chat.completions.create({
-    model: 'gpt-4o', temperature: 0.2,
-    messages: [
-      { role: 'system', content: `${COACH_SYSTEM}\\nYou are doing Internet RAG. Use only the provided results; do not invent URLs. If location is relevant, use it.` },
-      { role: 'user', content: `User question: ${q}\\n\\nTop results:\\n${context}\\n\\nGive a concise answer (bullets), then a short next-steps line.` },
-    ],
+  if (!pages.length) return null;
+
+  const context = pages
+    .map((p, i) => `[#${i + 1}] ${p.title}\n${p.text.slice(0, 3000)}\n${p.url}`)
+    .join('\n\n---\n\n');
+
+  const sys = `${COACH_SYSTEM}\nYou are doing Internet RAG. Use ONLY the provided context; do not invent URLs. Cite sources in-line as [#1], [#2] when useful.`;
+  const prompt = `User question: ${query}\nLocation: ${location || 'N/A'}\n\nRAG Context:\n${context}\n\nWrite a concise markdown answer (bullets welcome). End with one short Next Steps line.`;
+
+  const out = await openai.chat.completions.create({
+    model: 'gpt-4o', temperature: 0.25,
+    messages: [ { role: 'system', content: sys }, { role: 'user', content: prompt } ],
   });
-  return res.choices[0]?.message?.content ?? null;
+  return out.choices[0]?.message?.content ?? null;
 }
 
-async function generateFollowups(question: string, answer: string, location?: string) {
+async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
   try {
     const res = await openai.chat.completions.create({
       model: 'gpt-4o-mini', temperature: 0.2,
       messages: [
-        { role: 'system', content: 'Create 4-6 manufacturing-only follow-up chips in JSON. Keep them actionable and short (<= 48 chars). Use actions: ask, openRoute, openQuiz, jobsSearch, programsSearch, salaryLookup, setLocation.' },
+        { role: 'system', content: 'Generate 4-6 SHORT follow-up prompts (<= 48 chars each) strictly about manufacturing careers, training, salaries, or apprenticeships. Return ONLY a JSON array of strings.' },
         { role: 'user', content: JSON.stringify({ question, answer, location }) },
       ],
     });
     const raw = res.choices[0]?.message?.content ?? '[]';
-    const parsed = JSON.parse(raw) as FollowupChip[] | { followups: FollowupChip[] };
-    const list = Array.isArray(parsed) ? parsed : parsed.followups;
-    if (Array.isArray(list) && list.length) return sanitizeChips(list);
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) return sanitizeFollowups(arr);
   } catch {}
-  return defaultManufacturingChips();
+  return defaultFollowups();
 }
 
-function sanitizeChips(chips: FollowupChip[]): FollowupChip[] {
-  const allowed: FollowupAction[] = ['ask','openRoute','openQuiz','jobsSearch','programsSearch','salaryLookup','setLocation'];
-  return chips
-    .filter(c => c && typeof c.label === 'string' && allowed.includes(c.action))
-    .map(c => ({ ...c, label: c.label.slice(0, 48) }))
+function sanitizeFollowups(arr: any[]): string[] {
+  return arr
+    .filter((s) => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => s.trim().slice(0, 48))
     .slice(0, 6);
 }
 
-function defaultManufacturingChips(): FollowupChip[] {
+function defaultFollowups(): string[] {
   return [
-    { label: 'CNC Machinist path', action: 'openRoute', href: '/careers/cnc-machinist' },
-    { label: 'Robotics Tech roles', action: 'openRoute', href: '/careers/robotics-technician' },
-    { label: 'Find paid apprenticeships', action: 'jobsSearch', params: { type: 'apprenticeship' } },
-    { label: 'Local training programs', action: 'programsSearch' },
-    { label: 'Typical salaries (BLS)', action: 'salaryLookup' },
-    { label: 'Set my location', action: 'setLocation' },
+    'Find paid apprenticeships near me',
+    'Local training programs',
+    'Typical salaries (BLS)',
+    'Explore CNC Machinist',
+    'Explore Robotics Technician',
+    'Talk to Coach Mach',
   ];
-}
-
-// ----- Web search placeholder -----
-async function searchWeb(q: string) {
-  // Integrate with Bing/Serp/Tavily here and return normalized results.
-  return [];
 }
