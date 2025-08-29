@@ -78,7 +78,7 @@ async function needsInternetRag(query: string, draft: string): Promise<boolean> 
   return txt?.startsWith('Y') ?? false;
 }
 
-/** Google CSE → fetch readable text → synthesize concise answer. */
+/** Google CSE → fetch readable text → synthesize concise answer + Sources list. */
 async function internetRagCSE(query: string, location?: string): Promise<string | null> {
   const q = location ? `${query} near ${location}` : query;
   const res: any = await cseSearch(q);
@@ -91,7 +91,7 @@ async function internetRagCSE(query: string, location?: string): Promise<string 
       const url: string | undefined = it.url || it.link;
       if (!url) return null;
       try {
-        const doc = await fetchReadable(url); // expected: { title, url, text }
+        const doc = await fetchReadable(url); // { title, url, text }
         if (doc && doc.text) return doc;
       } catch {}
       return null;
@@ -104,15 +104,38 @@ async function internetRagCSE(query: string, location?: string): Promise<string 
     .map((p, i) => `[#${i + 1}] ${p.title}\n${p.text.slice(0, 3000)}\n${p.url}`)
     .join('\n\n---\n\n');
 
-  const sys = `${COACH_SYSTEM}\nYou are doing Internet RAG. Use ONLY the provided context; do not invent URLs. Cite sources in-line as [#1], [#2] when useful.`;
-  const prompt = `User question: ${query}\nLocation: ${location || 'N/A'}\n\nRAG Context:\n${context}\n\nWrite a concise markdown answer (bullets welcome). End with one short Next Steps line.`;
+  const sys = `${COACH_SYSTEM}
+You are doing Internet RAG. Use ONLY the provided context; do not invent URLs.
+Cite sources in-line as [#1], [#2] where helpful.`;
+
+  const prompt = `User question: ${query}
+Location: ${location || 'N/A'}
+
+RAG Context:
+${context}
+
+Write a concise markdown answer (bullets welcome). End with a short "Next steps" line.`;
 
   const out = await openai.chat.completions.create({
-    model: 'gpt-4o', temperature: 0.25,
-    messages: [ { role: 'system', content: sys }, { role: 'user', content: prompt } ],
+    model: 'gpt-4o',
+    temperature: 0.25,
+    messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
   });
-  return out.choices[0]?.message?.content ?? null;
+
+  const answer = out.choices[0]?.message?.content ?? '';
+
+  // Add clickable sources
+  const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+  const sourcesMd =
+    '\n\n**Sources**\n' +
+    pages
+      .map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`)
+      .join('\n');
+
+  return answer + sourcesMd;
 }
+
+
 
 async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
   try {
