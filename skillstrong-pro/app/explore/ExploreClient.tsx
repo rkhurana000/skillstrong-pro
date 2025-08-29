@@ -134,22 +134,29 @@ function ExploreClient({ user }: { user: User | null }) {
     setChatHistory((prev) => prev.map((c) => (c.id === activeChatId ? { ...c, provider } : c)));
   };
 
-  const handleExplorePromptClick = (prompt: string) => {
-    // Detect if the click is one of our career categories and seed an OVERVIEW prompt
-    const p = (prompt || '').toLowerCase().trim();
-    const catMap: Record<string, string> = {
-      'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
-      'welder': 'Welder', 'welding programmer': 'Welding Programmer',
-      'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
-      'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
-      'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
-      'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain'
-    };
-    const canonical = catMap[p];
+// Seed a hidden overview for known categories; otherwise just chat the text
+const handleExplorePromptClick = (prompt: string) => {
+  const p = (prompt || '').toLowerCase().trim();
+  const catMap: Record<string, string> = {
+    'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
+    'welder': 'Welder', 'welding programmer': 'Welding Programmer',
+    'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
+    'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
+    'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
+    'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain',
+  };
+  const canonical = catMap[p];
 
+  if (!canonical) {
+    // Not a category → normal visible message
     const id = activeChatId ?? createNewChat(true).id;
-    const overviewPrompt = canonical
-      ? `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
+    setTimeout(() => sendMessage(prompt, id), 0);
+    return;
+  }
+
+  // CATEGORY: send a SILENT seed so the template isn't shown in the UI
+  const id = activeChatId ?? createNewChat(true).id;
+  const overviewPrompt = `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
 
 🔎 **Overview** — what the role is and where they work.
 🧭 **Day-to-Day** — typical tasks.
@@ -160,11 +167,43 @@ function ExploreClient({ user }: { user: User | null }) {
 📜 **Helpful Certs** — 2–4 recognized credentials.
 🚀 **Next Steps** — 2–3 actions the student can take.
 
-Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`
-      : prompt;
+Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
 
-    setTimeout(() => sendMessage(overviewPrompt, id), 0);
-  };
+  // SILENT send (don’t add the user prompt bubble)
+  (async () => {
+    const provider = (chatHistory.find(c => c.id === id)?.provider) || 'openai';
+    setIsLoading(true);
+    try {
+      const body = {
+        messages: [...(chatHistory.find(c => c.id === id)?.messages || []), { role: 'user', content: overviewPrompt }],
+        provider,
+        location,
+      };
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+
+      const assistantMessage: Message = { role: 'assistant', content: data.answer };
+      setChatHistory(prev =>
+        prev.map(c =>
+          c.id === id
+            ? {
+                ...c,
+                title: c.messages.length === 0 ? `Overview: ${canonical}` : c.title,
+                messages: [...c.messages, assistantMessage],
+              }
+            : c
+        )
+      );
+      setCurrentFollowUps((data.followups as string[]) || []);
+    } catch {
+      const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
+      setChatHistory(prev => prev.map(c => (c.id === id ? { ...c, messages: [...c.messages, errorMessage] } : c)));
+    } finally {
+      setIsLoading(false);
+    }
+  })();
+};
+
 
   const sendMessage = async (
     text: string,
@@ -371,10 +410,13 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
                     }`}
                   >
                     <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''} prose-a:text-blue-600`}>
-                      <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}
-                    >{typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}</ReactMarkdown>
+<ReactMarkdown
+  remarkPlugins={[remarkGfm]}
+  components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}
+>
+  {typeof msg.content === 'string' ? msg.content : 'Error: Invalid message content.'}
+</ReactMarkdown>
+
                     </article>
                   </div>
                 </div>
