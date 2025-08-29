@@ -1,5 +1,9 @@
+// /app/api/chat/route.ts
 import { NextResponse } from 'next/server';
 import { orchestrate, type OrchestratorInput } from '@/lib/orchestrator';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   try {
@@ -8,12 +12,12 @@ export async function POST(req: Request) {
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
-    const out = await orchestrate({ messages, location: location ?? null });
-    return NextResponse.json(out);
+    const { answer, followups } = await orchestrate({ messages, location: location ?? null });
+    return NextResponse.json({ answer, followups });
   } catch {
     return NextResponse.json(
       { answer: "Sorry, I couldn't process that.", followups: [] },
-      { status: 200 },
+      { status: 200 }
     );
   }
 }
