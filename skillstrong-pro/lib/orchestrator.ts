@@ -98,16 +98,20 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
     const web = await internetRagCSE(lastUserRaw, input.location ?? undefined);
     if (web) finalAnswer = web; // keep local if web fails
   }
-
-  try {
-const featured = findFeaturedMatching(lastUserRaw, input.location ?? undefined);
-if (featured && featured.length) {
-const locTxt = input.location ? ` near ${input.location}` : '';
-const lines = featured.map((f) => `- **${f.title}** — ${f.org} (${f.location})`).join('\n');
-finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+try {
+  const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined);
+  if (Array.isArray(featured) && featured.length > 0) {
+    const locTxt = input.location ? ` near ${input.location}` : '';
+    const lines = featured
+      .map((f) => `- **${f.title}** — ${f.org} (${f.location})`)
+      .join('\n');
+    finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+  }
+} catch (err) {
+  // no-op: Featured is optional
 }
-} catch {}
-  const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
+
+   const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
   return { answer: finalAnswer, followups };
 }
 
