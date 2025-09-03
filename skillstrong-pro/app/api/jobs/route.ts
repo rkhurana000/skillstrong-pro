@@ -17,3 +17,4 @@ export async function POST(req: Request) {
   } catch (e) {
     return NextResponse.json({ error: 'Invalid job payload' }, { status: 400 });
   }
+}
