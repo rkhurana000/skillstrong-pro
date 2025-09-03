@@ -4,6 +4,7 @@
 
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
+import { findFeaturedMatching } from '@/lib/marketplace';
 
 export type Role = 'system' | 'user' | 'assistant';
 export interface Message { role: Role; content: string }
@@ -97,6 +98,14 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
     if (web) finalAnswer = web; // keep local if web fails
   }
 
+  try {
+const featured = findFeaturedMatching(lastUserRaw, input.location ?? undefined);
+if (featured && featured.length) {
+const locTxt = input.location ? ` near ${input.location}` : '';
+const lines = featured.map((f) => `- **${f.title}** — ${f.org} (${f.location})`).join('\n');
+finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+}
+} catch {}
   const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
   return { answer: finalAnswer, followups };
 }
