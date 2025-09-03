@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 import { findFeaturedMatching } from '@/lib/marketplace';
 
+
 export type Role = 'system' | 'user' | 'assistant';
 export interface Message { role: Role; content: string }
 export interface OrchestratorInput { messages: Message[]; location?: string | null }
