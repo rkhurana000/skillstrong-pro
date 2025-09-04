@@ -2,7 +2,25 @@
 
 import useSWR from 'swr';
 import { useMemo, useState } from 'react';
+
 const fetcher = (u: string) => fetch(u).then(r => r.json());
+
+// client-side fallback map (same as server)
+const CIP4_NAMES: Record<string, string> = {
+  '4805': 'Precision Metal Working (Welding & Machining)',
+  '1504': 'Electromechanical & Mechatronics Technology (Robotics)',
+  '1506': 'Industrial & Manufacturing Production Technologies',
+};
+
+// If something old still has "CIP ####", show a friendly label anyway.
+function friendlyTitleFromRow(p: any) {
+  const t: string = p.title || '';
+  if (!/^CIP\s+\d{4}/i.test(t)) return t;
+  const m = t.match(/CIP\s+(\d{4})/i) || p.description?.match(/\(CIP\s*(\d{4})\)/i);
+  if (!m) return t;
+  const label = CIP4_NAMES[m[1]];
+  return label ? `${label} — Certificate / AAS` : t;
+}
 
 export default function ProgramsPage() {
   const [filters, set] = useState({
@@ -28,9 +46,9 @@ export default function ProgramsPage() {
       <h1 className="text-2xl font-bold mb-4">Training Programs</h1>
 
       <div className="grid md:grid-cols-6 gap-3 p-4 border rounded-lg bg-white mb-6">
-        <input className="border rounded-md p-2 md:col-span-2" placeholder="Search program/school"
+        <input className="border rounded-md p-2 md:col-span-2" placeholder="Search program or school"
           value={filters.q} onChange={e=>set(s=>({...s,q:e.target.value}))}/>
-        <input className="border rounded-md p-2" placeholder="Metro (e.g., Phoenix, AZ)"
+        <input className="border rounded-md p-2" placeholder="Metro (e.g., Columbus, OH)"
           value={filters.location} onChange={e=>set(s=>({...s,location:e.target.value}))}/>
         <select className="border rounded-md p-2" value={filters.delivery}
           onChange={e=>set(s=>({...s,delivery:e.target.value}))}>
@@ -48,25 +66,43 @@ export default function ProgramsPage() {
       </div>
 
       <div className="grid gap-4">
-        {programs.map((p: any) => (
-          <div key={p.id} className="p-4 border rounded-lg bg-white">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold">{p.title}</div>
-                <div className="text-sm text-gray-600">{p.school} • {p.location} • {p.delivery}</div>
+        {programs.map((p: any) => {
+          const title = friendlyTitleFromRow(p);
+          return (
+            <div key={p.id} className="p-4 border rounded-xl bg-white">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-lg font-semibold">{title}</div>
+                  <div className="text-sm text-gray-600">
+                    {p.school} • {p.location} • {p.delivery || 'in-person'}
+                  </div>
+                </div>
+                <div className="text-sm text-gray-700 whitespace-nowrap">
+                  {p.length_weeks ? <span className="inline-block px-2 py-1 rounded-full bg-gray-100">⏱ {p.length_weeks} wks</span> : null}
+                  &nbsp;
+                  {p.cost ? <span className="inline-block px-2 py-1 rounded-full bg-gray-100">💵 ${p.cost}</span> : null}
+                </div>
               </div>
-              <div className="text-sm">{p.length_weeks ? `${p.length_weeks} weeks` : ''}</div>
+
+              {p.description && <p className="text-sm mt-3 text-gray-700">{p.description}</p>}
+
+              <div className="flex gap-3 mt-3">
+                {p.url && (
+                  <a className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700" href={p.url} target="_blank">
+                    Program page
+                  </a>
+                )}
+                {p.external_url && (
+                  <a className="px-3 py-2 rounded-md bg-gray-100 hover:bg-gray-200" href={p.external_url} target="_blank">
+                    School website
+                  </a>
+                )}
+              </div>
             </div>
-            {p.description && <p className="text-sm mt-2">{p.description}</p>}
-            <div className="flex gap-3 mt-3">
-              {p.url && <a className="px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700" href={p.url} target="_blank">Program page</a>}
-              {p.external_url && <a className="px-3 py-2 rounded-md bg-gray-100 hover:bg-gray-200" href={p.external_url} target="_blank">School site</a>}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {programs.length === 0 && <div className="p-6 border rounded-lg bg-white">No programs match your filters.</div>}
       </div>
     </div>
   );
 }
-
