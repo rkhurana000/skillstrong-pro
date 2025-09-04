@@ -1,6 +1,6 @@
 // /app/api/ingest/programs/scorecard/route.ts
 import { NextResponse } from 'next/server';
-import { fetchSchoolsByCIP4 } from '@/lib/scorecard';
+import { fetchSchoolsByCIP4, friendlyProgramTitle } from '@/lib/scorecard';
 import { addProgram } from '@/lib/marketplace';
 
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/ingest/programs/scorecard
- * body: { cip4: "4805", states?: ["CA","AZ","MI"], pages?: 2, perPage?: 100, featured?: boolean }
+ * body: { cip4: "4805", states?: ["CA","AZ",...], pages?: 2, perPage?: 100, featured?: boolean }
  */
 export async function POST(req: Request) {
   try {
@@ -27,27 +27,4 @@ export async function POST(req: Request) {
     for (const st of targets) {
       const schools = await fetchSchoolsByCIP4({ cip4, state: st, perPage, pages });
       for (const s of schools) {
-        const title = s['latest.programs.cip_4_digit.title'] || `CIP ${cip4}`;
-        const program = await addProgram({
-          school: s['school.name'],
-          title,
-          location: `${s['school.city']}, ${s['school.state']}`,
-          delivery: 'in-person',
-          description: `Program listed via College Scorecard (CIP ${cip4}).`,
-          length_weeks: null,
-          cost: null,
-          certs: [],
-          start_date: null,
-          url: null,
-          external_url: null,
-          featured,
-        });
-        created.push(program);
-      }
-    }
-
-    return NextResponse.json({ ok: true, count: created.length, programs: created });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message || 'Scorecard ingest failed' }, { status: 500 });
-  }
-}
+        const apiTitle = s['latest.programs.cip
