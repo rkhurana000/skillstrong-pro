@@ -23,8 +23,13 @@ export default function HomePage() {
         <div className="pointer-events-none absolute top-24 -left-24 h-72 w-72 rounded-full bg-fuchsia-600/20 blur-3xl" />
         <div className="pointer-events-none absolute top-48 -right-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
 <div className="flex gap-3 mt-4">
-  <a href="/jobs" className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">Browse Jobs</a>
-  <a href="/programs" className="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200">Find Programs</a>
+ <a href="/jobs" className="px-5 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700">
+  Browse Jobs
+</a>
+
+<a href="/programs" className="px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
+  Find Programs
+</a>
 </div>
         <div className="relative container mx-auto px-6 lg:px-8 py-20 md:py-28 text-center">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
