@@ -26,83 +26,71 @@ const CIP_TITLES: Record<string, string> = {
   "1507": "Quality Control Technology / Technician",
 };
 
-async function getPrograms(): Promise<Program[]> {
-  // Require a URL so every card has a “Program page” link.
-  // Use a relative URL; Next.js will resolve it at request time.
-  const res = await fetch(`/api/programs?requireUrl=1`, {
-    cache: "no-store",
-    next: { revalidate: 0 },
+async function getPrograms(search: string) {
+  const res = await fetch(`/api/programs${search ? `?${search}` : ''}`, {
+    cache: 'no-store',
   });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.programs || []) as Program[];
+  if (!res.ok) {
+    // keep the page alive with an empty list; show nothing fatal
+    return { programs: [] as Program[], error: await res.text() };
+  }
+  return (await res.json()) as { programs: Program[] };
 }
 
-export default async function ProgramsPage() {
-  const programs = await getPrograms();
+export default async function ProgramsPage({ searchParams }: { searchParams: Record<string, string> }) {
+  const search = new URLSearchParams(searchParams as any).toString();
+  const { programs } = await getPrograms(search);
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">Training Programs</h1>
-        <p className="text-gray-600 mt-1">
-          Find hands-on manufacturing training near you — certificates, AAS, bootcamps, and apprenticeships.
-        </p>
-      </header>
+      <h1 className="text-3xl font-bold mb-6">Training Programs</h1>
 
-      {programs.length === 0 ? (
-        <div className="rounded-xl border bg-white p-6 text-gray-600">
-          No programs found yet. Try again later.
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {programs.map((p: Program) => {
-            const where = [p.city, p.state].filter(Boolean).join(", ");
-            const modality = p.delivery || "in-person";
+      <div className="grid gap-4">
+        {programs.map((p: Program) => {
+          const where = [p.city, p.state].filter(Boolean).join(', ');
+          const modality = p.delivery || 'in-person';
+          const subject =
+            (p.cip4 && CIP_NAMES[p.cip4]) ||
+            p.title ||
+            'Manufacturing training program';
 
-            // Prefer real program title; fall back to CIP family name; then a generic label
-            const offered =
-              (p.title && p.title.trim()) ||
-              (p.cip4 && CIP_TITLES[p.cip4]) ||
-              "Manufacturing program";
+          // short, student-friendly snippet (2–3 lines)
+          const blurb =
+            (p.description || '')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 240) + (p.description && p.description.length > 240 ? '…' : '');
 
-            const raw = (p.description || "").replace(/\s+/g, " ").trim();
-            const short =
-              raw.length > 260 ? raw.slice(0, 257).replace(/\s+\S*$/, "") + "…" : raw;
+          return (
+            <div key={p.id} className="rounded-xl border p-5 bg-white">
+              <div className="text-2xl font-semibold">
+                {p.school || 'Unnamed school'}{' '}
+                {where ? <span className="text-gray-500">• {where}</span> : null}{' '}
+                {modality ? <span className="text-gray-500">• {modality}</span> : null}
+              </div>
 
-            return (
-              <article key={p.id} className="rounded-xl border bg-white p-5 shadow-sm">
-                {/* Title: college name */}
-                <h3 className="text-xl font-semibold">
-                  {p.school}
-                  {where ? <span className="text-gray-500"> • {where}</span> : null}
-                  <span className="text-gray-500"> • {modality}</span>
-                </h3>
+              <div className="mt-2 text-gray-700">
+                <div className="font-medium">Program offered: {subject}</div>
+                {blurb ? <p className="mt-2">{blurb}</p> : null}
+              </div>
 
-                {/* Program offered (student-friendly, no raw CIP numbers) */}
-                <p className="mt-2 text-gray-800">
-                  <span className="font-medium">Program offered:</span> {offered}
-                </p>
-
-                {/* Short description (2–3 lines) */}
-                {short && <p className="mt-2 text-gray-600 leading-relaxed">{short}</p>}
-
-                {/* CTA */}
-                {p.url && (
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-block mt-4 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-                  >
-                    Program page
-                  </a>
-                )}
-              </article>
-            );
-          })}
-        </div>
-      )}
+              {p.url ? (
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-block px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Program page
+                </a>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
       {/* Optional: quick links back to jobs or chat */}
       <div className="mt-8 flex gap-3">
