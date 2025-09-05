@@ -511,6 +511,7 @@ const handleExplorePromptClick = (prompt: string) => {
         </main>
 
         {/* Footer with follow-up chips is now ONLY visible in chat view AFTER there are messages */}
+
         {showChatView && activeChat && activeChat.messages.length > 0 && (
 <footer className="p-3 bg-white/80 backdrop-blur-sm border-t">
             <div className="w-full max-w-3xl mx-auto">
