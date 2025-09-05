@@ -325,15 +325,23 @@ const handleExplorePromptClick = (prompt: string) => {
   useEffect(() => {
     const newChatFlag = searchParams.get('newChat');
     const chatMode = searchParams.get('chat');
-    if (newChatFlag || chatMode === '1') {
-      const nc = createNewChat(true);
-      setActiveChatId(nc.id);
-      setShowChatView(true);
-      // clean URL
-      const newUrl = window.location.pathname + (newChatFlag ? '' : '?chat=1');
-      window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
-      return;
-    }
+
+ if (newChatFlag) {
+    // Create a clean chat session but KEEP the explore chips visible
+    const nc = createNewChat(true);
+    setActiveChatId(nc.id);
+    setShowChatView(false);  // << important: show the chips
+    const url = window.location.pathname; // remove query noise
+    window.history.replaceState({ ...window.history.state, as: url, url }, '', url);
+    return;
+  }
+
+  if (chatMode === '1') {
+    const nc = createNewChat(true);
+    setActiveChatId(nc.id);
+    setShowChatView(true);   // explicit chat view (used when a chip is clicked)
+    return;
+  }
 
     try {
       const saved = localStorage.getItem('skillstrong-chathistory');
