@@ -62,48 +62,45 @@ export default function ProgramsPage() {
       </div>
 
       <div className="grid gap-4">
-        {programs.map((p: any) => (
-          <div key={p.id} className="p-5 border rounded-2xl bg-white">
-            {/* Title: College name • City, ST • delivery */}
-            <div className="text-xl font-semibold">
-              {p.school}
-              {p.location ? <span className="text-gray-600 font-normal"> • {p.location}</span> : null}
-              <span className="text-gray-600 font-normal"> • {p.delivery || "in-person"}</span>
-            </div>
+{programs.map(p => {
+  const where = [p.city, p.state].filter(Boolean).join(', ');
+  const modality = p.delivery || 'in-person';
+  const offered = p.title || 'Manufacturing program';
+  const desc =
+    (p.description || '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Program listed via College Scorecard.';
 
-            {/* Program offered (1 line) */}
-            {p.title ? (
-              <div className="mt-1 text-gray-800">
-                <span className="font-medium">Program offered:</span> {p.title}
-              </div>
-            ) : null}
+  const link =
+    p.url ||
+    `https://www.google.com/search?q=${encodeURIComponent(`${p.school} ${offered} site:.edu`)}`;
 
-            {/* Description (2 lines max) */}
-            {p.description ? (
-              <p className="mt-3 text-gray-700 line-clamp-2">
-                {p.description}
-              </p>
-            ) : null}
+  return (
+    <div key={p.id} className="rounded-xl border bg-white p-6 shadow-sm">
+      <h3 className="text-xl font-semibold">{p.school}</h3>
+      <p className="text-gray-600 mt-1">{where} • {modality}</p>
 
-            {/* Actions */}
-            <div className="mt-4 flex gap-3">
-              <a
-                className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                href={p.url} target="_blank" rel="noreferrer"
-              >
-                Program page
-              </a>
-              {p.external_url && (
-                <a
-                  className="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200"
-                  href={p.external_url} target="_blank" rel="noreferrer"
-                >
-                  School website
-                </a>
-              )}
-            </div>
-          </div>
-        ))}
+      <p className="mt-3 font-medium">
+        <span className="text-gray-500">Program offered:</span> {offered}
+      </p>
+
+      <p className="mt-2 text-gray-700 line-clamp-3">
+        {desc}
+      </p>
+
+      <div className="mt-4">
+        <a
+          href={link}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+        >
+          Program page
+        </a>
+      </div>
+    </div>
+  );
+})}
 
         {programs.length === 0 && (
           <div className="p-6 border rounded-lg bg-white">
