@@ -14,8 +14,9 @@ export async function GET(req: Request) {
     const lenMin = searchParams.get('lengthMin');
     const lenMax = searchParams.get('lengthMax');
     const costMax = searchParams.get('costMax');
-
+    const requireUrl = url.searchParams.get("requireUrl") === "1";
     let query = supabaseAdmin.from('programs').select('*');
+    if (requireUrl) query = query.not("url", "is", null);
     if (q) query = query.or(`title.ilike.%${q}%,school.ilike.%${q}%,description.ilike.%${q}%`);
     if (location) query = query.ilike('location', `%${location}%`);
     if (delivery) query = query.eq('delivery', delivery);
