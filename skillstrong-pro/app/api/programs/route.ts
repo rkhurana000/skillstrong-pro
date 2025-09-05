@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url);
+    const url = new URL(req.url);                         // <-- add this
+    const searchParams = url.searchParams;
+
     const q = searchParams.get('q') || undefined;
     const location = searchParams.get('location') || undefined;
     const delivery = searchParams.get('delivery') || undefined; // in-person | online | hybrid
