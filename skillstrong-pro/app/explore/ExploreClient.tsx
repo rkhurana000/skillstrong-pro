@@ -107,6 +107,15 @@ function ExploreClient({ user }: { user: User | null }) {
     try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(limited)); } catch {}
   };
 
+// chat UI helpers
+const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
+const [showChatView, setShowChatView] = useState(false);
+const [priming, setPriming] = useState(false);
+
+const chatContainerRef = useRef<HTMLDivElement>(null);
+const kickoffRef = useRef(false);
+
+
   const createNewChat = (setActive = true): ChatSession => {
     const newChat: ChatSession = {
       id: `chat-${Date.now()}`,
@@ -130,6 +139,7 @@ function ExploreClient({ user }: { user: User | null }) {
     );
   };
 // Visible "user bubble" right away (UI only)
+
 function pushUserBubble(text: string, id: string) {
   setChatHistory(prev =>
     prev.map(c =>
@@ -138,7 +148,6 @@ function pushUserBubble(text: string, id: string) {
   );
 }
 
-// Build the hidden overview seed sent to the API
 function overviewSeed(canonical: string) {
   return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
 
@@ -161,36 +170,41 @@ const handleExplorePromptClick = (prompt: string) => {
   const catMap: Record<string, string> = {
     'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
     'welder': 'Welder', 'welding programmer': 'Welding Programmer',
-    'robotics technician': 'Robotics Technician', 'robotics technologist': 'Robotics Technologist', 'robotics': 'Robotics Technician',
-    'industrial maintenance': 'Industrial Maintenance', 'maintenance tech': 'Industrial Maintenance',
-    'quality control': 'Quality Control Specialist', 'quality': 'Quality Control Specialist',
-    'logistics & supply chain': 'Logistics & Supply Chain', 'logistics': 'Logistics & Supply Chain',
+    'robotics technician': 'Robotics Technician',
+    'robotics technologist': 'Robotics Technologist',
+    'robotics': 'Robotics Technician',
+    'industrial maintenance': 'Industrial Maintenance',
+    'maintenance tech': 'Industrial Maintenance',
+    'quality control': 'Quality Control Specialist',
+    'quality': 'Quality Control Specialist',
+    'logistics & supply chain': 'Logistics & Supply Chain',
+    'logistics': 'Logistics & Supply Chain',
   };
   const canonical = catMap[p];
 
-  // Create/reuse chat, flip to chat view immediately
+  // create/reuse a chat and go to chat view immediately
   const id = activeChatId ?? createNewChat(true).id;
   setActiveChatId(id);
   setShowChatView(true);
   setPriming(true);
 
-  // Show a visible user bubble instantly
+  // show a visible “user” bubble right away
   const visibleText = canonical ? `Explore: ${canonical}` : prompt;
   pushUserBubble(visibleText, id);
 
-  // Update URL so it’s clear we’re in chat mode
+  // bump URL into chat mode (no page change)
   try {
     const newUrl = `${window.location.pathname}?chat=1`;
     window.history.replaceState({ ...window.history.state, as: newUrl, url: newUrl }, '', newUrl);
   } catch {}
 
-  // Build request body messages (include the visible bubble + hidden seed for categories)
+  // send to API (include hidden overview seed if we recognize the category)
   (async () => {
     const provider = (chatHistory.find(c => c.id === id)?.provider) || 'openai';
     setIsLoading(true);
     try {
       const prior = chatHistory.find(c => c.id === id)?.messages || [];
-      const bodyMessages: Message[] = [...prior, { role: 'user', content: visibleText }];
+      const bodyMessages = [...prior, { role: 'user', content: visibleText }];
       if (canonical) bodyMessages.push({ role: 'user', content: overviewSeed(canonical) });
 
       const res = await fetch('/api/chat', {
@@ -214,14 +228,23 @@ const handleExplorePromptClick = (prompt: string) => {
       );
       setCurrentFollowUps((data.followups as string[]) || []);
     } catch {
-      const errorMessage: Message = { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." };
-      setChatHistory(prev => prev.map(c => (c.id === id ? { ...c, messages: [...c.messages, errorMessage] } : c)));
+      setChatHistory(prev =>
+        prev.map(c =>
+          c.id === id
+            ? {
+                ...c,
+                messages: [...c.messages, { role: 'assistant', content: "Sorry, I couldn't get a response. Please try again." }],
+              }
+            : c
+        )
+      );
     } finally {
       setIsLoading(false);
       setPriming(false);
     }
   })();
 };
+ 
 
 
   async function sendMessage(
@@ -339,14 +362,32 @@ const handleExplorePromptClick = (prompt: string) => {
   }, []);
 
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [activeChat?.messages, isLoading, priming]);
+  if (kickoffRef.current) return;
+
+  const raw = (searchParams.get('category') || '').toLowerCase().trim();
+  if (!raw) return;
+
+  const map: Record<string, string> = {
+    cnc: 'CNC Machinist',
+    robotics: 'Robotics Technician',
+    additive: 'Additive Manufacturing',
+    welding: 'Welding Programmer',
+    maint: 'Industrial Maintenance',
+    maintenance: 'Industrial Maintenance',
+    qc: 'Quality Control Specialist',
+    quality: 'Quality Control Specialist',
+    logistics: 'Logistics & Supply Chain',
+  };
+
+  const label = map[raw] || raw;
+  kickoffRef.current = true;
+  handleExplorePromptClick(label);
+}, [searchParams]);
+
 
   // ----------------- RENDER -----------------
   return (
-    <div className="flex h-screen bg-gray-100 text-gray-800">
+<div className="flex min-h-screen bg-gray-100 text-gray-800">
       <div className="flex flex-1 flex-col h-screen">
         <header className="p-4 border-b bg-white shadow-sm flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-800 flex items-center">
@@ -388,7 +429,7 @@ const handleExplorePromptClick = (prompt: string) => {
           </div>
         </header>
 
-        <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+<main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-5 lg:p-6">
           {showChatView ? (
 <div className="space-y-4 max-w-3xl mx-auto">
               {/* If priming and no messages yet, show an immediate typing bubble */}
@@ -471,7 +512,7 @@ const handleExplorePromptClick = (prompt: string) => {
 
         {/* Footer with follow-up chips is now ONLY visible in chat view AFTER there are messages */}
         {showChatView && activeChat && activeChat.messages.length > 0 && (
-          <footer className="p-4 bg-white/80 backdrop-blur-sm border-t">
+<footer className="p-3 bg-white/80 backdrop-blur-sm border-t">
             <div className="w-full max-w-3xl mx-auto">
               <div className="flex flex-wrap gap-2 justify-center mb-4">
                 {!isLoading &&
