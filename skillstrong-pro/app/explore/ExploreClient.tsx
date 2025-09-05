@@ -42,11 +42,11 @@ const exploreContent: Record<ExploreTab, { title: string; prompts: string[] }> =
     title: 'Explore by Job Category',
     prompts: [
       'CNC Machinist',
-      'Welder',
-      'Robotics Technician',
-      'Industrial Maintenance',
-      'Quality Control',
-      'Logistics & Supply Chain',
+      'Welding Programmer',
+      'Robotics Technologist',
+      'Maintenance Tech',
+      'Quality Control Specialist',
+      'Additive Manufacturing',
     ],
   },
   salary: {
