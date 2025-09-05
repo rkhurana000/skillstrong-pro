@@ -97,6 +97,7 @@ function ExploreClient({ user }: { user: User | null }) {
   const [inputValue, setInputValue] = useState('');
   const { location } = useLocation();
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const kickoffRef = useRef(false);
 
   const activeChat = chatHistory.find((c) => c.id === activeChatId) || null;
 
@@ -107,13 +108,6 @@ function ExploreClient({ user }: { user: User | null }) {
     try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(limited)); } catch {}
   };
 
-// chat UI helpers
-const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
-const [showChatView, setShowChatView] = useState(false);
-const [priming, setPriming] = useState(false);
-
-const chatContainerRef = useRef<HTMLDivElement>(null);
-const kickoffRef = useRef(false);
 
 
   const createNewChat = (setActive = true): ChatSession => {
