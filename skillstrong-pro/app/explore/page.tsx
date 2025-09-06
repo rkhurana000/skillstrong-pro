@@ -4,11 +4,11 @@ import { Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react
 
 const careers = [
   { icon: ScanSearch, title: 'CNC Machinist', href: '/careers/cnc-machinist' },
-  { icon: Flame, title: 'Welder', href: '/careers/welder' },
-  { icon: Cpu, title: 'Robotics Technician', href: '/careers/robotics-technician' },
-  { icon: Wrench, title: 'Industrial Maintenance', href: '/careers/industrial-maintenance' },
-  { icon: Handshake, title: 'Quality Control', href: '/careers/quality-control' },
-  { icon: Printer, title: 'Logistics & Supply Chain', href: '/careers/logistics' },
+  { icon: Flame, title: 'Welding Programmer', href: '/careers/welder' },
+  { icon: Cpu, title: 'Robotics Technologist', href: '/careers/robotics-technician' },
+  { icon: Wrench, title: 'Maintenance Tech', href: '/careers/industrial-maintenance' },
+  { icon: Handshake, title: 'Quality Control Specialist', href: '/careers/quality-control' },
+  { icon: Printer, title: 'Additive Manufacturing', href: '/careers/logistics' },
 ];
 
 export default function ExplorePage() {
