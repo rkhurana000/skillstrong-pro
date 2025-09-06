@@ -2,6 +2,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+// Make sure to import your new chat styles here
+import "@/app/explore/chat.css"; 
 import SiteHeader from "@/app/components/SiteHeader";
 import { LocationProvider } from "@/app/contexts/LocationContext";
 
