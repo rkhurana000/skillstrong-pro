@@ -89,8 +89,7 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Rec
         })}
       </div>
     </div>
-  );
-}
+
 
       {/* Optional: quick links back to jobs or chat */}
       <div className="mt-8 flex gap-3">
