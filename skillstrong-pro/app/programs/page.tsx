@@ -57,6 +57,20 @@ const METRO_CHIPS = [
   'Atlanta, GA',
   'Miami, FL',
 ];
+function safeHostname(u?: string | null) {
+  try {
+    if (!u) return null;
+    const h = new URL(u).hostname;
+    return h.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+function cityStateFromLocation(loc?: string | null) {
+  const [city = '', state = ''] = (loc || '').split(',').map(s => s.trim());
+  return { city, state };
+}
 
 export default function ProgramsPage() {
   const [q, setQ] = useState('');
