@@ -88,9 +88,13 @@ type SeedBody = {
   sourcesTable?: string;
 };
 
-function pick<T>(arr: T[]): T {
+
+// before: function pick<T>(list: T[]): T { ... }
+function pick<T>(list: Iterable<T>): T {
+  const arr = Array.from(list);
   return arr[Math.floor(Math.random() * arr.length)];
 }
+
 
 function cityFromMetro(metro: string): string {
   if (/bay area/i.test(metro)) return pick(BAY_AREA_CITIES);
