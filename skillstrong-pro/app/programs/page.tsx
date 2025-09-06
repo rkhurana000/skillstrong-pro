@@ -1,228 +1,260 @@
-// app/programs/page.tsx
-import Link from "next/link";
-import { headers } from "next/headers";
+// /app/programs/page.tsx
+'use client';
 
-type Delivery = "in-person" | "online" | "hybrid" | null;
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 
 type Program = {
   id: string;
   school: string;
-  title?: string | null;
-  description?: string | null;
+  title?: string;          // program title from source (optional)
   city?: string | null;
   state?: string | null;
-  metro?: string | null;           // include if you have it; harmless if null
-  delivery?: Delivery;
-  url?: string | null;
-  cip4?: string | null;            // e.g. "4805"
+  metro?: string | null;
+  delivery?: 'in-person' | 'online' | 'hybrid' | null;
+  lengthWeeks?: number | null;
   cost?: number | null;
-  length_weeks?: number | null;
+  cip?: string | null;     // e.g. "4805", "150702"
+  description?: string | null;
+  url?: string | null;
+  featured?: boolean | null;
 };
 
-// Friendly titles & short blurbs for common CIP families
-const CIP_TITLES: Record<string, string> = {
-  "4805": "Precision Metal Working (Welding & Machining)",
-  "4803": "Machine Tool Technology (CNC)",
-  "1504": "Robotics / Automation",
-  "1506": "Industrial Maintenance",
-  "1507": "Quality Control Technology / Technician",
-};
-const CIP_DESCRIPTIONS: Record<string, string> = {
-  "4805":
-    "Hands-on metal fabrication: cutting, forming, and welding. Learn shop safety, print reading, and setup for multi-process welds & machining.",
-  "4803":
-    "CNC setup & operation: read prints, CAM/G-code basics, tool selection, work offsets, and quality checks for precision parts.",
-  "1504":
-    "Robotics/automation fundamentals: PLCs, sensors, motion systems, safety, and troubleshooting automated cells.",
-  "1506":
-    "Keep factories running: mechanical, electrical, hydraulics, pneumatics, and PLC troubleshooting with preventive maintenance.",
-  "1507":
-    "Inspect & verify quality: GD&T, metrology, SPC/QA methods, and tools such as CMMs, micrometers, calipers, and gauges.",
+// CIP lookup for friendly text
+const CIP_INFO: Record<string, { name: string; blurb: string }> = {
+  // Precision Metal Working (Welding & Machining)
+  '4805': {
+    name: 'Precision Metal Working (Welding & Machining)',
+    blurb:
+      'Hands-on metalworking: read drawings, set up CNC/lathes, and produce precise parts.',
+  },
+  // Quality Control Technology/Technician
+  '150702': {
+    name: 'Quality Control Technology/Technician',
+    blurb:
+      'Use measurement tools, SPC, and QA methods to keep product quality high.',
+  },
 };
 
-const CIP_FALLBACK = "Manufacturing training program";
+const METRO_CHIPS = [
+  'Bay Area, CA',
+  'Los Angeles, CA',
+  'San Diego, CA',
+  'Phoenix, AZ',
+  'Tucson, AZ',
+  'Denver, CO',
+  'Dallas–Fort Worth, TX',
+  'Houston, TX',
+  'Austin, TX',
+  'Seattle, WA',
+  'Portland, OR',
+  'Chicago, IL',
+  'Detroit, MI',
+  'Columbus, OH',
+  'Boston, MA',
+  'New York City, NY',
+  'Philadelphia, PA',
+  'Atlanta, GA',
+  'Miami, FL',
+];
 
-export const dynamic = "force-dynamic";
+export default function ProgramsPage() {
+  const [q, setQ] = useState('');
+  const [metro, setMetro] = useState('');
+  const [delivery, setDelivery] = useState<'all' | 'in-person' | 'online' | 'hybrid'>('all');
+  const [minWeeks, setMinWeeks] = useState<string>('');
+  const [maxWeeks, setMaxWeeks] = useState<string>('');
+  const [maxCost, setMaxCost] = useState<string>('');
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [count, setCount] = useState<number | null>(null);
 
-function baseUrl() {
-  const h = headers();
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  return `${proto}://${host}`;
-}
+  const queryString = useMemo(() => {
+    const p = new URLSearchParams();
+    if (q) p.set('q', q);
+    if (metro) p.set('metro', metro);
+    if (delivery !== 'all') p.set('delivery', delivery);
+    if (minWeeks) p.set('lengthMin', minWeeks);
+    if (maxWeeks) p.set('lengthMax', maxWeeks);
+    if (maxCost) p.set('costMax', maxCost);
+    // Only show rows that actually have a link
+    p.set('requireUrl', '1');
+    return p.toString();
+  }, [q, metro, delivery, minWeeks, maxWeeks, maxCost]);
 
-async function fetchPrograms(sp: Record<string, string | string[] | undefined>) {
-  const params = new URLSearchParams();
-
-  // persist known filters (all are optional)
-  const keep = ["q", "metro", "delivery", "lengthMin", "lengthMax", "costMax"] as const;
-  for (const key of keep) {
-    const v = sp[key];
-    if (typeof v === "string" && v.trim()) params.set(key, v.trim());
+  async function runSearch() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/programs?${queryString}`, { cache: 'no-store' });
+      const data = await res.json();
+      setPrograms(Array.isArray(data.programs) ? data.programs : []);
+      setCount(typeof data.count === 'number' ? data.count : null);
+    } catch {
+      setPrograms([]);
+      setCount(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  // only show programs that have a link
-  params.set("requireUrl", "1");
-
-  const res = await fetch(`${baseUrl()}/api/programs?${params.toString()}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return { programs: [] as Program[] };
-
-  return (await res.json()) as { programs: Program[] };
-}
-
-export default async function ProgramsPage({
-  searchParams,
-}: {
-  searchParams: Record<string, string | string[] | undefined>;
-}) {
-  const { programs } = await fetchPrograms(searchParams);
-
-  const q = (searchParams.q as string) ?? "";
-  const metro = (searchParams.metro as string) ?? "";
-  const delivery = ((searchParams.delivery as string) ?? "all") as
-    | "all"
-    | "in-person"
-    | "online"
-    | "hybrid";
-  const lengthMin = (searchParams.lengthMin as string) ?? "";
-  const lengthMax = (searchParams.lengthMax as string) ?? "";
-  const costMax = (searchParams.costMax as string) ?? "";
+  useEffect(() => {
+    runSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <h1 className="text-3xl font-bold">Training Programs</h1>
+    <div className="max-w-5xl mx-auto px-4 py-6">
+      <h1 className="text-3xl font-extrabold mb-4">Training Programs</h1>
 
-      {/* --- Search & filters (server-side with GET) --- */}
-      <form method="GET" className="grid gap-3 md:grid-cols-6 bg-white border rounded-xl p-3">
+      {/* Controls */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
         <input
-          name="q"
-          defaultValue={q}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
           placeholder="Search program or school"
           className="md:col-span-2 border rounded-md px-3 py-2"
         />
         <input
-          name="metro"
-          defaultValue={metro}
-          placeholder="Metro (e.g., Columbus, OH)"
+          value={metro}
+          onChange={(e) => setMetro(e.target.value)}
+          placeholder="Metro (e.g., Phoenix, AZ)"
           className="border rounded-md px-3 py-2"
         />
         <select
-          name="delivery"
-          defaultValue={delivery}
+          value={delivery}
+          onChange={(e) => setDelivery(e.target.value as any)}
           className="border rounded-md px-3 py-2"
-          aria-label="Delivery"
         >
           <option value="all">Delivery (all)</option>
           <option value="in-person">In-person</option>
           <option value="online">Online</option>
           <option value="hybrid">Hybrid</option>
         </select>
+        <div className="flex gap-2">
+          <input
+            value={minWeeks}
+            onChange={(e) => setMinWeeks(e.target.value)}
+            placeholder="Min weeks"
+            className="w-full border rounded-md px-3 py-2"
+          />
+          <input
+            value={maxWeeks}
+            onChange={(e) => setMaxWeeks(e.target.value)}
+            placeholder="Max weeks"
+            className="w-full border rounded-md px-3 py-2"
+          />
+        </div>
         <input
-          name="lengthMin"
-          defaultValue={lengthMin}
-          inputMode="numeric"
-          placeholder="Min weeks"
-          className="border rounded-md px-3 py-2"
-        />
-        <input
-          name="lengthMax"
-          defaultValue={lengthMax}
-          inputMode="numeric"
-          placeholder="Max weeks"
-          className="border rounded-md px-3 py-2"
-        />
-        <input
-          name="costMax"
-          defaultValue={costMax}
-          inputMode="numeric"
+          value={maxCost}
+          onChange={(e) => setMaxCost(e.target.value)}
           placeholder="Max cost"
           className="border rounded-md px-3 py-2 md:col-span-1"
         />
-        <div className="md:col-span-6 flex items-center gap-2">
-          <button className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">
-            Search
-          </button>
-          <Link
-            href="/programs"
-            className="px-4 py-2 rounded-md border hover:bg-gray-50"
-          >
-            Clear
-          </Link>
-          <span className="ml-auto text-sm text-gray-500">
-            {programs.length.toLocaleString()} result{programs.length === 1 ? "" : "s"}
-          </span>
-        </div>
-      </form>
+      </div>
 
-      {/* --- Results --- */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={runSearch}
+          className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+          disabled={loading}
+        >
+          {loading ? 'Searching…' : 'Search'}
+        </button>
+        <button
+          onClick={() => {
+            setQ(''); setMetro(''); setDelivery('all');
+            setMinWeeks(''); setMaxWeeks(''); setMaxCost('');
+            setTimeout(runSearch, 0);
+          }}
+          className="px-4 py-2 rounded-md border"
+          disabled={loading}
+        >
+          Clear
+        </button>
+        <div className="ml-auto text-sm text-gray-500">
+          {typeof count === 'number' ? `${count} results` : ''}
+        </div>
+      </div>
+
+      {/* Metro chips */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        {METRO_CHIPS.map((m) => (
+          <button
+            key={m}
+            onClick={() => { setMetro(m); setTimeout(runSearch, 0); }}
+            className={`px-3 py-1 rounded-full border text-sm ${
+              metro === m ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50'
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      {/* Results */}
       <div className="grid gap-4">
         {programs.map((p) => {
-          const where = [p.city, p.state].filter(Boolean).join(", ");
-          const modality = p.delivery ?? "in-person";
-          const subject =
-            (p.title && p.title.trim()) || (p.cip4 && CIP_TITLES[p.cip4]) || CIP_FALLBACK;
+          // Friendly fields
+          const place = [p.city, p.state].filter(Boolean).join(', ');
+          const modality = p.delivery || 'in-person';
+          const cipKey =
+            (p.cip || '')
+              .trim()
+              .replace(/\D/g, '')
+              .slice(0, 6) || '';
+          const cipShort = cipKey.slice(0, 4); // “4805” bucket
+          const cipInfo =
+            CIP_INFO[cipKey] || CIP_INFO[cipShort] || null;
 
-          // Prefer a human description; fall back to a CIP blurb
-          const raw = (p.description ?? "").replace(/\s+/g, " ").trim();
-          const fallback = (p.cip4 && CIP_DESCRIPTIONS[p.cip4]) || "";
-          const blurbSrc = raw || fallback;
+          const programName =
+            cipInfo?.name || p.title || 'Manufacturing Program';
+
           const blurb =
-            blurbSrc.slice(0, 220) + (blurbSrc.length > 220 ? "…" : "");
+            (p.description && p.description.trim() ? p.description.trim() : cipInfo?.blurb) ||
+            'Hands-on training for modern manufacturing careers.';
+
+          const metaBits: string[] = [];
+          if (place) metaBits.push(place);
+          if (p.metro) metaBits.push(p.metro);
+          metaBits.push(modality);
 
           return (
-            <article key={p.id} className="rounded-xl border p-5 bg-white">
-              {/* Headline: School */}
-              <h2 className="text-xl font-semibold">{p.school || "School"}</h2>
+            <article key={p.id} className="rounded-xl border p-4">
+              <h3 className="text-xl font-semibold">{p.school}</h3>
+              <div className="text-gray-600 mt-1">{metaBits.join(' • ')}</div>
 
-              {/* Line 2: City, ST • delivery • metro (if present) */}
-              <div className="mt-1 text-gray-600 text-sm">
-                {where && <span>{where}</span>}
-                {where && modality && <span> • </span>}
-                {modality && <span>{modality}</span>}
-                {p.metro && (
-                  <>
-                    {(where || modality) && <span> • </span>}
-                    <span>{p.metro}</span>
-                  </>
+              <div className="mt-3">
+                <div className="font-medium">Program:</div>
+                <div>{programName}</div>
+              </div>
+
+              <p className="text-gray-700 mt-2 line-clamp-3">{blurb}</p>
+
+              <div className="text-sm text-gray-500 mt-2 flex gap-4">
+                {typeof p.lengthWeeks === 'number' && p.lengthWeeks > 0 && (
+                  <span>Length: ~{p.lengthWeeks} weeks</span>
+                )}
+                {typeof p.cost === 'number' && p.cost > 0 && (
+                  <span>Est. cost: ${p.cost.toLocaleString()}</span>
                 )}
               </div>
 
-              {/* Program name & blurb */}
-              <div className="mt-3 text-gray-800">
-                <div className="font-medium">Program: {subject}</div>
-                {blurb && <p className="mt-1 text-gray-700">{blurb}</p>}
-
-                <div className="mt-2 text-sm text-gray-500 space-x-4">
-                  {typeof p.length_weeks === "number" && (
-                    <span>Length: ~{p.length_weeks} weeks</span>
-                  )}
-                  {typeof p.cost === "number" && (
-                    <span>Est. cost: ${p.cost.toLocaleString()}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Program website (hidden if missing; we already filtered server-side) */}
               {p.url && (
-                <a
-                  href={p.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 inline-block px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  Program page
-                </a>
+                <div className="mt-3">
+                  <Link
+                    href={p.url}
+                    target="_blank"
+                    className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Program page
+                  </Link>
+                </div>
               )}
             </article>
           );
         })}
-
-        {programs.length === 0 && (
-          <div className="rounded-lg border p-6 bg-white text-gray-600">
-            No programs matched your filters. Try clearing the search or expanding the range.
-          </div>
+        {!loading && programs.length === 0 && (
+          <div className="text-gray-500">No programs match these filters.</div>
         )}
       </div>
     </div>
