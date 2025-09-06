@@ -7,28 +7,48 @@ import Link from 'next/link';
 type Program = {
   id: string;
   school: string;
-  title?: string;          // program title from source (optional)
-  city?: string | null;
+  title?: string | null;
+  location?: string | null; // "City, ST"
+  city?: string | null;     // optional if your API already splits it
   state?: string | null;
   metro?: string | null;
   delivery?: 'in-person' | 'online' | 'hybrid' | null;
   lengthWeeks?: number | null;
   cost?: number | null;
-  cip?: string | null;     // e.g. "4805", "150702"
+  cip?: string | null;      // e.g. "4805", "150702"
   description?: string | null;
-  url?: string | null;
+  url?: string | null;      // program page we link to
+  external_url?: string | null; // fallback (school domain, catalog, etc.)
   featured?: boolean | null;
 };
 
-// CIP lookup for friendly text
+// Friendly CIP text (add more as you like)
 const CIP_INFO: Record<string, { name: string; blurb: string }> = {
-  // Precision Metal Working (Welding & Machining)
   '4805': {
     name: 'Precision Metal Working (Welding & Machining)',
     blurb:
-      'Hands-on metalworking: read drawings, set up CNC/lathes, and produce precise parts.',
+      'Hands-on metal fabrication: cutting, forming, welding, and safe shop practices with print reading and CNC setup.',
   },
-  // Quality Control Technology/Technician
+  '4803': {
+    name: 'CNC Machining Technology',
+    blurb:
+      'CNC setup & operation: read prints, CAM/G-code basics, tool selection, work offsets, and quality checks for precision parts.',
+  },
+  '1504': {
+    name: 'Robotics & Automation',
+    blurb:
+      'PLCs, sensors, motion systems, safety, and troubleshooting automated cells.',
+  },
+  '1506': {
+    name: 'Industrial Maintenance',
+    blurb:
+      'Mechanical, electrical, hydraulics, pneumatics, and PLC troubleshooting with preventive maintenance.',
+  },
+  '1507': {
+    name: 'Quality Control / QA',
+    blurb:
+      'GD&T, metrology, SPC and practical QA methods with common measurement tools.',
+  },
   '150702': {
     name: 'Quality Control Technology/Technician',
     blurb:
@@ -36,6 +56,7 @@ const CIP_INFO: Record<string, { name: string; blurb: string }> = {
   },
 };
 
+// Quick metro chips
 const METRO_CHIPS = [
   'Bay Area, CA',
   'Los Angeles, CA',
@@ -57,6 +78,7 @@ const METRO_CHIPS = [
   'Atlanta, GA',
   'Miami, FL',
 ];
+
 function safeHostname(u?: string | null) {
   try {
     if (!u) return null;
@@ -66,23 +88,27 @@ function safeHostname(u?: string | null) {
     return null;
   }
 }
-
 function cityStateFromLocation(loc?: string | null) {
   const [city = '', state = ''] = (loc || '').split(',').map(s => s.trim());
   return { city, state };
+}
+function cipKeyFor(p: Program) {
+  const k = (p.cip || '').trim().replace(/\D/g, '').slice(0, 6);
+  return { full: k, short: k.slice(0, 4) };
 }
 
 export default function ProgramsPage() {
   const [q, setQ] = useState('');
   const [metro, setMetro] = useState('');
   const [delivery, setDelivery] = useState<'all' | 'in-person' | 'online' | 'hybrid'>('all');
-  const [minWeeks, setMinWeeks] = useState<string>('');
-  const [maxWeeks, setMaxWeeks] = useState<string>('');
-  const [maxCost, setMaxCost] = useState<string>('');
+  const [minWeeks, setMinWeeks] = useState('');
+  const [maxWeeks, setMaxWeeks] = useState('');
+  const [maxCost, setMaxCost] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
   const [count, setCount] = useState<number | null>(null);
 
+  // Build query string for /api/programs
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
     if (q) p.set('q', q);
@@ -91,7 +117,7 @@ export default function ProgramsPage() {
     if (minWeeks) p.set('lengthMin', minWeeks);
     if (maxWeeks) p.set('lengthMax', maxWeeks);
     if (maxCost) p.set('costMax', maxCost);
-    // Only show rows that actually have a link
+    // important: only request rows that actually have a link
     p.set('requireUrl', '1');
     return p.toString();
   }, [q, metro, delivery, minWeeks, maxWeeks, maxCost]);
@@ -115,6 +141,47 @@ export default function ProgramsPage() {
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ---- transform for display (this is where your snippet lives) ----
+  const items = programs
+    .filter(p => !!(p.url || p.external_url)) // hide entries that don’t link anywhere
+    .map(p => {
+      // Derive city/state if your API only returns `location`
+      const locParts = (p.city && p.state)
+        ? { city: p.city, state: p.state }
+        : cityStateFromLocation(p.location);
+
+      const { full, short } = cipKeyFor(p);
+      const cipInfo = CIP_INFO[full] || CIP_INFO[short] || null;
+
+      // What we’ll show as program title and blurb
+      const programName = cipInfo?.name || p.title || 'Manufacturing Program';
+      const blurb =
+        (p.description && p.description.trim())
+          ? p.description.trim()
+          : (cipInfo?.blurb || 'Hands-on training for modern manufacturing careers.');
+
+      const link = p.url || p.external_url || null;
+      const domain = safeHostname(link || undefined);
+
+      const metaBits: string[] = [];
+      const place = [locParts.city, locParts.state].filter(Boolean).join(', ');
+      if (place) metaBits.push(place);
+      if (p.metro) metaBits.push(p.metro);
+      metaBits.push(p.delivery || 'in-person');
+
+      return {
+        id: p.id,
+        school: p.school,
+        programName,
+        blurb,
+        lengthWeeks: p.lengthWeeks,
+        cost: p.cost,
+        link,
+        domain,
+        meta: metaBits.join(' • '),
+      };
+    });
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
@@ -166,6 +233,7 @@ export default function ProgramsPage() {
         />
       </div>
 
+      {/* Actions */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={runSearch}
@@ -207,67 +275,42 @@ export default function ProgramsPage() {
 
       {/* Results */}
       <div className="grid gap-4">
-        {programs.map((p) => {
-          // Friendly fields
-          const place = [p.city, p.state].filter(Boolean).join(', ');
-          const modality = p.delivery || 'in-person';
-          const cipKey =
-            (p.cip || '')
-              .trim()
-              .replace(/\D/g, '')
-              .slice(0, 6) || '';
-          const cipShort = cipKey.slice(0, 4); // “4805” bucket
-          const cipInfo =
-            CIP_INFO[cipKey] || CIP_INFO[cipShort] || null;
+        {items.map((it) => (
+          <article key={it.id} className="rounded-xl border p-4">
+            <h3 className="text-xl font-semibold">{it.school}</h3>
+            <div className="text-gray-600 mt-1">{it.meta}</div>
 
-          const programName =
-            cipInfo?.name || p.title || 'Manufacturing Program';
+            <div className="mt-3">
+              <div className="font-medium">Program:</div>
+              <div>{it.programName}</div>
+            </div>
 
-          const blurb =
-            (p.description && p.description.trim() ? p.description.trim() : cipInfo?.blurb) ||
-            'Hands-on training for modern manufacturing careers.';
+            <p className="text-gray-700 mt-2 line-clamp-3">{it.blurb}</p>
 
-          const metaBits: string[] = [];
-          if (place) metaBits.push(place);
-          if (p.metro) metaBits.push(p.metro);
-          metaBits.push(modality);
-
-          return (
-            <article key={p.id} className="rounded-xl border p-4">
-              <h3 className="text-xl font-semibold">{p.school}</h3>
-              <div className="text-gray-600 mt-1">{metaBits.join(' • ')}</div>
-
-              <div className="mt-3">
-                <div className="font-medium">Program:</div>
-                <div>{programName}</div>
-              </div>
-
-              <p className="text-gray-700 mt-2 line-clamp-3">{blurb}</p>
-
-              <div className="text-sm text-gray-500 mt-2 flex gap-4">
-                {typeof p.lengthWeeks === 'number' && p.lengthWeeks > 0 && (
-                  <span>Length: ~{p.lengthWeeks} weeks</span>
-                )}
-                {typeof p.cost === 'number' && p.cost > 0 && (
-                  <span>Est. cost: ${p.cost.toLocaleString()}</span>
-                )}
-              </div>
-
-              {p.url && (
-                <div className="mt-3">
-                  <Link
-                    href={p.url}
-                    target="_blank"
-                    className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    Program page
-                  </Link>
-                </div>
+            <div className="text-sm text-gray-500 mt-2 flex gap-4">
+              {typeof it.lengthWeeks === 'number' && it.lengthWeeks > 0 && (
+                <span>Length: ~{it.lengthWeeks} weeks</span>
               )}
-            </article>
-          );
-        })}
-        {!loading && programs.length === 0 && (
+              {typeof it.cost === 'number' && it.cost > 0 && (
+                <span>Est. cost: ${it.cost.toLocaleString()}</span>
+              )}
+              {it.domain && <span>{it.domain}</span>}
+            </div>
+
+            {it.link && (
+              <div className="mt-3">
+                <Link
+                  href={it.link}
+                  target="_blank"
+                  className="inline-block px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Program page
+                </Link>
+              </div>
+            )}
+          </article>
+        ))}
+        {!loading && items.length === 0 && (
           <div className="text-gray-500">No programs match these filters.</div>
         )}
       </div>
