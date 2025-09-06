@@ -42,7 +42,7 @@ const BAY_AREA_CITIES = new Set(
     'san rafael', 'novato', 'petaluma', 'santa rosa', 'vallejo',
     'fairfield', 'vacaville', 'napa', 'san carlos', 'belmont',
     'foster city', 'san pablo', 'el cerrito', 'alameda',
-  ].map((s) => s.toLowerCase())
+  ].map((s) => s.toLowerCase());
 
 
 
