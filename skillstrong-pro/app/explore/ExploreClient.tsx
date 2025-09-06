@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { MessageSquarePlus, Send, Bot, Gem, MessageSquareText } from 'lucide-react';
+import { MessageSquarePlus, Send, Bot } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
@@ -77,11 +77,11 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
   // Effect to load a conversation from URL on initial page load
   useEffect(() => {
     const convoId = searchParams.get('id');
-    if (convoId && !hasLoadedFromUrl.current) {
+    if (convoId && !hasLoadedFromUrl.current && initialHistory.some(h => h.id === convoId)) {
       hasLoadedFromUrl.current = true;
-      handleHistoryClick(convoId, false); // Don't push router state again
+      handleHistoryClick(convoId, false);
     }
-  }, [searchParams]);
+  }, [searchParams, initialHistory]);
 
   const createNewChat = () => {
     setActiveConversation(null);
@@ -102,14 +102,12 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
       }
     } catch (error) {
       console.error(error);
-      // Handle error, e.g., show a notification
     } finally {
       setIsLoading(false);
     }
   };
   
   const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
-    // If it's the first message exchange, get a title
     if (convo.messages?.length === 2) {
       const titleRes = await fetch('/api/title', {
         method: 'POST',
@@ -130,7 +128,7 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || !user) {
-      if (!user) router.push('/account'); // Redirect to login if not signed in
+      if (!user) router.push('/account');
       return;
     }
 
@@ -142,7 +140,6 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
       ? [...activeConversation.messages, { role: 'user', content: text }]
       : [{ role: 'user', content: text }];
     
-    // Optimistically update the UI state
     const tempId = `temp-${Date.now()}`;
     setActiveConversation(prev => ({
       id: prev?.id || tempId,
@@ -159,9 +156,9 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
       });
       
       if (!res.ok) throw new Error('Failed to get response from AI');
-      const data = await res.json();
+      const data: { answer: string; followups: string[] } = await res.json();
       
-      const newMessages = [...messages, { role: 'assistant', content: data.answer }];
+      const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
       
       const savedConvoData = await saveConversation({
         id: activeConversation?.id === tempId ? undefined : activeConversation?.id,
@@ -174,12 +171,14 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
 
       setHistory(prev => {
         const existingIndex = prev.findIndex(h => h.id === finalConversation.id);
+        const newHistoryItem = { id: finalConversation.id, title: finalConversation.title, updated_at: finalConversation.updated_at };
+
         if (existingIndex > -1) {
           const updatedHistory = [...prev];
-          updatedHistory[existingIndex] = { id: finalConversation.id, title: finalConversation.title, updated_at: finalConversation.updated_at };
+          updatedHistory[existingIndex] = newHistoryItem;
           return updatedHistory.sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         }
-        return [{ id: finalConversation.id, title: finalConversation.title, updated_at: finalConversation.updated_at }, ...prev];
+        return [newHistoryItem, ...prev];
       });
 
       if (!searchParams.get('id')) {
@@ -189,7 +188,7 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
       setCurrentFollowUps(data.followups || []);
     } catch (error) {
       console.error(error);
-      const errorMsg = { role: 'assistant' as Role, content: "Sorry, an error occurred. Please try again." };
+      const errorMsg: Message = { role: 'assistant', content: "Sorry, an error occurred. Please try again." };
       setActiveConversation(prev => ({ ...prev!, messages: [...messages, errorMsg] }));
     } finally {
       setIsLoading(false);
