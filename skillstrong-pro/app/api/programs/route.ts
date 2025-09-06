@@ -17,7 +17,12 @@ export async function GET(req: NextRequest) {
   const costMax = parseInt(u.searchParams.get("costMax") || "");
   const requireUrl = u.searchParams.get("requireUrl") === "1";
 
-  let query = supabaseAdmin.from("programs").select("*");
+  // --- PAGINATION PARAMS ---
+  const page = parseInt(u.searchParams.get("page") || "1");
+  const limit = parseInt(u.searchParams.get("limit") || "20");
+  const offset = (page - 1) * limit;
+
+  let query = supabaseAdmin.from("programs").select("*", { count: 'exact' }); // Add count option
 
   if (requireUrl) query = query.not("url", "is", null);
   if (q) query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%,description.ilike.%${q}%`);
@@ -27,10 +32,16 @@ export async function GET(req: NextRequest) {
   if (!Number.isNaN(lenMax)) query = query.lte("length_weeks", lenMax);
   if (!Number.isNaN(costMax)) query = query.lte("cost", costMax);
 
+  // Add range for pagination
+  query = query.range(offset, offset + limit - 1);
+  
   // Featured first, then name
   query = query.order("featured", { ascending: false }).order("school", { ascending: true });
 
-  const { data, error } = await query.limit(500);
+  const { data, error, count } = await query; // Destructure count from the response
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ programs: data }, { status: 200 });
+  
+  // Return programs, total count, and current page
+  return NextResponse.json({ programs: data, count, page, limit }, { status: 200 });
 }
