@@ -36,7 +36,7 @@ function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 function detectCanonicalCategory(query: string): string | null {
-  const text = (query || '').toLowerCase();
+const text = (query || '').toLowerCase();
   for (const [canonical, syns] of Object.entries(CATEGORY_SYNONYMS)) {
     for (const s of syns) {
       const re = new RegExp(`\\b${escapeRegExp(s)}\\b`, 'i');
@@ -64,14 +64,16 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
 
 export async function orchestrate(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const lastUserRaw = [...input.messages].reverse().find(m => m.role === 'user')?.content ?? '';
+  const isFirstUserMessage = input.messages.filter(m => m.role === 'user').length === 1;
   const canonical = detectCanonicalCategory(lastUserRaw);
 
   // If the user typed a category (e.g., "cnc machinist"), silently transform the last message
   // into our overview seed (so the template isn't shown in the chat UI).
-  let messages: Message[] = input.messages;
+let messages: Message[] = input.messages;
   let overviewSeeded = false;
-  if (canonical) {
+  if (canonical && isFirstUserMessage) {
     const seed = buildOverviewPrompt(canonical);
+    // Overwrite the last user message with our detailed seed prompt
     messages = [...input.messages];
     messages[messages.length - 1] = { role: 'user', content: seed };
     overviewSeeded = true;
