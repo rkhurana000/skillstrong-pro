@@ -93,10 +93,10 @@ function cityStateFromLocation(loc?: string | null) {
   return { city, state };
 }
 function cipKeyFor(p: Program) {
-  const k = (p.cip || '').trim().replace(/\D/g, '').slice(0, 6);
+  // The fix is to wrap the value in String()
+  const k = (String(p.cip || '')).trim().replace(/\D/g, '').slice(0, 6);
   return { full: k, short: k.slice(0, 4) };
 }
-
 export default function ProgramsPage() {
   // --- STATE ---
   const [q, setQ] = useState('');
