@@ -257,16 +257,6 @@ const handleExplorePromptClick = (prompt: string) => {
     }
   })();
 };
- 
-
-
-sendMessage function with this updated version that can handle the displayText for a better user experience:
-
-TypeScript
-
-// /app/explore/ExploreClient.tsx
-
-// ... (keep everything above this function) ...
 
 async function sendMessage(
     text: string,
