@@ -1,30 +1,43 @@
-// /app/explore/page.tsx (Server Component Wrapper)
-import { createClient } from '@/utils/supabase/server';
-import ExploreClient from './ExploreClient';
-import { cookies } from 'next/headers';
+// /app/explore/page.tsx
+import Link from 'next/link';
+import { Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
 
-async function getHistory(supabase: any, userId: string) {
-    const { data, error } = await supabase
-    .from('conversations')
-    .select('id, title, updated_at, provider')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false });
-    
-    if (error) {
-        console.error("Error fetching history:", error);
-        return [];
-    }
-    return data;
-}
+const careers = [
+  { icon: ScanSearch, title: 'CNC Machinist', href: '/careers/cnc-machinist' },
+  { icon: Flame, title: 'Welder', href: '/careers/welder' },
+  { icon: Cpu, title: 'Robotics Technician', href: '/careers/robotics-technician' },
+  { icon: Wrench, title: 'Industrial Maintenance', href: '/careers/industrial-maintenance' },
+  { icon: Handshake, title: 'Quality Control', href: '/careers/quality-control' },
+  { icon: Printer, title: 'Logistics & Supply Chain', href: '/careers/logistics' },
+];
 
-export default async function ExplorePage() {
-    const supabase = createClient(); // This is the correct way
-  const { data: { user } } = await supabase.auth.getUser();
-
-  let history = [];
-  if (user) {
-    history = await getHistory(supabase, user.id);
-  }
-
-  return <ExploreClient user={user} history={history} />;
+export default function ExplorePage() {
+  return (
+    <div className="bg-gray-50 py-12">
+      <div className="container mx-auto max-w-4xl px-4">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-extrabold text-slate-900">Explore Career Pathways</h1>
+          <p className="mt-3 text-lg text-slate-600">
+            Click on a category to learn more about the role, skills required, and earning potential.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {careers.map(({ icon: Icon, title, href }) => (
+            <Link
+              key={title}
+              href={href}
+              className="group block rounded-lg border bg-white p-6 shadow-sm hover:shadow-md hover:border-blue-500 transition-all"
+            >
+              <div className="flex items-center gap-4">
+                <Icon className="h-10 w-10 text-blue-600" />
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
