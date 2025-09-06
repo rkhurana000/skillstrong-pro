@@ -343,7 +343,7 @@ async function sendMessage(
     } finally {
         setIsLoading(false);
     }
-};
+}
 
 
   // init — handle ?chat=1 / ?newChat=1 and saved history
