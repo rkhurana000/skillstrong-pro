@@ -159,28 +159,47 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
 
 
 // Click on category chips OR follow-up chips
-const handleExplorePromptClick = (prompt: string) => {
-  const p = (prompt || '').toLowerCase().trim();
-  const catMap: Record<string, string> = {
-    'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
-    'welder': 'Welder', 'welding programmer': 'Welding Programmer',
-    'robotics technician': 'Robotics Technician',
-    'robotics technologist': 'Robotics Technologist',
-    'robotics': 'Robotics Technician',
-    'industrial maintenance': 'Industrial Maintenance',
-    'maintenance tech': 'Industrial Maintenance',
-    'quality control': 'Quality Control Specialist',
-    'quality': 'Quality Control Specialist',
-    'logistics & supply chain': 'Logistics & Supply Chain',
-    'logistics': 'Logistics & Supply Chain',
-  };
-  const canonical = catMap[p];
 
-  // create/reuse a chat and go to chat view immediately
-  const id = activeChatId ?? createNewChat(true).id;
-  setActiveChatId(id);
-  setShowChatView(true);
-  setPriming(true);
+const handleExplorePromptClick = (prompt: string) => {
+    const isFirstMessageInChat = (activeChat?.messages.length || 0) === 0;
+
+    // Determine the canonical category for special handling on the first message
+    const p = (prompt || '').toLowerCase().trim();
+    const catMap: Record<string, string> = {
+      'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
+      'welder': 'Welder', 'welding programmer': 'Welding Programmer',
+      'robotics technician': 'Robotics Technician',
+      'robotics technologist': 'Robotics Technologist',
+      'robotics': 'Robotics Technician',
+      'industrial maintenance': 'Industrial Maintenance',
+      'maintenance tech': 'Industrial Maintenance',
+      'quality control': 'Quality Control Specialist',
+      'quality': 'Quality Control Specialist',
+      'logistics & supply chain': 'Logistics & Supply Chain',
+      'logistics': 'Logistics & Supply Chain',
+    };
+    const canonical = catMap[p];
+
+    // If it's the first message and a known category, use the special overview prompt.
+    // Otherwise, use the user's actual clicked prompt.
+    const messageToSend = isFirstMessageInChat && canonical
+      ? overviewSeed(canonical)
+      : prompt;
+
+    // Use a display text that is always user-friendly
+    const displayText = canonical && isFirstMessageInChat
+      ? `Explore: ${canonical}`
+      : prompt;
+
+    // Start a new chat if needed and send the message
+    const chatToUpdate = activeChatId ?? createNewChat(true).id;
+    setActiveChatId(chatToUpdate);
+    // setShowChatView(true);
+    // setPriming(true);
+    sendMessage(messageToSend, chatToUpdate, { displayText }); // Pass both message and display text
+};
+
+
 
   // show a visible “user” bubble right away
   const visibleText = canonical ? `Explore: ${canonical}` : prompt;
@@ -241,19 +260,30 @@ const handleExplorePromptClick = (prompt: string) => {
  
 
 
-  async function sendMessage(
+sendMessage function with this updated version that can handle the displayText for a better user experience:
+
+TypeScript
+
+// /app/explore/ExploreClient.tsx
+
+// ... (keep everything above this function) ...
+
+async function sendMessage(
     text: string,
     chatId?: string | undefined,
-    extraPayload: Record<string, unknown> = {},
+    extraPayload: Record<string, any> = {}, // Allow any extra data
     historyOverride?: ChatSession[],
-  ) {
+) {
     const targetChatId = chatId ?? activeChatId ?? undefined;
     if (!targetChatId) return;
 
     const provider =
       (historyOverride || chatHistory).find((c) => c.id === targetChatId)?.provider || 'openai';
 
-    const newUserMessage: Message = { role: 'user', content: text };
+    // Use the displayText for the user bubble, but send the real `text` to the API
+    const userMessageContent = extraPayload.displayText || text;
+    const newUserMessage: Message = { role: 'user', content: userMessageContent };
+
     setIsLoading(true);
     setShowChatView(true);
 
@@ -266,60 +296,65 @@ const handleExplorePromptClick = (prompt: string) => {
     );
 
     try {
-      const body = {
-        messages:
-          (historyOverride || chatHistory)
-            .find((c) => c.id === targetChatId)?.messages.concat(newUserMessage) || [newUserMessage],
-        provider,
-        location,
-        ...extraPayload,
-      };
+        const currentMessages = (historyOverride || chatHistory).find((c) => c.id === targetChatId)?.messages || [];
+        // The actual message sent to the backend includes the real prompt (`text`)
+        const backendMessage: Message = { role: 'user', content: text };
 
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!response.ok) throw new Error('API response was not ok');
-      const data = await response.json();
+        const body = {
+            messages: [...currentMessages, backendMessage],
+            provider,
+            location,
+        };
 
-      const assistantMessage: Message = { role: 'assistant', content: data.answer };
-      setChatHistory((prev) => {
-        let next = prev.map((c) =>
-          c.id === targetChatId ? { ...c, messages: [...c.messages, assistantMessage] } : c,
-        );
-        const isFirst = (next.find((c) => c.id === targetChatId)?.messages.length || 0) === 2;
-        if (isFirst) {
-          fetch('/api/title', {
+        const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }),
-          })
-            .then((r) => r.json())
-            .then((t) => {
-              setChatHistory((prev2) =>
-                prev2.map((c) => (c.id === targetChatId ? { ...c, title: t.title } : c)),
-              );
-            })
-            .catch(() => {});
-        }
-        try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(next)); } catch {}
-        return next;
-      });
+            body: JSON.stringify(body),
+        });
+        
+        if (!response.ok) throw new Error('API response was not ok');
+        const data = await response.json();
 
-      setCurrentFollowUps((data.followups as string[]) || []);
+        const assistantMessage: Message = { role: 'assistant', content: data.answer };
+        setChatHistory((prev) => {
+            let next = prev.map((c) =>
+                c.id === targetChatId ? { ...c, messages: [...c.messages, assistantMessage] } : c,
+            );
+            
+            // Generate a title for the first message exchange
+            const isFirst = (next.find((c) => c.id === targetChatId)?.messages.length || 0) <= 2;
+            if (isFirst) {
+                fetch('/api/title', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: [newUserMessage, assistantMessage] }),
+                })
+                .then((r) => r.json())
+                .then((t) => {
+                    setChatHistory((prev2) =>
+                        prev2.map((c) => (c.id === targetChatId ? { ...c, title: t.title || c.title } : c)),
+                    );
+                })
+                .catch(() => {});
+            }
+            try { localStorage.setItem('skillstrong-chathistory', JSON.stringify(next)); } catch {}
+            return next;
+        });
+
+        setCurrentFollowUps((data.followups as string[]) || []);
     } catch (e) {
-      const errorMessage: Message = {
-        role: 'assistant',
-        content: "Sorry, I couldn't get a response. Please try again.",
-      };
-      setChatHistory((prev) =>
-        prev.map((c) => (c.id === targetChatId ? { ...c, messages: [...c.messages, errorMessage] } : c)),
-      );
+        const errorMessage: Message = {
+            role: 'assistant',
+            content: "Sorry, I couldn't get a response. Please try again.",
+        };
+        setChatHistory((prev) =>
+            prev.map((c) => (c.id === targetChatId ? { ...c, messages: [...c.messages, errorMessage] } : c)),
+        );
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  }
+}
+
 
   // init — handle ?chat=1 / ?newChat=1 and saved history
   useEffect(() => {
@@ -433,7 +468,7 @@ const handleExplorePromptClick = (prompt: string) => {
 
 <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 md:p-5 lg:p-6">
           {showChatView ? (
-<div className="space-y-4 max-w-3xl mx-auto">
+<div className="space-y-4 max-w-5xl mx-auto">
               {/* If priming and no messages yet, show an immediate typing bubble */}
               {priming && (!activeChat || activeChat.messages.length === 0) && (
                 <div className="flex justify-start">
