@@ -91,6 +91,15 @@ function ExploreClient({ user }: { user: User | null }) {
 
   const activeChat = chatHistory.find((c) => c.id === activeChatId) || null;
 
+  // FIX #4: Auto-scrolling effect
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      setTimeout(() => {
+        chatContainerRef.current!.scrollTop = chatContainerRef.current!.scrollHeight;
+      }, 100);
+    }
+  }, [activeChat?.messages, isLoading]);
+
   const createNewChat = (setActive = true): ChatSession => {
     const newChat: ChatSession = {
       id: `chat-${Date.now()}`,
@@ -216,19 +225,20 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
   const handleExplorePromptClick = (prompt: string) => {
     const isFirstMessageInChat = (activeChat?.messages.length || 0) === 0;
 
+    // FIX #3: Corrected category mapping
     const p = (prompt || '').toLowerCase().trim();
     const catMap: Record<string, string> = {
-      'cnc machinist': 'CNC Machinist', 'cnc': 'CNC Machinist',
-      'welder': 'Welder', 'welding programmer': 'Welding Programmer',
-      'robotics technician': 'Robotics Technician',
+      'cnc machinist': 'CNC Machinist',
+      'welding programmer': 'Welding Programmer',
       'robotics technologist': 'Robotics Technologist',
-      'robotics': 'Robotics Technician',
-      'industrial maintenance': 'Industrial Maintenance',
       'maintenance tech': 'Industrial Maintenance',
-      'quality control': 'Quality Control Specialist',
+      'quality control specialist': 'Quality Control Specialist',
+      'additive manufacturing': 'Additive Manufacturing',
+      'cnc': 'CNC Machinist',
+      'welder': 'Welding Programmer',
+      'robotics': 'Robotics Technologist',
+      'maintenance': 'Industrial Maintenance',
       'quality': 'Quality Control Specialist',
-      'logistics & supply chain': 'Logistics & Supply Chain',
-      'logistics': 'Logistics & Supply Chain',
     };
     const canonical = catMap[p];
 
@@ -374,7 +384,7 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
                 </div>
               ))}
 
-              {isLoading && activeChat?.messages.length !== 0 && (
+              {isLoading && (
                 <div className="flex justify-start">
                   <div className="p-3 rounded-2xl bg-white text-gray-800 border rounded-bl-none">
                     <TypingIndicator />
@@ -425,22 +435,25 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
           )}
         </main>
 
-        {showChatView && activeChat && activeChat.messages.length > 0 && (
+        {/* FIX #1: Footer is now always visible in chat view */}
+        {showChatView && (
           <footer className="p-3 bg-white/80 backdrop-blur-sm border-t">
             <div className="w-full max-w-3xl mx-auto">
-              <div className="flex flex-wrap gap-2 justify-center mb-4">
-                {!isLoading &&
-                  currentFollowUps.map((prompt, index) => (
+              {currentFollowUps.length > 0 && !isLoading && (
+                <div className="flex flex-wrap gap-2 justify-center mb-4">
+                  {currentFollowUps.map((prompt, index) => (
                     <button
                       key={index}
                       onClick={() => handleExplorePromptClick(prompt)}
-                      className="group inline-flex items-center gap-2 px-3 py-2 rounded-full border text-sm text-blue-700 hover:bg-blue-50"
+                      // FIX #2: Smaller, more compact bubbles
+                      className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium text-blue-700 bg-white hover:bg-blue-50"
                     >
-                      <ArrowRight className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+                      <ArrowRight className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
                       {prompt}
                     </button>
                   ))}
-              </div>
+                </div>
+              )}
 
               <form
                 onSubmit={(e) => {
@@ -461,7 +474,7 @@ Keep it concise and friendly. Do **not** include local programs, openings, or li
                 />
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || !inputValue.trim()}
                   className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-40"
                 >
                   <Send className="w-5 h-5" />
