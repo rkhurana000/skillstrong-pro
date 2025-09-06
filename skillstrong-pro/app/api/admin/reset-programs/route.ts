@@ -28,7 +28,7 @@ function isAuthorized(req: NextRequest): boolean {
 
 const ALLOWED_DELIVERY = new Set(['in-person', 'online', 'hybrid']);
 
-/ Any city in this set will be normalized to the “Bay Area, CA” metro label.
+// Any city in this set will be normalized to the “Bay Area, CA” metro label.
 const BAY_AREA_CITIES = new Set(
   [
     'san francisco', 'oakland', 'berkeley', 'richmond',
