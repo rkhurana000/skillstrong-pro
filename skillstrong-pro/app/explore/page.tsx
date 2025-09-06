@@ -18,7 +18,7 @@ async function getHistory(supabase: any, userId: string) {
 }
 
 export default async function ExplorePage() {
-  const supabase = createClient(cookies()); // Pass cookies for server-side auth
+    const supabase = createClient(); // This is the correct way
   const { data: { user } } = await supabase.auth.getUser();
 
   let history = [];
