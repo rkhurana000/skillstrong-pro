@@ -1,4 +1,6 @@
+// app/programs/page.tsx
 import Link from "next/link";
+import { headers } from "next/headers";
 
 // ---------- Types ----------
 type Delivery = "in-person" | "online" | "hybrid" | null;
@@ -6,7 +8,7 @@ type Delivery = "in-person" | "online" | "hybrid" | null;
 type Program = {
   id: string;
   school: string;
-  title?: string | null;          // program title if available
+  title?: string | null;
   description?: string | null;
   city?: string | null;
   state?: string | null;
@@ -17,7 +19,7 @@ type Program = {
   length_weeks?: number | null;
 };
 
-// Friendly fallback titles by common CIP families you seed
+// Friendly titles by common CIP families
 const CIP_TITLES: Record<string, string> = {
   "4805": "Precision Metal Working (Welding & Machining)",
   "4803": "Machine Tool Technology (CNC)",
@@ -26,55 +28,85 @@ const CIP_TITLES: Record<string, string> = {
   "1507": "Quality Control Technology / Technician",
 };
 
-async function getPrograms(search: string) {
-  const res = await fetch(`/api/programs${search ? `?${search}` : ''}`, {
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    // keep the page alive with an empty list; show nothing fatal
-    return { programs: [] as Program[], error: await res.text() };
-  }
+const CIP_FALLBACK = "Manufacturing training program";
+
+export const dynamic = "force-dynamic";
+
+function makeBaseUrl() {
+  // Build an absolute URL for server-to-server fetches
+  const h = headers();
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  return `${proto}://${host}`;
+}
+
+async function getPrograms(searchParams: Record<string, string | string[] | undefined>) {
+  const search = new URLSearchParams(
+    Object.fromEntries(
+      Object.entries(searchParams).map(([k, v]) => [k, Array.isArray(v) ? v.join(",") : (v ?? "")])
+    )
+  ).toString();
+
+  const res = await fetch(
+    `${makeBaseUrl()}/api/programs${search ? `?${search}` : ""}`,
+    { cache: "no-store" }
+  );
+
+  if (!res.ok) return { programs: [] as Program[], error: await res.text() };
   return (await res.json()) as { programs: Program[] };
 }
 
-export default async function ProgramsPage({ searchParams }: { searchParams: Record<string, string> }) {
-  const search = new URLSearchParams(searchParams as any).toString();
-  const { programs } = await getPrograms(search);
+export default async function ProgramsPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const { programs } = await getPrograms(searchParams);
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Training Programs</h1>
+    <div className="max-w-6xl mx-auto p-6 space-y-6">
+      <h1 className="text-3xl font-bold">Training Programs</h1>
 
       <div className="grid gap-4">
-        {programs.map((p: Program) => {
-          const where = [p.city, p.state].filter(Boolean).join(', ');
-          const modality = p.delivery || 'in-person';
+        {programs.map((p) => {
+          const where = [p.city, p.state].filter(Boolean).join(", ");
+          const modality = p.delivery ?? "in-person";
           const subject =
-            (p.cip4 && CIP_NAMES[p.cip4]) ||
-            p.title ||
-            'Manufacturing training program';
+            (p.title && p.title.trim()) ||
+            (p.cip4 && CIP_TITLES[p.cip4]) ||
+            CIP_FALLBACK;
 
-          // short, student-friendly snippet (2–3 lines)
+          const raw = p.description ?? "";
           const blurb =
-            (p.description || '')
-              .replace(/\s+/g, ' ')
-              .trim()
-              .slice(0, 240) + (p.description && p.description.length > 240 ? '…' : '');
+            raw.replace(/\s+/g, " ").trim().slice(0, 240) +
+            (raw.length > 240 ? "…" : "");
 
           return (
             <div key={p.id} className="rounded-xl border p-5 bg-white">
+              {/* Title line: School • City, ST • modality */}
               <div className="text-2xl font-semibold">
-                {p.school || 'Unnamed school'}{' '}
-                {where ? <span className="text-gray-500">• {where}</span> : null}{' '}
-                {modality ? <span className="text-gray-500">• {modality}</span> : null}
+                {p.school || "School"}
+                {where && <span className="text-gray-500"> • {where}</span>}
+                {modality && <span className="text-gray-500"> • {modality}</span>}
               </div>
 
+              {/* Program offered + 2–3 line description */}
               <div className="mt-2 text-gray-700">
                 <div className="font-medium">Program offered: {subject}</div>
-                {blurb ? <p className="mt-2">{blurb}</p> : null}
+                {blurb && <p className="mt-2">{blurb}</p>}
+
+                <div className="mt-2 text-sm text-gray-500 space-x-4">
+                  {typeof p.length_weeks === "number" && (
+                    <span>Length: ~{p.length_weeks} weeks</span>
+                  )}
+                  {typeof p.cost === "number" && (
+                    <span>Est. cost: ${p.cost.toLocaleString()}</span>
+                  )}
+                </div>
               </div>
 
-              {p.url ? (
+              {/* Program link */}
+              {p.url && (
                 <a
                   href={p.url}
                   target="_blank"
@@ -83,16 +115,20 @@ export default async function ProgramsPage({ searchParams }: { searchParams: Rec
                 >
                   Program page
                 </a>
-              ) : null}
+              )}
             </div>
           );
         })}
+
+        {programs.length === 0 && (
+          <div className="rounded-lg border p-6 bg-white text-gray-600">
+            No programs found. Try adjusting filters or check back soon.
+          </div>
+        )}
       </div>
-    </div>
 
-
-      {/* Optional: quick links back to jobs or chat */}
-      <div className="mt-8 flex gap-3">
+      {/* Quick links */}
+      <div className="flex gap-3 pt-2">
         <Link
           href="/jobs"
           className="rounded-md border px-4 py-2 text-gray-800 hover:bg-gray-50"
