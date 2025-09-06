@@ -98,6 +98,7 @@ function cipKeyFor(p: Program) {
 }
 
 export default function ProgramsPage() {
+  // --- STATE ---
   const [q, setQ] = useState('');
   const [metro, setMetro] = useState('');
   const [delivery, setDelivery] = useState<'all' | 'in-person' | 'online' | 'hybrid'>('all');
@@ -106,7 +107,13 @@ export default function ProgramsPage() {
   const [maxCost, setMaxCost] = useState('');
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(false);
-  const [count, setCount] = useState<number | null>(null);
+  
+  // --- NEW PAGINATION STATE ---
+  const [count, setCount] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+
+  const totalPages = Math.ceil(count / limit);
 
   // Build query string for /api/programs
   const queryString = useMemo(() => {
@@ -117,10 +124,11 @@ export default function ProgramsPage() {
     if (minWeeks) p.set('lengthMin', minWeeks);
     if (maxWeeks) p.set('lengthMax', maxWeeks);
     if (maxCost) p.set('costMax', maxCost);
-    // important: only request rows that actually have a link
     p.set('requireUrl', '1');
+    p.set('page', String(currentPage)); // Add page to query
+    p.set('limit', String(limit));       // Add limit to query
     return p.toString();
-  }, [q, metro, delivery, minWeeks, maxWeeks, maxCost]);
+  }, [q, metro, delivery, minWeeks, maxWeeks, maxCost, currentPage, limit]);
 
   async function runSearch() {
     setLoading(true);
@@ -128,19 +136,29 @@ export default function ProgramsPage() {
       const res = await fetch(`/api/programs?${queryString}`, { cache: 'no-store' });
       const data = await res.json();
       setPrograms(Array.isArray(data.programs) ? data.programs : []);
-      setCount(typeof data.count === 'number' ? data.count : null);
+      setCount(typeof data.count === 'number' ? data.count : 0);
     } catch {
       setPrograms([]);
-      setCount(null);
+      setCount(0);
     } finally {
       setLoading(false);
     }
   }
 
+  // Refetch when currentPage changes
   useEffect(() => {
     runSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentPage]);
+
+  const handleSearchClick = () => {
+    // Reset to page 1 for new searches
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    } else {
+      runSearch();
+    }
+  };
 
   // ---- transform for display (this is where your snippet lives) ----
   const items = programs
@@ -236,7 +254,7 @@ export default function ProgramsPage() {
       {/* Actions */}
       <div className="flex gap-2 mb-4">
         <button
-          onClick={runSearch}
+          onClick={handleSearchClick} // Use new handler
           className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
           disabled={loading}
         >
@@ -314,6 +332,28 @@ export default function ProgramsPage() {
           <div className="text-gray-500">No programs match these filters.</div>
         )}
       </div>
+      {/* --- NEW PAGINATION CONTROLS --- */}
+      {totalPages > 1 && (
+        <div className="mt-8 flex justify-center items-center gap-4">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1 || loading}
+            className="px-4 py-2 rounded-md border disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-gray-600">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages || loading}
+            className="px-4 py-2 rounded-md border disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }
