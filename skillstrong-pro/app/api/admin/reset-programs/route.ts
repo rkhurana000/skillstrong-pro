@@ -302,12 +302,13 @@ export async function POST(req: NextRequest) {
     ), ...cipDescriptions };
 
     if (wipe) {
-      const { error: delErr } = await supabaseAdmin
-        .from('programs')
-        .delete()
-        .neq('id', ''); // matches all rows
-      if (delErr) throw delErr;
-    }
+  const { error: delErr } = await supabaseAdmin
+    .from('programs')
+    .delete()
+    .not('id', 'is', null);  // delete where id IS NOT NULL
+  if (delErr) throw delErr;
+}
+
 
     if (!SCORECARD_API_KEY) {
       return bad(
