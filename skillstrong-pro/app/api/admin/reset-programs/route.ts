@@ -21,7 +21,7 @@ const VERCL_PROTECTION_BYPASS = 'x-vercel-protection-bypass';
 /** Checks admin header against env */
 function isAuthorized(req: NextRequest): boolean {
   const incoming = req.headers.get(ADMIN_HEADER);
-  const expected = process.env.ADMIN_SECRET;
+  const expected = process.env.ADMIN_RESET_SECRET;
   return !!expected && incoming === expected;
 }
 
