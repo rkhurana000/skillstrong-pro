@@ -1,7 +1,7 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, 'useState', useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
