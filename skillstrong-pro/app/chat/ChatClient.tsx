@@ -24,11 +24,11 @@ type HistoryItem = Omit<Conversation, 'messages' | 'provider'>;
 
 const welcomeCareers = [
   { icon: ScanSearch, title: 'CNC Machinist' },
-  { icon: Flame, title: 'Welding Prgrammer' },
-  { icon: Cpu, title: 'Robotics Technologist' },
-  { icon: Wrench, title: 'Maintenance tech' },
-  { icon: Handshake, title: 'Quality Control Specialist' },
-  { icon: Printer, title: 'Additive Manufacturing' },
+  { icon: Flame, title: 'Welder' },
+  { icon: Cpu, title: 'Robotics Technician' },
+  { icon: Wrench, title: 'Industrial Maintenance' },
+  { icon: Handshake, title: 'Quality Control' },
+  { icon: Printer, title: 'Logistics & Supply Chain' },
 ];
 
 const TypingIndicator = () => (
@@ -74,7 +74,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         handleHistoryClick(convoId, false);
       } else if (category) {
         initialUrlHandled.current = true;
-        // THIS IS THE FIRST LOCATION TO CHANGE
         sendMessage(`Tell me about ${category}`);
       }
     }, [searchParams]);
@@ -100,7 +99,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           router.push(`${pathname}?id=${id}`);
         }
       } catch (error) {
-        console.error(error);
+        console.error("Error loading history:", error);
         createNewChat();
       } finally {
         setIsLoading(false);
@@ -108,22 +107,27 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     };
     
     const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
-      if (convo.messages?.length === 2 && (!convo.title || convo.title === 'New Conversation')) {
-        const titleRes = await fetch('/api/title', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: convo.messages }),
-        });
-        const { title } = await titleRes.json();
-        convo.title = title || 'New Conversation';
-      }
+        // Only generate title for brand new conversations
+        if (convo.messages?.length === 2 && !convo.id) {
+            const titleRes = await fetch('/api/title', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: convo.messages }),
+            });
+            const { title } = await titleRes.json();
+            convo.title = title || 'New Conversation';
+        }
 
-      const res = await fetch('/api/chat/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(convo),
-      });
-      return await res.json();
+        const res = await fetch('/api/chat/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(convo),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to save to DB');
+        }
+        return await res.json();
     };
 
     const sendMessage = async (text: string) => {
@@ -136,14 +140,15 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       setInputValue('');
       setCurrentFollowUps([]);
       
-      const messages: Message[] = activeConversation
-        ? [...activeConversation.messages, { role: 'user', content: text }]
-        : [{ role: 'user', content: text }];
+      const isNewConversation = !activeConversation;
+      const currentMessages: Message[] = activeConversation?.messages || [];
+      const newUserMessage: Message = { role: 'user', content: text };
+      const messages = [...currentMessages, newUserMessage];
       
-      const tempId = `temp-${Date.now()}`;
       const currentProvider = activeConversation?.provider || 'openai';
+      // Optimistically update UI
       setActiveConversation(prev => ({
-        id: prev?.id || tempId,
+        id: prev?.id || `temp-${Date.now()}`,
         title: prev?.title || 'New Conversation',
         messages,
         provider: currentProvider,
@@ -156,41 +161,45 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           body: JSON.stringify({ messages, location, provider: currentProvider }),
         });
         
-        if (!res.ok) throw new Error('Failed to get response from AI');
+        if (!res.ok) throw new Error('Failed to get AI response');
         const data: { answer: string; followups: string[] } = await res.json();
         
         const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
         
-        const savedConvoData = await saveConversation({
-          id: activeConversation?.id === tempId ? undefined : activeConversation?.id,
+        // Save the complete conversation and get back the confirmed data
+        const savedConvo = await saveConversation({
+          id: isNewConversation ? undefined : activeConversationId,
           messages: newMessages,
           provider: currentProvider,
-          title: activeConversation?.title
+          title: activeConversation?.title,
         });
         
-        const finalConversation: Conversation = { ...activeConversation!, ...savedConvoData, messages: newMessages };
-        setActiveConversation(finalConversation);
-
+        const finalConversationState: Conversation = {
+            ...activeConversation,
+            ...savedConvo,
+            messages: newMessages
+        };
+        setActiveConversation(finalConversationState);
+        
+        // Update history list state
         setHistory(prev => {
-          const newHistoryItem = { id: finalConversation.id, title: finalConversation.title, updated_at: finalConversation.updated_at };
-          const existingIndex = prev.findIndex(h => h.id === finalConversation.id);
-          let updatedHistory;
-          if (existingIndex > -1) {
-            updatedHistory = [...prev];
-            updatedHistory[existingIndex] = newHistoryItem;
-          } else {
-            updatedHistory = [newHistoryItem, ...prev];
-          }
-          return updatedHistory.sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+            const newHistoryItem = { id: finalConversationState.id, title: finalConversationState.title, updated_at: finalConversationState.updated_at };
+            const existingIndex = prev.findIndex(h => h.id === finalConversationState.id);
+            if (existingIndex > -1) {
+                const updated = [...prev];
+                updated[existingIndex] = newHistoryItem;
+                return updated.sort((a,b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+            }
+            return [newHistoryItem, ...prev].sort((a,b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
 
-        if (!searchParams.get('id') || searchParams.get('category')) {
-          router.push(`${pathname}?id=${finalConversation.id}`);
+        if (isNewConversation) {
+          router.push(`${pathname}?id=${finalConversationState.id}`);
         }
         
         setCurrentFollowUps(data.followups || []);
       } catch (error) {
-        console.error(error);
+        console.error("Error in sendMessage:", error);
         const errorMsg: Message = { role: 'assistant', content: "Sorry, an error occurred. Please try again." };
         setActiveConversation(prev => ({ ...prev!, messages: [...messages, errorMsg] }));
       } finally {
@@ -246,7 +255,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
                 <p>Select a category to begin exploring.</p>
                 <div className="explore-grid">
                   {welcomeCareers.map(({icon: Icon, title}) => (
-                    // THIS IS THE SECOND LOCATION TO CHANGE
                     <button key={title} onClick={() => sendMessage(`Tell me about ${title}`)} className="explore-btn" style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
                       <Icon className="h-8 w-8 text-blue-600" />
                       {title}
