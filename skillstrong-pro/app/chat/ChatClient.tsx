@@ -1,10 +1,10 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { MessageSquarePlus, Send, Bot, Gem } from 'lucide-react';
+import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
@@ -22,11 +22,14 @@ interface Conversation {
 }
 type HistoryItem = Omit<Conversation, 'messages' | 'provider'>;
 
-const explorePrompts = [
-  'Explore CNC Machinist careers',
-  'What does a Robotics Technologist do?',
-  'Find apprenticeships for Welders',
-  'Tell me about salaries for Maintenance Techs',
+// FIX #4: Define career categories for the new welcome screen
+const welcomeCareers = [
+  { icon: ScanSearch, title: 'CNC Machinist' },
+  { icon: Flame, title: 'Welder Programmer' },
+  { icon: Cpu, title: 'Robotics Technologist ' },
+  { icon: Wrench, title: 'Maintenance Tech' },
+  { icon: Handshake, title: 'Quality Control Specialist' },
+  { icon: Printer, title: 'Additive Manufacturing' },
 ];
 
 const TypingIndicator = () => (
@@ -38,256 +41,266 @@ const TypingIndicator = () => (
 );
 
 export default function ChatClient({ user, initialHistory }: { user: User | null; initialHistory: HistoryItem[] }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
 
-  const [history, setHistory] = useState<HistoryItem[]>(initialHistory);
-  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
-  const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [inputValue, setInputValue] = useState('');
-  const { location } = useLocation();
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const hasLoadedFromUrl = useRef(false);
-  const activeConversationId = activeConversation?.id || null;
+    const [history, setHistory] = useState<HistoryItem[]>(initialHistory);
+    const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
+    const [currentFollowUps, setCurrentFollowUps] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [inputValue, setInputValue] = useState('');
+    const { location } = useLocation();
+    const chatContainerRef = useRef<HTMLDivElement>(null);
+    const initialPromptSent = useRef(false);
 
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      setTimeout(() => {
-        chatContainerRef.current!.scrollTop = chatContainerRef.current!.scrollHeight;
-      }, 100);
-    }
-  }, [activeConversation?.messages, isLoading]);
+    const activeConversationId = activeConversation?.id || null;
 
-  // This hook handles loading conversations from the URL
-  useEffect(() => {
-    const convoId = searchParams.get('id');
-    const category = searchParams.get('category');
-    
-    if (convoId && !hasLoadedFromUrl.current && initialHistory.some(h => h.id === convoId)) {
-      hasLoadedFromUrl.current = true;
-      handleHistoryClick(convoId, false);
-    } else if (category && !activeConversation && !convoId) {
-      // THIS IS THE LOGIC THAT FIXES YOUR ISSUE
-      sendMessage(`Tell me about ${category} careers`);
-    }
-  }, [searchParams, initialHistory, activeConversation]);
+    useEffect(() => {
+      if (chatContainerRef.current) {
+        setTimeout(() => {
+          chatContainerRef.current!.scrollTop = chatContainerRef.current!.scrollHeight;
+        }, 100);
+      }
+    }, [activeConversation?.messages, isLoading]);
 
-  const createNewChat = () => {
-    setActiveConversation(null);
-    setCurrentFollowUps([]);
-    router.push(pathname);
-  };
+    useEffect(() => {
+      const convoId = searchParams.get('id');
+      const category = searchParams.get('category');
+      
+      if (convoId && activeConversationId !== convoId) {
+        handleHistoryClick(convoId, false);
+      } else if (category && !activeConversation && !initialPromptSent.current) {
+        // FIX #1: Correctly send the initial prompt without "Explore"
+        initialPromptSent.current = true;
+        sendMessage(`Tell me about ${category} careers`);
+      }
+    }, [searchParams, activeConversation, initialHistory]);
 
-  const handleHistoryClick = async (id: string, navigate = true) => {
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/api/chat/conversation?id=${id}`);
-      if (!res.ok) throw new Error('Failed to fetch conversation');
-      const convo: Conversation = await res.json();
-      setActiveConversation(convo);
+    const createNewChat = () => {
+      setActiveConversation(null);
       setCurrentFollowUps([]);
-      if (navigate) {
-        router.push(`${pathname}?id=${id}`);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
-    if (convo.messages?.length === 2) {
-      const titleRes = await fetch('/api/title', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: convo.messages }),
-      });
-      const { title } = await titleRes.json();
-      convo.title = title || 'New Conversation';
-    }
+      initialPromptSent.current = false;
+      router.push(pathname);
+    };
 
-    const res = await fetch('/api/chat/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(convo),
-    });
-    return await res.json();
-  };
-
-  const sendMessage = async (text: string) => {
-    if (!text.trim() || !user) {
-      if (!user) router.push('/account');
-      return;
-    }
-
-    setIsLoading(true);
-    setInputValue('');
-    setCurrentFollowUps([]);
-    
-    const messages: Message[] = activeConversation
-      ? [...activeConversation.messages, { role: 'user', content: text }]
-      : [{ role: 'user', content: text }];
-    
-    const tempId = `temp-${Date.now()}`;
-    setActiveConversation(prev => ({
-      id: prev?.id || tempId,
-      title: prev?.title || 'New Conversation',
-      messages,
-      provider: prev?.provider || 'openai',
-    }));
-    
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, location, provider: activeConversation?.provider || 'openai' }),
-      });
-      
-      if (!res.ok) throw new Error('Failed to get response from AI');
-      const data: { answer: string; followups: string[] } = await res.json();
-      
-      const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
-      
-      const savedConvoData = await saveConversation({
-        id: activeConversation?.id === tempId ? undefined : activeConversation?.id,
-        messages: newMessages,
-        provider: activeConversation?.provider || 'openai'
-      });
-      
-      const finalConversation: Conversation = { ...savedConvoData, messages: newMessages, provider: activeConversation?.provider || 'openai' };
-      setActiveConversation(finalConversation);
-
-      setHistory(prev => {
-        const existingIndex = prev.findIndex(h => h.id === finalConversation.id);
-        const newHistoryItem = { id: finalConversation.id, title: finalConversation.title, updated_at: finalConversation.updated_at };
-
-        if (existingIndex > -1) {
-          const updatedHistory = [...prev];
-          updatedHistory[existingIndex] = newHistoryItem;
-          return updatedHistory.sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+    const handleHistoryClick = async (id: string, navigate = true) => {
+      if (activeConversationId === id) return;
+      setIsLoading(true);
+      initialPromptSent.current = true;
+      try {
+        const res = await fetch(`/api/chat/conversation?id=${id}`);
+        if (!res.ok) throw new Error('Failed to fetch conversation');
+        const convo: Conversation = await res.json();
+        setActiveConversation(convo);
+        setCurrentFollowUps([]);
+        if (navigate) {
+          router.push(`${pathname}?id=${id}`);
         }
-        return [newHistoryItem, ...prev];
-      });
-
-      if (!searchParams.get('id')) {
-        router.push(`${pathname}?id=${finalConversation.id}`);
+      } catch (error) {
+        console.error(error);
+        createNewChat();
+      } finally {
+        setIsLoading(false);
       }
-      
-      setCurrentFollowUps(data.followups || []);
-    } catch (error) {
-      console.error(error);
-      const errorMsg: Message = { role: 'assistant', content: "Sorry, an error occurred. Please try again." };
-      setActiveConversation(prev => ({ ...prev!, messages: [...messages, errorMsg] }));
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
     
-  const handleProviderChange = (provider: 'openai' | 'gemini') => {
+    const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
+      if (convo.messages?.length === 2 && (!convo.title || convo.title === 'New Conversation')) {
+        const titleRes = await fetch('/api/title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: convo.messages }),
+        });
+        const { title } = await titleRes.json();
+        convo.title = title || 'New Conversation';
+      }
+
+      const res = await fetch('/api/chat/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(convo),
+      });
+      return await res.json();
+    };
+
+    const sendMessage = async (text: string) => {
+      if (!text.trim() || !user) {
+        if (!user) router.push('/account');
+        return;
+      }
+
+      setIsLoading(true);
+      setInputValue('');
+      setCurrentFollowUps([]);
+      
+      const messages: Message[] = activeConversation
+        ? [...activeConversation.messages, { role: 'user', content: text }]
+        : [{ role: 'user', content: text }];
+      
+      const tempId = `temp-${Date.now()}`;
+      const currentProvider = activeConversation?.provider || 'openai';
+      setActiveConversation(prev => ({
+        id: prev?.id || tempId,
+        title: prev?.title || 'New Conversation',
+        messages,
+        provider: currentProvider,
+      }));
+      
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages, location, provider: currentProvider }),
+        });
+        
+        if (!res.ok) throw new Error('Failed to get response from AI');
+        const data: { answer: string; followups: string[] } = await res.json();
+        
+        const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
+        
+        const savedConvoData = await saveConversation({
+          id: activeConversation?.id === tempId ? undefined : activeConversation?.id,
+          messages: newMessages,
+          provider: currentProvider,
+          title: activeConversation?.title
+        });
+        
+        const finalConversation: Conversation = { ...activeConversation!, ...savedConvoData, messages: newMessages };
+        setActiveConversation(finalConversation);
+
+        setHistory(prev => {
+          const newHistoryItem = { id: finalConversation.id, title: finalConversation.title, updated_at: finalConversation.updated_at };
+          const existingIndex = prev.findIndex(h => h.id === finalConversation.id);
+          let updatedHistory;
+          if (existingIndex > -1) {
+            updatedHistory = [...prev];
+            updatedHistory[existingIndex] = newHistoryItem;
+          } else {
+            updatedHistory = [newHistoryItem, ...prev];
+          }
+          return updatedHistory.sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+        });
+
+        if (!searchParams.get('id')) {
+          router.push(`${pathname}?id=${finalConversation.id}`);
+        }
+        
+        setCurrentFollowUps(data.followups || []);
+      } catch (error) {
+        console.error(error);
+        const errorMsg: Message = { role: 'assistant', content: "Sorry, an error occurred. Please try again." };
+        setActiveConversation(prev => ({ ...prev!, messages: [...messages, errorMsg] }));
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    const handleProviderChange = (provider: 'openai' | 'gemini') => {
       if (!activeConversation) return;
       const updatedConvo = { ...activeConversation, provider };
       setActiveConversation(updatedConvo);
       saveConversation(updatedConvo);
-  };
+    };
 
-  return (
-    <div className="chat-container">
-      <aside className="chat-sidebar">
-        <div className="sidebar-header">
-          <button onClick={createNewChat} className="new-chat-btn">
-            <MessageSquarePlus size={20} style={{ marginRight: '0.5rem' }} />
-            New Chat
-          </button>
-        </div>
-        <nav className="history-list">
-          {history.map(item => (
-            <div
-              key={item.id}
-              className={`history-item ${item.id === activeConversationId ? 'active' : ''}`}
-              onClick={() => handleHistoryClick(item.id)}
-              title={item.title}
-            >
-              {item.title}
-            </div>
-          ))}
-        </nav>
-      </aside>
-      <main className="chat-main">
-        <div className="chat-header">
-          <h3>SkillStrong Coach</h3>
-          {activeConversation && (
-            <div className="provider-switch">
-              <button onClick={() => handleProviderChange('openai')} className={activeConversation.provider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
-              <button onClick={() => handleProviderChange('gemini')} className={activeConversation.provider === 'gemini' ? 'active' : ''}><Gem size={16}/> Gemini</button>
-            </div>
-          )}
-        </div>
-        <div ref={chatContainerRef} className="chat-messages">
-          {!activeConversation ? (
-            <div className="welcome-view">
-              <Bot size={48} className="text-blue-600 mb-4" />
-              <h2>Start a Conversation</h2>
-              <p>How can I help you explore manufacturing careers today?</p>
-              <div className="explore-grid">
-                {explorePrompts.map(prompt => (
-                  <button key={prompt} onClick={() => sendMessage(prompt)} className="explore-btn">
-                    {prompt}
-                  </button>
-                ))}
+    return (
+      <div className="chat-container">
+        <aside className="chat-sidebar">
+          <div className="sidebar-header">
+            <button onClick={createNewChat} className="new-chat-btn">
+              <MessageSquarePlus size={20} style={{ marginRight: '0.5rem' }} />
+              New Chat
+            </button>
+          </div>
+          <nav className="history-list">
+            {history.map(item => (
+              <div
+                key={item.id}
+                className={`history-item ${item.id === activeConversationId ? 'active' : ''}`}
+                onClick={() => handleHistoryClick(item.id)}
+                title={item.title}
+              >
+                {item.title}
               </div>
-            </div>
-          ) : (
-            <div className="message-list">
-              {activeConversation.messages.map((msg, idx) => (
-                <div key={idx} className={`message-wrapper ${msg.role}`}>
-                  <div className={`message-bubble ${msg.role}`}>
-                    <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
-                       <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
-                         {msg.content}
-                       </ReactMarkdown>
-                    </article>
-                  </div>
-                </div>
-              ))}
-              {isLoading && (
-                 <div className="message-wrapper assistant">
-                   <div className="message-bubble assistant">
-                      <TypingIndicator />
-                   </div>
-                 </div>
-              )}
-            </div>
-          )}
-        </div>
-        <footer className="chat-footer">
-            <div className="footer-content">
-                {currentFollowUps.length > 0 && !isLoading && (
-                    <div className="follow-ups">
-                        {currentFollowUps.map((prompt, i) => (
-                            <button key={i} onClick={() => sendMessage(prompt)} className="follow-up-btn">
-                                {prompt}
-                            </button>
-                        ))}
-                    </div>
-                )}
-                <form onSubmit={(e) => { e.preventDefault(); sendMessage(inputValue); }} className="input-form">
-                    <input
-                        value={inputValue}
-                        onChange={e => setInputValue(e.target.value)}
-                        placeholder={user ? "Ask anything..." : "Please sign in to chat"}
-                        className="chat-input"
-                        disabled={isLoading || !user}
-                    />
-                    <button type="submit" className="send-btn" disabled={isLoading || !inputValue.trim() || !user}>
-                        <Send size={20} />
+            ))}
+          </nav>
+        </aside>
+
+        <main className="chat-main">
+          <div className="chat-header">
+            <h3>SkillStrong Coach</h3>
+            {activeConversation && (
+              <div className="provider-switch">
+                <button onClick={() => handleProviderChange('openai')} className={activeConversation.provider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
+                <button onClick={() => handleProviderChange('gemini')} className={activeConversation.provider === 'gemini' ? 'active' : ''}><Gem size={16}/> Gemini</button>
+              </div>
+            )}
+          </div>
+          <div ref={chatContainerRef} className="chat-messages">
+            {!activeConversation ? (
+              <div className="welcome-view">
+                <Bot size={48} className="text-blue-600 mb-4" />
+                <h2>Start a Conversation</h2>
+                <p>Select a category to begin exploring.</p>
+                <div className="explore-grid">
+                  {welcomeCareers.map(({icon: Icon, title}) => (
+                    <button key={title} onClick={() => sendMessage(`Tell me about ${title} careers`)} className="explore-btn" style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                      <Icon className="h-8 w-8 text-blue-600" />
+                      {title}
                     </button>
-                </form>
-            </div>
-        </footer>
-      </main>
-    </div>
-  );
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="message-list">
+                {activeConversation.messages.map((msg, idx) => (
+                  <div key={idx} className={`message-wrapper ${msg.role}`}>
+                    <div className={`message-bubble ${msg.role}`}>
+                      <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
+                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
+                           {msg.content}
+                         </ReactMarkdown>
+                      </article>
+                    </div>
+                  </div>
+                ))}
+                {isLoading && (
+                   <div className="message-wrapper assistant">
+                     <div className="message-bubble assistant">
+                        <TypingIndicator />
+                     </div>
+                   </div>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <footer className="chat-footer">
+              <div className="footer-content">
+                  {currentFollowUps.length > 0 && !isLoading && (
+                      <div className="follow-ups">
+                          {currentFollowUps.map((prompt, i) => (
+                              <button key={i} onClick={() => sendMessage(prompt)} className="follow-up-btn">
+                                  {prompt}
+                              </button>
+                          ))}
+                      </div>
+                  )}
+                  <form onSubmit={(e) => { e.preventDefault(); sendMessage(inputValue); }} className="input-form">
+                      <input
+                          value={inputValue}
+                          onChange={e => setInputValue(e.target.value)}
+                          placeholder={user ? "Ask anything..." : "Please sign in to chat"}
+                          className="chat-input"
+                          disabled={isLoading || !user}
+                      />
+                      <button type="submit" className="send-btn" disabled={isLoading || !inputValue.trim() || !user}>
+                          <Send size={20} />
+                      </button>
+                  </form>
+              </div>
+          </footer>
+        </main>
+      </div>
+    );
 }
