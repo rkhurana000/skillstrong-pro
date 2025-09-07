@@ -4,7 +4,6 @@ import { createClient } from '@/utils/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
-// GET all conversations for the current user
 export async function GET(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -26,7 +25,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data);
 }
 
-// POST a new conversation or update an existing one
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -43,12 +41,13 @@ export async function POST(req: NextRequest) {
     if (provider) payload.provider = provider;
     if (title) payload.title = title;
 
+    // THIS IS THE FIX: Return the full record after updating
     const { data, error } = await supabase
       .from('conversations')
       .update(payload)
       .eq('id', id)
       .eq('user_id', user.id)
-      .select('id')
+      .select('id, title, updated_at, provider')
       .single();
     
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -59,7 +58,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase
       .from('conversations')
       .insert({ user_id: user.id, messages, provider, title: title || 'New Conversation' })
-      .select('id, title, updated_at, messages, provider')
+      .select('id, title, updated_at, provider') // Don't need to return messages on create
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
