@@ -24,11 +24,11 @@ type HistoryItem = Omit<Conversation, 'messages' | 'provider'>;
 
 const welcomeCareers = [
   { icon: ScanSearch, title: 'CNC Machinist' },
-  { icon: Flame, title: 'Welder' },
-  { icon: Cpu, title: 'Robotics Technician' },
-  { icon: Wrench, title: 'Industrial Maintenance' },
-  { icon: Handshake, title: 'Quality Control' },
-  { icon: Printer, title: 'Logistics & Supply Chain' },
+  { icon: Flame, title: 'Welding Prgrammer' },
+  { icon: Cpu, title: 'Robotics Technologist' },
+  { icon: Wrench, title: 'Maintenance tech' },
+  { icon: Handshake, title: 'Quality Control Specialist' },
+  { icon: Printer, title: 'Additive Manufacturing' },
 ];
 
 const TypingIndicator = () => (
