@@ -67,13 +67,12 @@ export default function WelderCareerPage() {
         <div className="mt-16 text-center">
             <h2 className="text-2xl font-bold">Ready to Learn More?</h2>
             <p className="mt-2 text-slate-600">Chat with our AI Coach to find local training programs, ask salary questions, and get personalized advice.</p>
-            <Link 
-                href="/explore?prompt=Tell me more about becoming a welder"
-                className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105"
-            >
-              Chat with Coach Mach <Bot className="w-5 h-5 ml-2" />
-            </Link>
-        </div>
+      <Link 
+    href="/chat?category=Welding%20Programmer" // Corrected href
+    className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+    Chat with Coach Mach<Bot className="w-5 h-5 ml-2" />
+</Link>    
+                  </div>
       </div>
     </div>
   );
