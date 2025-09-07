@@ -1,7 +1,7 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, 'useState', useEffect, useRef, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
@@ -24,11 +24,11 @@ type HistoryItem = Omit<Conversation, 'messages' | 'provider'>;
 
 const welcomeCareers = [
   { icon: ScanSearch, title: 'CNC Machinist' },
-  { icon: Flame, title: 'Welder' },
-  { icon: Cpu, title: 'Robotics Technician' },
-  { icon: Wrench, title: 'Industrial Maintenance' },
-  { icon: Handshake, title: 'Quality Control' },
-  { icon: Printer, title: 'Logistics & Supply Chain' },
+  { icon: Flame, title: 'Welding Prgrammer' },
+  { icon: Cpu, title: 'Robotics Technologist' },
+  { icon: Wrench, title: 'Maintenance tech' },
+  { icon: Handshake, title: 'Quality Control Specialist' },
+  { icon: Printer, title: 'Additive Manufacturing' },
 ];
 
 const TypingIndicator = () => (
@@ -51,7 +51,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     const [inputValue, setInputValue] = useState('');
     const { location } = useLocation();
     const chatContainerRef = useRef<HTMLDivElement>(null);
-    const initialUrlHandled = useRef(false); // Used to ensure URL is processed only once
+    const initialUrlHandled = useRef(false);
 
     const activeConversationId = activeConversation?.id || null;
 
@@ -63,9 +63,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       }
     }, [activeConversation?.messages, isLoading]);
 
-    // THIS IS THE CORRECTED HOOK
     useEffect(() => {
-      if (initialUrlHandled.current) return; // Prevent re-running
+      if (initialUrlHandled.current) return;
 
       const convoId = searchParams.get('id');
       const category = searchParams.get('category');
@@ -75,14 +74,15 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         handleHistoryClick(convoId, false);
       } else if (category) {
         initialUrlHandled.current = true;
-        sendMessage(`Tell me about ${category} careers`);
+        // THIS IS THE FIRST LOCATION TO CHANGE
+        sendMessage(`Tell me about ${category}`);
       }
-    }, [searchParams]); // Dependency array is now simpler and safer
+    }, [searchParams]);
 
     const createNewChat = () => {
       setActiveConversation(null);
       setCurrentFollowUps([]);
-      initialUrlHandled.current = true; // Mark as handled to prevent re-triggering from URL
+      initialUrlHandled.current = true;
       router.push(pathname);
     };
 
@@ -246,7 +246,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
                 <p>Select a category to begin exploring.</p>
                 <div className="explore-grid">
                   {welcomeCareers.map(({icon: Icon, title}) => (
-                    <button key={title} onClick={() => sendMessage(`Tell me about ${title} careers`)} className="explore-btn" style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
+                    // THIS IS THE SECOND LOCATION TO CHANGE
+                    <button key={title} onClick={() => sendMessage(`Tell me about ${title}`)} className="explore-btn" style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
                       <Icon className="h-8 w-8 text-blue-600" />
                       {title}
                     </button>
