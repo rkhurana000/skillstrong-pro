@@ -1,7 +1,4 @@
 // /lib/orchestrator.ts
-// Coach Mach orchestration: domain guard → local answer → optional Internet RAG (Google CSE) → follow-ups
-// Env: OPENAI_API_KEY, GOOGLE_CSE_ID, GOOGLE_CSE_KEY
-
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 import { findFeaturedMatching } from '@/lib/marketplace';
@@ -19,24 +16,23 @@ const COACH_SYSTEM = `You are Coach Mach, an upbeat, practical AI career coach f
 - Be concise, specific, and actionable. Prefer bullet lists over long paragraphs.
 - When asked for programs or jobs, use the user's location if provided.
 - If you don't know, say so briefly and propose how to find out.
-- NEVER invent URLs or citations.`;
+- NEVER invent URLs or citations.
+- When relevant, find and embed a YouTube video that illustrates the career (e.g., a "day in the life" video). Format it as a Markdown image link: [![Watch Video](https://img.youtube.com/vi/VIDEO_ID/0.jpg)](https://www.youtube.com/watch?v=VIDEO_ID)`;
 
 // ------- Category auto-detect (for typed queries) -------
 const CATEGORY_SYNONYMS: Record<string, string[]> = {
   'CNC Machinist': ['cnc machinist', 'cnc', 'machinist', 'cnc operator'],
   'Robotics Technician': ['robotics technician', 'robotics technologist', 'robotics tech', 'robotics'],
   'Welding Programmer': ['welding programmer', 'robotic welding', 'laser welding'],
-  Welder: ['welder', 'welding'],
-  'Industrial Maintenance': ['industrial maintenance', 'maintenance tech', 'maintenance technician'],
+  'Maintenance Tech': ['industrial maintenance', 'maintenance tech', 'maintenance technician'],
   'Quality Control Specialist': ['quality control', 'quality inspector', 'qc', 'metrology'],
-  'Logistics & Supply Chain': ['logistics', 'supply chain', 'warehouse automation'],
+  'Additive Manufacturing': ['logistics', 'supply chain', 'warehouse automation'],
 };
-
 function escapeRegExp(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 function detectCanonicalCategory(query: string): string | null {
-const text = (query || '').toLowerCase();
+  const text = (query || '').toLowerCase();
   for (const [canonical, syns] of Object.entries(CATEGORY_SYNONYMS)) {
     for (const s of syns) {
       const re = new RegExp(`\\b${escapeRegExp(s)}\\b`, 'i');
@@ -67,19 +63,16 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   const isFirstUserMessage = input.messages.filter(m => m.role === 'user').length === 1;
   const canonical = detectCanonicalCategory(lastUserRaw);
 
-  // If the user typed a category (e.g., "cnc machinist"), silently transform the last message
-  // into our overview seed (so the template isn't shown in the chat UI).
-let messages: Message[] = input.messages;
+  let messages: Message[] = input.messages;
   let overviewSeeded = false;
   if (canonical && isFirstUserMessage) {
     const seed = buildOverviewPrompt(canonical);
-    // Overwrite the last user message with our detailed seed prompt
     messages = [...input.messages];
     messages[messages.length - 1] = { role: 'user', content: seed };
     overviewSeeded = true;
   }
 
-  // Domain guard – treat category hits as IN-domain even if the short text confuses the guard
+  // Domain guard
   let inDomain = await domainGuard(lastUserRaw);
   if (!inDomain && canonical) inDomain = true;
   if (!inDomain) {
@@ -94,26 +87,26 @@ let messages: Message[] = input.messages;
   const local = await answerLocal(messages, input.location ?? undefined);
   let finalAnswer = local;
 
-  // Decide on Internet RAG (skip if we just did a category overview seed)
+  // Decide on Internet RAG
   const needWeb = !overviewSeeded && (await needsInternetRag(lastUserRaw, local));
   if (needWeb) {
     const web = await internetRagCSE(lastUserRaw, input.location ?? undefined);
-    if (web) finalAnswer = web; // keep local if web fails
+    if (web) finalAnswer = web;
   }
-try {
-  const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined);
-  if (Array.isArray(featured) && featured.length > 0) {
-    const locTxt = input.location ? ` near ${input.location}` : '';
-    const lines = featured
-      .map((f) => `- **${f.title}** — ${f.org} (${f.location})`)
-      .join('\n');
-    finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+  try {
+    const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined);
+    if (Array.isArray(featured) && featured.length > 0) {
+      const locTxt = input.location ? ` near ${input.location}` : '';
+      const lines = featured
+        .map((f) => `- **${f.title}** — ${f.org} (${f.location})`)
+        .join('\n');
+      finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+    }
+  } catch (err) {
+    // no-op
   }
-} catch (err) {
-  // no-op: Featured is optional
-}
 
-   const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
+  const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
   return { answer: finalAnswer, followups };
 }
 
