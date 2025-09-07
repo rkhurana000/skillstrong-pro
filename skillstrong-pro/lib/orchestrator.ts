@@ -17,7 +17,7 @@ const COACH_SYSTEM = `You are Coach Mach, an upbeat, practical AI career coach f
 - When asked for programs or jobs, use the user's location if provided.
 - If you don't know, say so briefly and propose how to find out.
 - NEVER invent URLs or citations.
-- When relevant, find and embed a image that illustrates the career (e.g., person(s) working in modern factories for this career). 
+- When relevant, find and embed a image that illustrates the career (e.g., person(s) working in modern factories for this career).`;
 // ------- Category auto-detect (for typed queries) -------
 const CATEGORY_SYNONYMS: Record<string, string[]> = {
   'CNC Machinist': ['cnc machinist', 'cnc', 'machinist', 'cnc operator'],
