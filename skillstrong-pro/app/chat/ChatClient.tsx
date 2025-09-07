@@ -1,7 +1,7 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
@@ -107,8 +107,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     };
     
     const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
-        // Only generate title for brand new conversations
-        if (convo.messages?.length === 2 && !convo.id) {
+        if (convo.messages?.length === 2 && (!convo.id || convo.id.startsWith('temp-'))) {
             const titleRes = await fetch('/api/title', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -140,13 +139,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       setInputValue('');
       setCurrentFollowUps([]);
       
-      const isNewConversation = !activeConversation;
+      const isNewConversation = !activeConversationId || activeConversationId.startsWith('temp-');
       const currentMessages: Message[] = activeConversation?.messages || [];
       const newUserMessage: Message = { role: 'user', content: text };
       const messages = [...currentMessages, newUserMessage];
       
       const currentProvider = activeConversation?.provider || 'openai';
-      // Optimistically update UI
+      
       setActiveConversation(prev => ({
         id: prev?.id || `temp-${Date.now()}`,
         title: prev?.title || 'New Conversation',
@@ -166,7 +165,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         
         const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
         
-        // Save the complete conversation and get back the confirmed data
         const savedConvo = await saveConversation({
           id: isNewConversation ? undefined : activeConversationId,
           messages: newMessages,
@@ -181,20 +179,21 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         };
         setActiveConversation(finalConversationState);
         
-        // Update history list state
         setHistory(prev => {
             const newHistoryItem = { id: finalConversationState.id, title: finalConversationState.title, updated_at: finalConversationState.updated_at };
-            const existingIndex = prev.findIndex(h => h.id === finalConversationState.id);
-            if (existingIndex > -1) {
-                const updated = [...prev];
-                updated[existingIndex] = newHistoryItem;
-                return updated.sort((a,b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+            const existingIndex = prev.findIndex(h => h.id === activeConversationId); // Use old ID for finding
+            let updatedHistory;
+            if (isNewConversation || existingIndex === -1) {
+                updatedHistory = [newHistoryItem, ...prev];
+            } else {
+                updatedHistory = [...prev];
+                updatedHistory[existingIndex] = newHistoryItem;
             }
-            return [newHistoryItem, ...prev].sort((a,b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+            return updatedHistory.sort((a,b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
 
         if (isNewConversation) {
-          router.push(`${pathname}?id=${finalConversationState.id}`);
+          router.push(`${pathname}?id=${savedConvo.id}`);
         }
         
         setCurrentFollowUps(data.followups || []);
