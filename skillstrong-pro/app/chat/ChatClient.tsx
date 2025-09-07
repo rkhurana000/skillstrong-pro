@@ -22,14 +22,13 @@ interface Conversation {
 }
 type HistoryItem = Omit<Conversation, 'messages' | 'provider'>;
 
-// FIX #4: Define career categories for the new welcome screen
 const welcomeCareers = [
   { icon: ScanSearch, title: 'CNC Machinist' },
-  { icon: Flame, title: 'Welder Programmer' },
-  { icon: Cpu, title: 'Robotics Technologist ' },
-  { icon: Wrench, title: 'Maintenance Tech' },
-  { icon: Handshake, title: 'Quality Control Specialist' },
-  { icon: Printer, title: 'Additive Manufacturing' },
+  { icon: Flame, title: 'Welder' },
+  { icon: Cpu, title: 'Robotics Technician' },
+  { icon: Wrench, title: 'Industrial Maintenance' },
+  { icon: Handshake, title: 'Quality Control' },
+  { icon: Printer, title: 'Logistics & Supply Chain' },
 ];
 
 const TypingIndicator = () => (
@@ -52,7 +51,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     const [inputValue, setInputValue] = useState('');
     const { location } = useLocation();
     const chatContainerRef = useRef<HTMLDivElement>(null);
-    const initialPromptSent = useRef(false);
+    const initialUrlHandled = useRef(false); // Used to ensure URL is processed only once
 
     const activeConversationId = activeConversation?.id || null;
 
@@ -64,30 +63,33 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       }
     }, [activeConversation?.messages, isLoading]);
 
+    // THIS IS THE CORRECTED HOOK
     useEffect(() => {
+      if (initialUrlHandled.current) return; // Prevent re-running
+
       const convoId = searchParams.get('id');
       const category = searchParams.get('category');
       
-      if (convoId && activeConversationId !== convoId) {
+      if (convoId) {
+        initialUrlHandled.current = true;
         handleHistoryClick(convoId, false);
-      } else if (category && !activeConversation && !initialPromptSent.current) {
-        // FIX #1: Correctly send the initial prompt without "Explore"
-        initialPromptSent.current = true;
+      } else if (category) {
+        initialUrlHandled.current = true;
         sendMessage(`Tell me about ${category} careers`);
       }
-    }, [searchParams, activeConversation, initialHistory]);
+    }, [searchParams]); // Dependency array is now simpler and safer
 
     const createNewChat = () => {
       setActiveConversation(null);
       setCurrentFollowUps([]);
-      initialPromptSent.current = false;
+      initialUrlHandled.current = true; // Mark as handled to prevent re-triggering from URL
       router.push(pathname);
     };
 
     const handleHistoryClick = async (id: string, navigate = true) => {
       if (activeConversationId === id) return;
       setIsLoading(true);
-      initialPromptSent.current = true;
+      initialUrlHandled.current = true;
       try {
         const res = await fetch(`/api/chat/conversation?id=${id}`);
         if (!res.ok) throw new Error('Failed to fetch conversation');
@@ -182,7 +184,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           return updatedHistory.sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
 
-        if (!searchParams.get('id')) {
+        if (!searchParams.get('id') || searchParams.get('category')) {
           router.push(`${pathname}?id=${finalConversation.id}`);
         }
         
