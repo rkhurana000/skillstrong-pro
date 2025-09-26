@@ -66,16 +66,32 @@ function score(item: { link: string; displayLink?: string; title: string }, scho
 }
 
 function extractSchoolFromTitle(title: string, displayLink?: string) {
-  // Common patterns: "Program Name - School", "Program | School"
+  const commonJunk = new Set(['programs', 'academics', 'college', 'university', 'courses', 'admission']);
+  // Split the title by common separators
   const parts = title.split(/ - | \| /).map(s => s.trim());
-  if (parts.length > 1) return parts[parts.length - 1];
-  if (displayLink) {
-    // turn domain into name
-    const host = displayLink.replace(/^www\./, "");
-    const core = host.split(".")[0];
-    return core.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  
+  // Find the longest part that isn't a generic word
+  let bestPart = parts[parts.length - 1]; // Default to the last part
+  let longestLength = 0;
+
+  for (const part of parts) {
+    const partLower = part.toLowerCase();
+    if (!commonJunk.has(partLower) && part.length > longestLength) {
+      bestPart = part;
+      longestLength = part.length;
+    }
   }
-  return title.slice(0, 80);
+
+  // Final cleanup if it still contains a junk word
+  if (/\b(programs|academics|courses)\b/i.test(bestPart)) {
+      if (displayLink) {
+        const host = displayLink.replace(/^www\./, "");
+        const core = host.split('.')[0];
+        return core.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      }
+  }
+
+  return bestPart.slice(0, 80);
 }
 
 export async function POST(req: Request) {
