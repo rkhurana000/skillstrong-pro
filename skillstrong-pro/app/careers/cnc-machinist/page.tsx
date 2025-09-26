@@ -19,7 +19,7 @@ export default function CncMachinistPage() {
               </p>
               {/* --- NEW VIDEO SECTION --- */}
               <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Machinists Career Video</h3>
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: CNC Machinists Career Video</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
                     src="https://www.youtube.com/embed/OWNXI09WI14?si=DbtL5QX45pQwvPuP" 
