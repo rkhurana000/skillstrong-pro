@@ -15,7 +15,7 @@ export default function SiteHeader() {
       <div className="site-header__inner container mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
         <Link href="/" className="brand flex items-center text-2xl font-bold text-gray-800">
             <Factory className="w-7 h-7 mr-2 text-blue-600" />
-            SkillStrong
+            Project SkillStrong
         </Link>
         <nav className="site-nav flex items-center space-x-6">
           <Link href="/explore">Explore Careers</Link>
