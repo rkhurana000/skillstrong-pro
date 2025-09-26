@@ -27,7 +27,7 @@ export default function WelderCareerPage() {
               
               {/* --- NEW VIDEO SECTION --- */}
               <div className="bg-white p-4 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: A Day in the Life of a Welder</h3>
+                <h3 className="text-lg font-semibold text-slate-800 mb-3">Watch: Robotic Weld Technician Career Video</h3>
                 <div className="aspect-w-16 aspect-h-9 rounded-lg overflow-hidden">
                   <iframe 
                     src="https://www.youtube.com/embed/oEzP46PwYqQ?si=XdlgdvganhtIkx2v"
