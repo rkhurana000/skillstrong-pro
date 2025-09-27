@@ -65,13 +65,12 @@ function score(item: { link: string; displayLink?: string; title: string }, scho
   return pts;
 }
 
+// THIS FUNCTION IS IMPROVED
 function extractSchoolFromTitle(title: string, displayLink?: string) {
-  const commonJunk = new Set(['programs', 'academics', 'college', 'university', 'courses', 'admission']);
-  // Split the title by common separators
+  const commonJunk = new Set(['programs', 'academics', 'college', 'university', 'courses', 'admission', 'certificate']);
   const parts = title.split(/ - | \| /).map(s => s.trim());
   
-  // Find the longest part that isn't a generic word
-  let bestPart = parts[parts.length - 1]; // Default to the last part
+  let bestPart = parts[parts.length - 1];
   let longestLength = 0;
 
   for (const part of parts) {
@@ -82,8 +81,7 @@ function extractSchoolFromTitle(title: string, displayLink?: string) {
     }
   }
 
-  // Final cleanup if it still contains a junk word
-  if (/\b(programs|academics|courses)\b/i.test(bestPart)) {
+  if (/\b(program|academic|course|certificate)\b/i.test(bestPart)) {
       if (displayLink) {
         const host = displayLink.replace(/^www\./, "");
         const core = host.split('.')[0];
@@ -98,14 +96,13 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const batch: number = Math.min(body.batch ?? 5, METROS.length);
-    const start: number = Math.max(0, body.start ?? 0); // for paging batches
+    const start: number = Math.max(0, body.start ?? 0);
 
     let created = 0;
     const work = METROS.slice(start, start + batch);
 
     for (const metro of work) {
       for (const prog of PROGRAMS) {
-        // Build 3–4 queries per metro+program
         const queries = [
           `site:.edu ${metro.city} ${metro.state} ${prog.keywords[0]} program certificate`,
           `${metro.city} ${prog.keywords.join(" ")} certificate program`,
@@ -123,15 +120,11 @@ export async function POST(req: Request) {
 
         const { error } = await supabaseAdmin.from("programs").insert({
           school,
-          title: prog.label,                         // program line
-          location: `${metro.city}, ${metro.state}`, // show as City, ST
+          title: prog.label,
+          location: `${metro.city}, ${metro.state}`,
           delivery: "in-person",
-          length_weeks: null,
-          cost: null,
           description: description || `${prog.label} at ${school}.`,
-          url: top.link,             // REQUIRED program page
-          external_url: null,
-          featured: false,
+          url: top.link,
         });
 
         if (!error) created++;
