@@ -9,33 +9,40 @@ export async function GET() {
     const { data: jobs, error } = await supabaseAdmin
       .from('jobs')
       .select('title, location, skills')
-      .limit(1000); // Analyze the latest 1000 jobs
+      .limit(1000);
 
     if (error) throw error;
 
     // Aggregate Titles
-    const titleCounts = jobs.reduce((acc, { title }) => {
-      acc[title] = (acc[title] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const titleCounts: Record<string, number> = {};
+    jobs.forEach(({ title }) => {
+        // Simple normalization: take text before first comma or parenthesis
+        const cleanTitle = title.split(/, | \(/)[0].trim();
+        if (cleanTitle.length > 5 && cleanTitle.length < 50) { // Filter out noise
+            titleCounts[cleanTitle] = (titleCounts[cleanTitle] || 0) + 1;
+        }
+    });
     const topTitles = Object.entries(titleCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(item => item[0]);
 
-    // Aggregate Cities
-    const locationCounts = jobs.reduce((acc, { location }) => {
-      acc[location] = (acc[location] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    // Aggregate Cities, filtering out generic/invalid locations
+    const locationCounts: Record<string, number> = {};
+    const excludedLocations = new Set(['United States', 'Remote']);
+    jobs.forEach(({ location }) => {
+        if (location && !excludedLocations.has(location)) {
+            locationCounts[location] = (locationCounts[location] || 0) + 1;
+        }
+    });
     const topCities = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(item => item[0]);
 
     // Aggregate Skills
-    const skillCounts = jobs.reduce((acc, { skills }) => {
+    const skillCounts: Record<string, number> = {};
+    jobs.forEach(({ skills }) => {
         if (Array.isArray(skills)) {
             skills.forEach(skill => {
-                if(skill) acc[skill] = (acc[skill] || 0) + 1;
+                if(skill) skillCounts[skill] = (skillCounts[skill] || 0) + 1;
             });
         }
-        return acc;
-    }, {} as Record<string, number>);
+    });
     const topSkills = Object.entries(skillCounts).sort((a, b) => b[1] - a[1]).slice(0, 12).map(item => item[0]);
 
     return NextResponse.json({
