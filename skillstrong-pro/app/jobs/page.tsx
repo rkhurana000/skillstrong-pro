@@ -13,7 +13,7 @@ const resourceLinks = [
     { name: "Job Corps", url: "https://www.jobcorps.gov/", description: "Free vocational training and job assistance for young adults." },
 ];
 
-const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: string }) => (
+const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' | 'skills' }) => (
     <div className="bg-white p-6 rounded-lg border shadow-sm">
         <div className="flex items-center gap-3 mb-4">
             {icon}
@@ -21,9 +21,13 @@ const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.Rea
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-2">
             {data?.map((item, index) => (
-                <span key={index} className="text-gray-600 after:content-['•'] after:ml-3 last:after:content-['']">
+                <Link
+                  key={item}
+                  href={`/jobs/all?${type}=${encodeURIComponent(item)}`}
+                  className="text-gray-600 hover:text-blue-600 hover:underline after:content-['•'] after:ml-3 last:after:content-['']"
+                >
                     {item}
-                </span>
+                </Link>
             ))}
         </div>
     </div>
@@ -48,8 +52,8 @@ export default function JobsPage() {
         
         {data && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <TrendCard title="In-Demand Job Titles" icon={<Briefcase className="text-blue-600"/>} data={data.jobTitles} type="titles" />
-            <TrendCard title="Popular Cities" icon={<MapPin className="text-blue-600"/>} data={data.popularCities} type="cities" />
+            <TrendCard title="In-Demand Job Titles" icon={<Briefcase className="text-blue-600"/>} data={data.jobTitles} type="q" />
+            <TrendCard title="Popular Cities" icon={<MapPin className="text-blue-600"/>} data={data.popularCities} type="location" />
             <TrendCard title="In-Demand Skills" icon={<ListChecks className="text-blue-600"/>} data={data.inDemandSkills} type="skills" />
           </div>
         )}
