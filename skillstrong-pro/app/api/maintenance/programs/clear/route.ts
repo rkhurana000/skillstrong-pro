@@ -17,8 +17,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabaseAdmin.from("programs").delete().neq("id", 0);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // THIS IS THE FIX:
+  // Instead of .neq("id", 0), we use .not("id", "is", null)
+  // This is a valid filter for a UUID column and will delete all rows.
+  const { error } = await supabaseAdmin.from("programs").delete().not("id", "is", null);
+  
+  if (error) {
+    // Also, it's good practice to log the error on the server
+    console.error("Error clearing programs:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }
