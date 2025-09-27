@@ -6,41 +6,70 @@ import { addJob } from '@/lib/marketplace';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-/**
- * POST /api/ingest/jobs/cse
- * body: { queries?: string[], maxPerQuery?: number, featured?: boolean }
- * Defaults will pull a few manufacturing queries from Indeed and ManufacturingJobs.
- */
+// A predefined list of skills to look for in job descriptions
+const SKILL_KEYWORDS = [
+    'CNC', 'Machinist', 'Welder', 'Robotics', 'Maintenance', 'Quality Control', 'QC', 'QA',
+    'PLC', 'CAD', 'CAM', 'SolidWorks', 'Mastercam', 'Fanuc', 'Blueprint Reading', 'GD&T',
+    'Metrology', 'CMM', 'ISO 9001', 'Six Sigma', 'Lean Manufacturing', '5S', 'Hydraulics',
+    'Pneumatics', 'TIG', 'MIG', 'Welding', 'Fabrication', 'Logistics', 'Supply Chain', 'APICS',
+    'Forklift', 'Shipping', 'Receiving', 'ERP', 'SAP', 'OSHA', 'Safety', 'Automation',
+    'RF Scanner', 'Pulling Orders', 'Deburring', 'Production Control'
+];
+
+function normalizeTitle(rawTitle: string): string {
+    if (!rawTitle) return "Manufacturing Role";
+    // Remove locations, job board names, and other noise
+    let title = rawTitle
+        .replace(/-\s*Indeed.*$/i, '')
+        .replace(/-\s*[A-Za-z\s]+,\s*[A-Z]{2}.*$/, '')
+        .replace(/\(.*\)|\[.*\]/g, ''); // Remove anything in parentheses or brackets
+    
+    // Take the part before the first separator
+    title = title.split(/ - | \| /)[0];
+    
+    return title.trim();
+}
+
+function extractSkills(text: string): string[] {
+    const foundSkills = new Set<string>();
+    const textLower = text.toLowerCase();
+    SKILL_KEYWORDS.forEach(skill => {
+        const regex = new RegExp(`\\b${skill.toLowerCase().replace(/\s/g, '\\s')}\\b`, 'i');
+        if (regex.test(textLower)) {
+            foundSkills.add(skill);
+        }
+    });
+    return Array.from(foundSkills);
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const featured = !!body.featured;
     const maxPer = Math.min(10, body.maxPerQuery ?? 6);
 
-    const defaults = [
-      'site:indeed.com/viewjob (manufacturing OR machinist OR welder OR robotics)',
-      'site:manufacturingjobs.com (manufacturing OR machinist OR welder OR robotics)',
-    ];
-    const queries: string[] = Array.isArray(body.queries) && body.queries.length ? body.queries : defaults;
+    const queries: string[] = Array.isArray(body.queries) && body.queries.length 
+        ? body.queries 
+        : ['site:indeed.com/viewjob (manufacturing OR machinist OR welder OR robotics)'];
 
     const created: any[] = [];
     for (const q of queries) {
       const items = await cseSearch(q, maxPer);
       for (const it of items) {
-        // Basic heuristics for company/location from snippet
-        const companyGuess = it.displayLink?.replace(/^www\./, '') || 'Job board';
-        const locMatch = it.snippet?.match(/[A-Z][a-zA-Z]+,\s*[A-Z]{2}/);
-        const title = it.title?.replace(/\s*-\s*Indeed.*$/i, '').trim();
+        const locMatch = it.snippet?.match(/[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}/);
+        const title = normalizeTitle(it.title || '');
+        const fullText = `${title} ${it.snippet || ''}`;
+        const skills = extractSkills(fullText);
 
         const job = await addJob({
-          title: title || it.title || 'Manufacturing Role',
-          company: companyGuess,
-          location: locMatch?.[0] || 'United States',
+          title,
+          company: it.displayLink?.replace(/^www\./, '') || 'Job Board',
+          location: locMatch?.[0] || 'Remote', // Use a better default than "United States"
           description: it.snippet || undefined,
-          skills: [],
+          skills,
           pay_min: null,
           pay_max: null,
-          apprenticeship: false,
+          apprenticeship: /apprentice/i.test(title),
           external_url: it.link,
           apply_url: it.link,
           featured,
