@@ -1,4 +1,4 @@
-// /app/api/ingest/programs/metros/route.ts
+// /app/api/programs/metros/route.ts
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseServer";
 import { cseSearchMany } from "@/lib/cse";
@@ -6,7 +6,6 @@ import { cseSearchMany } from "@/lib/cse";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** metros to cover */
 const METROS: Array<{ city: string; state: string }> = [
   { city: "Atlanta", state: "GA" }, { city: "Austin", state: "TX" },
   { city: "Boston", state: "MA" },  { city: "Charlotte", state: "NC" },
@@ -28,8 +27,6 @@ const METROS: Array<{ city: string; state: string }> = [
   { city: "Seattle", state: "WA" }, { city: "St. Louis", state: "MO" },
   { city: "Tampa", state: "FL" }, { city: "Washington", state: "DC" },
 ];
-
-/** program families we want */
 
 const PROGRAMS: Array<{ label: string; keywords: string[] }> = [
   {
@@ -54,7 +51,7 @@ const PROGRAMS: Array<{ label: string; keywords: string[] }> = [
   }
 ];
 
-function score(item: { link: string; displayLink?: string; title: string }, school?: string) {
+function score(item: { link: string; displayLink?: string; title: string }) {
   const url = item.link.toLowerCase();
   const host = (item.displayLink || "").toLowerCase();
   let pts = 0;
@@ -65,31 +62,30 @@ function score(item: { link: string; displayLink?: string; title: string }, scho
   return pts;
 }
 
-// THIS FUNCTION IS IMPROVED
-function extractSchoolFromTitle(title: string, displayLink?: string) {
-  const commonJunk = new Set(['programs', 'academics', 'college', 'university', 'courses', 'admission', 'certificate']);
-  const parts = title.split(/ - | \| /).map(s => s.trim());
-  
-  let bestPart = parts[parts.length - 1];
-  let longestLength = 0;
+function extractSchoolFromTitle(title: string, displayLink?: string): string {
+    const commonJunk = new Set(['programs', 'academics', 'college', 'university', 'courses', 'admission', 'certificate']);
+    const parts = title.split(/ - | \| /).map(s => s.trim());
+    
+    let bestPart = parts[parts.length - 1] || '';
+    let longestLength = 0;
 
-  for (const part of parts) {
-    const partLower = part.toLowerCase();
-    if (!commonJunk.has(partLower) && part.length > longestLength) {
-      bestPart = part;
-      longestLength = part.length;
+    for (const part of parts) {
+        const partLower = part.toLowerCase();
+        if (!commonJunk.has(partLower) && part.length > longestLength) {
+            bestPart = part;
+            longestLength = part.length;
+        }
     }
-  }
 
-  if (/\b(program|academic|course|certificate)\b/i.test(bestPart)) {
-      if (displayLink) {
-        const host = displayLink.replace(/^www\./, "");
-        const core = host.split('.')[0];
-        return core.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-      }
-  }
+    if (/\b(program|academic|course|certificate)\b/i.test(bestPart)) {
+        if (displayLink) {
+            const host = displayLink.replace(/^www\./, "");
+            const core = host.split('.')[0];
+            return core.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+        }
+    }
 
-  return bestPart.slice(0, 80);
+    return bestPart.slice(0, 80);
 }
 
 export async function POST(req: Request) {
@@ -106,11 +102,10 @@ export async function POST(req: Request) {
         const queries = [
           `site:.edu ${metro.city} ${metro.state} ${prog.keywords[0]} program certificate`,
           `${metro.city} ${prog.keywords.join(" ")} certificate program`,
-          `community college ${metro.city} ${prog.keywords[0]} program`,
-          `technical college ${metro.city} ${prog.keywords[1] || prog.keywords[0]} program`,
         ];
-        const items = await cseSearchMany(queries, 5);
+        const items = await cseSearchMany(queries, 4);
         if (!items.length) continue;
+
         items.sort((a, b) => score(b) - score(a));
         const top = items[0];
         if (!top?.link) continue;
@@ -128,7 +123,7 @@ export async function POST(req: Request) {
         });
 
         if (!error) created++;
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 400));
       }
     }
 
