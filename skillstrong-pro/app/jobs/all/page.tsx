@@ -2,7 +2,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useMemo, useState, useEffect, Suspense } from 'react';
+import { useMemo, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -26,7 +26,7 @@ function JobResults() {
         return sp.toString();
     }, [filters]);
 
-    const { data, error } = useSWR(`/api/jobs${qs ? `?${qs}` : ''}`, fetcher);
+    const { data, error } = useSWR(`/api/jobs?${qs}`, fetcher);
     const jobs = data?.jobs || [];
     const isLoading = !data && !error;
 
@@ -35,7 +35,7 @@ function JobResults() {
             <h1 className="text-3xl font-bold mb-4">Job Listings</h1>
             <p className="text-gray-600 mb-6">Browse all available jobs or use the filters to narrow your search.</p>
 
-            <div className="grid md:grid-cols-4 gap-3 p-4 border rounded-lg bg-white mb-6 sticky top-20 z-10">
+            <div className="grid md:grid-cols-4 gap-3 p-4 border rounded-lg bg-white mb-6 sticky top-20 z-10 shadow-sm">
                 <input className="border rounded-md p-2 md:col-span-2" placeholder="Search title or keyword"
                     value={filters.q} onChange={e => setFilters(s => ({ ...s, q: e.target.value }))} />
                 <input className="border rounded-md p-2" placeholder="City, ST"
@@ -49,7 +49,7 @@ function JobResults() {
                 </label>
             </div>
 
-            {isLoading && <p>Loading jobs...</p>}
+            {isLoading && <p className="text-center p-8">Loading jobs...</p>}
             <div className="grid gap-4">
                 {!isLoading && jobs.map((j: any) => (
                     <div key={j.id} className="p-4 border rounded-lg bg-white shadow-sm">
@@ -69,7 +69,7 @@ function JobResults() {
                         )}
                     </div>
                 ))}
-                {!isLoading && jobs.length === 0 && <div className="p-6 border rounded-lg bg-white">No jobs match your filters.</div>}
+                {!isLoading && jobs.length === 0 && <div className="p-6 text-center border rounded-lg bg-white">No jobs match your filters.</div>}
             </div>
         </div>
     );
@@ -77,7 +77,7 @@ function JobResults() {
 
 export default function JobsListPage() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div className="text-center p-8">Loading...</div>}>
             <JobResults />
         </Suspense>
     );
