@@ -23,27 +23,37 @@ export default function HomePage() {
         <div className="pointer-events-none absolute top-24 -left-24 h-72 w-72 rounded-full bg-fuchsia-600/20 blur-3xl" />
         <div className="pointer-events-none absolute top-48 -right-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
 
-        <div className="relative container mx-auto px-6 lg:px-8 py-20 md:py-28 text-center">
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-            High‑Tech Careers. No 4‑Year Debt.
-          </h1>
-          <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-slate-300">
-            A vocational career in modern manufacturing is the way to go! Chat with our AI coach to find your path.
-          </p>
+        {/* This is your original layout with the Browse buttons */}
+        <div className="relative container mx-auto px-6 lg:px-8 pt-10 text-center">
+            <div className="flex justify-center gap-4 mb-8">
+                <Link href="/jobs" className="px-5 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-semibold">
+                    Browse Jobs
+                </Link>
+                <Link href="/programs" className="px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 font-semibold">
+                    Find Programs
+                </Link>
+            </div>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {/* THIS IS THE NEW, PROMINENT BUTTON */}
-            <Link href="/chat" className="inline-flex items-center rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
-              <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
-            </Link>
-            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white border border-white/15 hover:bg-white/15 backdrop-blur">
-              Take the Interest Quiz
-            </Link>
-          </div>
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
+                High‑Tech Careers. No 4‑Year Debt.
+            </h1>
+            <p className="mt-4 max-w-3xl mx-auto text-lg md:text-xl text-slate-300">
+                A vocational career in modern manufacturing is the way to go! Chat with our AI coach to find your path.
+            </p>
+
+            {/* The "Chat with Coach Mach" button is now the primary CTA */}
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+                <Link href="/chat" className="inline-flex items-center rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+                    <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
+                </Link>
+                <Link href="/quiz" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white border border-white/15 hover:bg-white/15 backdrop-blur">
+                    Take the Interest Quiz
+                </Link>
+            </div>
         </div>
       </section>
 
-      {/* CONTEXT COPY + 3 BOXES */}
+      {/* CONTEXT COPY + 3 BOXES (Your original section is preserved) */}
       <section className="border-t border-slate-800/50">
         <div className="container mx-auto px-6 lg:px-8 py-14">
           <div className="text-center mb-10">
@@ -73,7 +83,6 @@ export default function HomePage() {
               <p className="mt-2 text-slate-300">
                 Chat with our AI Coach to learn about the programs that will help you get there.
               </p>
-              {/* THIS LINK IS ALSO UPDATED */}
               <Link href="/chat" className="mt-3 inline-flex items-center text-cyan-300 hover:text-cyan-200">
                 Chat with Coach Mach <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
@@ -93,7 +102,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* CAREERS GRID */}
+      {/* CAREERS GRID (Your original section is preserved) */}
       <section className="py-16 md:py-20">
         <div className="container mx-auto px-6 lg:px-8">
           <div className="text-center mb-10">
@@ -123,11 +132,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* FINAL CTA BAND */}
+      {/* FINAL CTA BAND (Your original section is preserved) */}
       <section className="border-t border-slate-800/50">
         <div className="container mx-auto px-6 lg:px-8 py-14 text-center">
           <h3 className="text-2xl font-bold">Ready to Get Started?</h3>
-          <p className="mt-2 text-slate-300">Chat with our AI coach or take the interest quiz to find your path.</p>
+          <p className="mt-2 text-slate-300">Pick your path: chat with our AI coach or take the interest quiz.</p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link href="/chat" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">
               Chat with Coach Mach
