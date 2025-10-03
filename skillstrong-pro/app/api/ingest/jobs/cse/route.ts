@@ -53,7 +53,14 @@ export async function POST(req: Request) {
     for (const q of queries) {
       const items = await cseSearch(q, maxPer);
       for (const it of items) {
+        // Find the location using a regular expression
         const locMatch = it.snippet?.match(/[A-Z][a-zA-Z\s]+,\s*[A-Z]{2}/);
+
+        // **THIS IS THE FIX**: If no location is found, skip this job entirely.
+        if (!locMatch || !locMatch[0]) {
+            continue; 
+        }
+
         const title = normalizeTitle(it.title || '');
         const fullText = `${title} ${it.snippet || ''}`;
         const skills = extractSkills(fullText);
@@ -61,7 +68,7 @@ export async function POST(req: Request) {
         await addJob({
           title,
           company: it.displayLink?.replace(/^www\./, '') || 'Manufacturing Company',
-          location: locMatch?.[0] || 'Remote',
+          location: locMatch[0], // We now know this exists
           description: it.snippet || undefined,
           skills,
           apprenticeship: /apprentice/i.test(title),
