@@ -3,6 +3,9 @@
 
 import { useEffect, useMemo, useState, useRef } from 'react';
 import Link from 'next/link';
+import useSWR from 'swr';
+
+const fetcher = (url: string) => fetch(url).then(res => res.json());
 
 type Program = {
   id: string;
@@ -31,13 +34,6 @@ const CIP_INFO: Record<string, { name: string; blurb: string }> = {
   '150702': { name: 'Quality Control Technology/Technician', blurb: 'Use measurement tools, SPC, and QA methods to keep product quality high.' },
 };
 
-const METRO_CHIPS = [
-  'Bay Area, CA', 'Los Angeles, CA', 'San Diego, CA', 'Phoenix, AZ', 'Tucson, AZ', 'Denver, CO',
-  'Dallas–Fort Worth, TX', 'Houston, TX', 'Austin, TX', 'Seattle, WA', 'Portland, OR',
-  'Chicago, IL', 'Detroit, MI', 'Columbus, OH', 'Boston, MA', 'New York City, NY',
-  'Philadelphia, PA', 'Atlanta, GA', 'Miami, FL',
-];
-
 function safeHostname(u?: string | null) {
   try {
     if (!u) return null;
@@ -47,10 +43,12 @@ function safeHostname(u?: string | null) {
     return null;
   }
 }
+
 function cityStateFromLocation(loc?: string | null) {
   const [city = '', state = ''] = (loc || '').split(',').map(s => s.trim());
   return { city, state };
 }
+
 function cipKeyFor(p: Program) {
   const k = (String(p.cip || '')).trim().replace(/\D/g, '').slice(0, 6);
   return { full: k, short: k.slice(0, 4) };
@@ -67,6 +65,10 @@ export default function ProgramsPage() {
   const limit = 20;
   const totalPages = Math.ceil(count / limit);
   const isInitialMount = useRef(true);
+
+  // Fetch the dynamic metro filters
+  const { data: filtersData } = useSWR('/api/programs/filters', fetcher);
+  const metroChips = filtersData?.metros || [];
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
@@ -151,7 +153,7 @@ export default function ProgramsPage() {
       </div>
 
       <div className="flex flex-wrap gap-2 mb-6">
-        {METRO_CHIPS.map((m) => (
+        {metroChips.map((m: string) => (
           <button key={m} onClick={() => { setMetro(m); }} className={`px-3 py-1 rounded-full border text-sm ${ metro === m ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50' }`}>
             {m}
           </button>
