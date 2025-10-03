@@ -13,18 +13,15 @@ export async function GET() {
 
     if (error) throw error;
 
-    // Aggregate Titles
     const titleCounts: Record<string, number> = {};
     jobs.forEach(({ title }) => {
-        // Simple normalization: take text before first comma or parenthesis
-        const cleanTitle = title.split(/, | \(/)[0].trim();
-        if (cleanTitle.length > 5 && cleanTitle.length < 50) { // Filter out noise
+        const cleanTitle = (title || '').split(/, | \(/)[0].trim();
+        if (cleanTitle.length > 4 && cleanTitle.length < 40) {
             titleCounts[cleanTitle] = (titleCounts[cleanTitle] || 0) + 1;
         }
     });
     const topTitles = Object.entries(titleCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(item => item[0]);
 
-    // Aggregate Cities, filtering out generic/invalid locations
     const locationCounts: Record<string, number> = {};
     const excludedLocations = new Set(['United States', 'Remote']);
     jobs.forEach(({ location }) => {
@@ -34,7 +31,6 @@ export async function GET() {
     });
     const topCities = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(item => item[0]);
 
-    // Aggregate Skills
     const skillCounts: Record<string, number> = {};
     jobs.forEach(({ skills }) => {
         if (Array.isArray(skills)) {
