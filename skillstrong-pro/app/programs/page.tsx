@@ -56,21 +56,6 @@ function cipKeyFor(p: Program) {
   return { full: k, short: k.slice(0, 4) };
 }
 
-// /app/programs/page.tsx
-'use client';
-
-import { useEffect, useMemo, useState, useRef } from 'react';
-import Link from 'next/link';
-
-// ... (Keep the type definitions and constants like Program, CIP_INFO, METRO_CHIPS)
-
-type Program = { /* ... */ };
-const CIP_INFO: Record<string, { name: string; blurb: string }> = { /* ... */ };
-const METRO_CHIPS = [ /* ... */ ];
-function safeHostname(u?: string | null) { /* ... */ }
-function cityStateFromLocation(loc?: string | null) { /* ... */ }
-function cipKeyFor(p: Program) { /* ... */ }
-
 export default function ProgramsPage() {
   const [q, setQ] = useState('');
   const [metro, setMetro] = useState('');
@@ -109,36 +94,30 @@ export default function ProgramsPage() {
     }
   }
 
- // THIS IS THE NEW LOGIC: Search automatically when filters change
   useEffect(() => {
-    // Debounce the search to avoid too many API calls while typing
     const handler = setTimeout(() => {
       if (isInitialMount.current) {
-        // Run once on load
         runSearch();
         isInitialMount.current = false;
       } else {
-        // For subsequent changes, reset to page 1 and search
         if (currentPage !== 1) {
           setCurrentPage(1);
         } else {
           runSearch();
         }
       }
-    }, 500); // 500ms delay
+    }, 500);
 
     return () => {
       clearTimeout(handler);
     };
   }, [q, metro, delivery]);
 
-  // This handles pagination clicks separately
   useEffect(() => {
     if (!isInitialMount.current) {
         runSearch();
     }
   }, [currentPage]);
-
 
   const items = programs
     .filter(p => !!(p.url || p.external_url))
@@ -160,7 +139,6 @@ export default function ProgramsPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="text-3xl font-extrabold mb-4">Training Programs</h1>
-      {/* The Search button is now removed from this section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-4 border rounded-lg bg-white sticky top-20 z-10 shadow-sm">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search program or school" className="md:col-span-2 border rounded-md px-3 py-2" />
         <input value={metro} onChange={(e) => setMetro(e.target.value)} placeholder="Metro (e.g., Phoenix, AZ)" className="border rounded-md px-3 py-2" />
@@ -179,18 +157,9 @@ export default function ProgramsPage() {
           </button>
         ))}
       </div>
-  
-
-      <div className="flex flex-wrap gap-2 mb-6">
-        {METRO_CHIPS.map((m) => (
-          <button key={m} onClick={() => { setMetro(m); handleSearchClick(); }} className={`px-3 py-1 rounded-full border text-sm ${ metro === m ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50' }`}>
-            {m}
-          </button>
-        ))}
-      </div>
 
       <div className="grid gap-5">
-        {loading && <p>Loading programs...</p>}
+        {loading && <p className="text-center py-10">Loading programs...</p>}
         {!loading && items.map((it) => (
           <article key={it.id} className="rounded-xl border bg-white p-5 shadow-sm">
             <h3 className="text-xl font-bold text-gray-900">{it.programName}</h3>
