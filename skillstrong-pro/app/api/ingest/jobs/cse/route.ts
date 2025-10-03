@@ -6,7 +6,6 @@ import { addJob } from '@/lib/marketplace';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// A predefined list of skills to look for in job descriptions
 const SKILL_KEYWORDS = [
     'CNC', 'Machinist', 'Welder', 'Robotics', 'Maintenance', 'Quality Control', 'QC', 'QA',
     'PLC', 'CAD', 'CAM', 'SolidWorks', 'Mastercam', 'Fanuc', 'Blueprint Reading', 'GD&T',
@@ -18,13 +17,11 @@ const SKILL_KEYWORDS = [
 
 function normalizeTitle(rawTitle: string): string {
     if (!rawTitle) return "Manufacturing Role";
-    // Remove locations, job board names, and other noise
     let title = rawTitle
         .replace(/-\s*Indeed.*$/i, '')
         .replace(/-\s*[A-Za-z\s]+,\s*[A-Z]{2}.*$/, '')
-        .replace(/\(.*\)|\[.*\]/g, ''); // Remove anything in parentheses or brackets
+        .replace(/\(.*\)|\[.*\]/g, '');
     
-    // Take the part before the first separator
     title = title.split(/ - | \| /)[0];
     
     return title.trim();
@@ -46,13 +43,13 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
     const featured = !!body.featured;
-    const maxPer = Math.min(10, body.maxPerQuery ?? 6);
+    const maxPer = Math.min(10, body.maxPerQuery ?? 8);
 
     const queries: string[] = Array.isArray(body.queries) && body.queries.length 
         ? body.queries 
         : ['site:indeed.com/viewjob (manufacturing OR machinist OR welder OR robotics)'];
 
-    const created: any[] = [];
+    let createdCount = 0;
     for (const q of queries) {
       const items = await cseSearch(q, maxPer);
       for (const it of items) {
@@ -61,25 +58,24 @@ export async function POST(req: Request) {
         const fullText = `${title} ${it.snippet || ''}`;
         const skills = extractSkills(fullText);
 
-        const job = await addJob({
+        await addJob({
           title,
-          company: it.displayLink?.replace(/^www\./, '') || 'Job Board',
-          location: locMatch?.[0] || 'Remote', // Use a better default than "United States"
+          company: it.displayLink?.replace(/^www\./, '') || 'Manufacturing Company',
+          location: locMatch?.[0] || 'Remote',
           description: it.snippet || undefined,
           skills,
-          pay_min: null,
-          pay_max: null,
           apprenticeship: /apprentice/i.test(title),
           external_url: it.link,
           apply_url: it.link,
           featured,
         });
-        created.push(job);
+        createdCount++;
       }
     }
 
-    return NextResponse.json({ ok: true, count: created.length, jobs: created });
+    return NextResponse.json({ ok: true, count: createdCount });
   } catch (e: any) {
+    console.error("CSE Ingest Error:", e);
     return NextResponse.json({ error: e.message || 'CSE ingest failed' }, { status: 500 });
   }
 }
