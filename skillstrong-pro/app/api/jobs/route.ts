@@ -1,5 +1,6 @@
-// /app/api/jobs/route.ts
 import { NextResponse } from 'next/server';
+// THIS IS THE FIX: Added `addJob` to the import from marketplace
+import { listJobs, addJob } from '@/lib/marketplace'; 
 import { supabaseAdmin } from '@/lib/supabaseServer';
 
 export const runtime = 'nodejs';
@@ -10,12 +11,14 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const q = searchParams.get('q') || undefined;
     const location = searchParams.get('location') || undefined;
-    const skills = (searchParams.get('skills') || '').split(',').map(s => s.trim()).filter(Boolean);
+    const skills = (searchParams.get('skills') || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
     const apprenticeship = searchParams.get('apprenticeship') === '1';
 
     let query = supabaseAdmin.from('jobs').select('*');
 
-    // THIS IS THE FIX: Chain filters correctly as AND conditions
     if (q) {
       query = query.or(`title.ilike.%${q}%,company.ilike.%${q}%,description.ilike.%${q}%`);
     }
