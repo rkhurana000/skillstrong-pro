@@ -2,119 +2,132 @@
 'use client';
 
 import { useState } from 'react';
-import useSWR from 'swr';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Briefcase, MapPin, ListChecks, Search, Bot } from 'lucide-react';
+import { Briefcase, MapPin, ListChecks, Search, Bot, Wrench, Factory } from 'lucide-react';
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-const resourceLinks = [
-    { name: "Apprenticeship Finder", url: "https://www.apprenticeship.gov/apprenticeship-job-finder", description: "Official U.S. government finder for paid, on-the-job training." },
-    { name: "O*NET OnLine", url: "https://www.onetonline.org/", description: "Comprehensive occupation data from the U.S. Department of Labor." },
-    { name: "Job Corps", url: "https://www.jobcorps.gov/", description: "Free vocational training and job assistance for young adults." },
+// --- Static Data (for now) ---
+const inDemandJobs = ['Machine Operator', 'CNC Machinist', 'Material Handler', 'Project Engineer', 'Maintenance Tech', 'Welder'];
+const hotCities = ['Atlanta, GA', 'Houston, TX', 'Dallas, TX', 'Phoenix, AZ', 'Chicago, IL', 'Charlotte, NC'];
+const inDemandSkills = ['CNC Lathe', 'RF Scanner', 'Fanuc Controls', 'MasterCAM', 'Deburring', 'Production Control'];
+const featuredJobs = [
+    { title: 'CNC Machinist', location: 'Houston, TX', company: 'XYZ Manufacturing', posted: '2 days ago' },
+    { title: 'Robotics Technician', location: 'Detroit, MI', company: 'AutoFab Inc.', posted: '1 day ago' },
+    { title: 'Welding Programmer', location: 'Cleveland, OH', company: 'Precision Parts Co.', posted: '4 days ago' },
+];
+const pathways = [
+    { icon: Wrench, title: 'Entry-Level Jobs' },
+    { icon: Wrench, title: 'Skilled Trades' },
+    { icon: Wrench, title: 'Engineering & Leadership' },
 ];
 
-const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' | 'skills' }) => (
-    <div className="bg-white p-6 rounded-lg border shadow-sm">
-        <div className="flex items-center gap-3 mb-4">
-            {icon}
-            <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+export default function ManufacturingJobsPage() {
+    const [keyword, setKeyword] = useState('');
+    const [location, setLocation] = useState('');
+
+    return (
+        <div className="min-h-screen bg-slate-50 text-slate-800">
+            {/* Hero Section */}
+            <section className="bg-slate-800 text-white p-12">
+                <div className="max-w-6xl mx-auto flex justify-between items-center">
+                    <div className="max-w-xl">
+                        <h1 className="text-4xl md:text-5xl font-bold mb-4">Find Your Next Manufacturing Job</h1>
+                        <p className="mb-6 text-lg text-slate-300">Curated opportunities for machine operators, technicians, and engineers. Search thousands of openings.</p>
+                        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                            <input value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="Job Title / Skill" className="p-3 rounded-md w-full sm:w-2/5 text-black" />
+                            <input value={location} onChange={e => setLocation(e.target.value)} placeholder="City, State, or Zip" className="p-3 rounded-md w-full sm:w-2/5 text-black" />
+                            <Link href={`/jobs/all?q=${keyword}&location=${location}`} className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md text-white font-semibold flex-grow flex items-center justify-center">
+                                <Search className="w-5 h-5 mr-2" />
+                                Search
+                            </Link>
+                        </div>
+                    </div>
+                    <div className="hidden md:block">
+                        <div className="w-56 h-56 bg-slate-700/50 rounded-lg flex items-center justify-center">
+                            <Factory size={80} className="text-cyan-400" />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Quick Access Section */}
+            <section className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto p-8 -mt-16 relative z-10">
+                <div className="bg-white p-6 rounded-xl shadow-lg border">
+                    <h2 className="flex items-center text-xl font-bold mb-4"><Briefcase className="mr-2 text-blue-600"/> In-Demand Job Titles</h2>
+                    <div className="flex flex-wrap gap-2">
+                        {inDemandJobs.map((job) => (
+                            <Link key={job} href={`/jobs/all?q=${job}`} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium hover:bg-blue-200">{job}</Link>
+                        ))}
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-lg border">
+                    <h2 className="flex items-center text-xl font-bold mb-4"><MapPin className="mr-2 text-blue-600"/> Hot Cities</h2>
+                    <div className="flex flex-wrap gap-2">
+                        {hotCities.map((city) => (
+                            <Link key={city} href={`/jobs/all?location=${city}`} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium hover:bg-blue-200">{city}</Link>
+                        ))}
+                    </div>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-lg border">
+                    <h2 className="flex items-center text-xl font-bold mb-4"><ListChecks className="mr-2 text-blue-600"/> In-Demand Skills</h2>
+                    <div className="flex flex-wrap gap-2">
+                        {inDemandSkills.map((skill) => (
+                            <Link key={skill} href={`/jobs/all?skills=${skill}`} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium hover:bg-blue-200">{skill}</Link>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Job Stats */}
+            <section className="bg-slate-100 py-12 text-center">
+                <h2 className="text-3xl font-bold text-slate-800">10,000+ Manufacturing Jobs Available</h2>
+                <p className="mt-2 text-lg text-slate-600">Hand-picked roles from trusted employers across the U.S.</p>
+            </section>
+
+            {/* Featured Jobs */}
+            <section className="max-w-6xl mx-auto p-8">
+                <h2 className="text-2xl font-bold mb-6">Featured Jobs</h2>
+                <div className="grid md:grid-cols-3 gap-6">
+                    {featuredJobs.map((job, index) => (
+                        <div key={index} className="bg-white p-6 rounded-xl shadow border hover:shadow-lg transition-shadow">
+                            <h3 className="font-bold text-lg">{job.title}</h3>
+                            <p className="text-md text-gray-700">{job.location}</p>
+                            <p className="text-sm text-gray-500 mt-2">{job.company} | Posted {job.posted}</p>
+                            <Link href="/jobs/all" className="mt-4 inline-block bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 font-semibold">
+                                View & Apply
+                            </Link>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* Career Pathway CTA */}
+            <section className="bg-slate-100 py-16">
+                <div className="max-w-4xl mx-auto px-4">
+                    <h2 className="text-center text-3xl font-bold mb-8">Not Sure Where to Start?</h2>
+                    <div className="flex flex-col md:flex-row justify-center gap-6">
+                        {pathways.map((path) => (
+                            <div key={path.title} className="bg-white p-8 rounded-xl shadow-md border w-full md:w-72 text-center">
+                                <div className="flex justify-center mb-4">
+                                    <div className="bg-blue-100 p-3 rounded-full">
+                                        <path.icon className="text-blue-600" size={32} />
+                                    </div>
+                                </div>
+                                <h3 className="font-semibold text-lg">{path.title}</h3>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Footer */}
+            <footer className="bg-slate-800 text-slate-300 py-8 text-center">
+                <div className="flex justify-center gap-6">
+                    <Link href="/about" className="hover:text-white">About</Link>
+                    <Link href="/programs" className="hover:text-white">Programs</Link>
+                    <Link href="/contact" className="hover:text-white">Contact</Link>
+                </div>
+                <p className="mt-4 text-sm">&copy; {new Date().getFullYear()} SkillStrong. All rights reserved.</p>
+            </footer>
         </div>
-        <div className="flex flex-wrap gap-2">
-            {data?.map((item) => (
-                <Link
-                  key={item}
-                  href={`/jobs/all?${type}=${encodeURIComponent(item)}`}
-                  className="px-3 py-1 bg-slate-100 text-slate-800 rounded-full text-sm font-medium hover:bg-blue-100 hover:text-blue-800 transition-colors"
-                >
-                    {item}
-                </Link>
-            ))}
-        </div>
-    </div>
-);
-
-export default function JobsPage() {
-  const router = useRouter();
-  const { data, error } = useSWR('/api/jobs/trends', fetcher);
-  const [keyword, setKeyword] = useState('');
-  const [location, setLocation] = useState('');
-
-  const handleSearch = () => {
-    const params = new URLSearchParams();
-    if (keyword) params.set('q', keyword);
-    if (location) params.set('location', location);
-    router.push(`/jobs/all?${params.toString()}`);
-  };
-
-  const isLoading = !data && !error;
-
-  return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Hero Section */}
-      <section className="bg-slate-900 text-white py-16 px-4">
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold mb-4">Find Your Next Manufacturing Job</h1>
-          <p className="mb-8 text-lg text-slate-300">Explore opportunities for machine operators, technicians, and engineers.</p>
-          <div className="flex flex-col sm:flex-row gap-2 max-w-xl mx-auto">
-            <input 
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Job Title or Skill (e.g., CNC)" 
-              className="p-3 rounded-md flex-grow text-black" 
-            />
-            <input 
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="City or State" 
-              className="p-3 rounded-md sm:w-1/3 text-black" 
-            />
-            <button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md text-white font-semibold flex items-center justify-center">
-              <Search className="w-5 h-5 mr-2" /> Search
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Quick Access / Trends Section */}
-      <section className="max-w-6xl mx-auto py-12 px-4">
-        {isLoading && <p className="text-center">Loading job market trends...</p>}
-        {error && <p className="text-center text-red-500">Failed to load job trends.</p>}
-        
-        {data && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <TrendCard title="In-Demand Job Titles" icon={<Briefcase className="text-blue-600"/>} data={data.jobTitles} type="q" />
-            <TrendCard title="Popular Cities" icon={<MapPin className="text-blue-600"/>} data={data.popularCities} type="location" />
-            <TrendCard title="In-Demand Skills" icon={<ListChecks className="text-blue-600"/>} data={data.inDemandSkills} type="skills" />
-          </div>
-        )}
-      </section>
-
-      {/* Resources Section */}
-      <section className="bg-slate-100 py-16">
-        <div className="max-w-6xl mx-auto px-4">
-            <h2 className="text-3xl font-bold text-center mb-8">Apprenticeships & Training Resources</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {resourceLinks.map(link => (
-                    <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer" className="block bg-white p-6 rounded-lg border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all">
-                        <h3 className="font-bold text-lg text-blue-700">{link.name}</h3>
-                        <p className="text-sm text-gray-600 mt-2">{link.description}</p>
-                    </a>
-                ))}
-            </div>
-        </div>
-      </section>
-      
-       {/* Final CTA */}
-      <section className="py-16 text-center px-4">
-          <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>
-          <p className="mt-2 text-slate-600">Let our AI coach guide you to the perfect manufacturing career.</p>
-          <Link href="/chat" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
-              <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
-          </Link>
-      </section>
-
-    </div>
-  );
+    );
 }
