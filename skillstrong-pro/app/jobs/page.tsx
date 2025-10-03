@@ -20,7 +20,7 @@ const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.Rea
             <h2 className="text-xl font-bold text-gray-800">{title}</h2>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-2">
-            {data?.map((item, index) => (
+            {data?.map((item) => (
                 <Link
                   key={item}
                   href={`/jobs/all?${type}=${encodeURIComponent(item)}`}
@@ -30,6 +30,7 @@ const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.Rea
                 </Link>
             ))}
         </div>
+        <Link href="/jobs/all" className="text-blue-600 font-semibold mt-6 block">Browse All »</Link>
     </div>
 );
 
@@ -59,7 +60,7 @@ export default function JobsPage() {
         )}
         
         <p className="text-center text-sm text-gray-500 mt-4">
-            In-demand job titles and skills are the most popular among employers according to the current jobs in our database. Last updated today!
+            In-demand job titles and skills are based on the most recent jobs in our database. Last updated today!
         </p>
 
         <div className="mt-16">
