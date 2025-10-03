@@ -1,9 +1,11 @@
 // /app/jobs/page.tsx
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
-import { Briefcase, MapPin, ListChecks } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Briefcase, MapPin, ListChecks, Search, Bot } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -19,37 +21,66 @@ const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.Rea
             {icon}
             <h2 className="text-xl font-bold text-gray-800">{title}</h2>
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-2">
+        <div className="flex flex-wrap gap-2">
             {data?.map((item) => (
                 <Link
                   key={item}
                   href={`/jobs/all?${type}=${encodeURIComponent(item)}`}
-                  className="text-gray-600 hover:text-blue-600 hover:underline after:content-['•'] after:ml-3 last:after:content-['']"
+                  className="px-3 py-1 bg-slate-100 text-slate-800 rounded-full text-sm font-medium hover:bg-blue-100 hover:text-blue-800 transition-colors"
                 >
                     {item}
                 </Link>
             ))}
         </div>
-        <Link href="/jobs/all" className="text-blue-600 font-semibold mt-6 block">Browse All »</Link>
     </div>
 );
 
 export default function JobsPage() {
+  const router = useRouter();
   const { data, error } = useSWR('/api/jobs/trends', fetcher);
+  const [keyword, setKeyword] = useState('');
+  const [location, setLocation] = useState('');
+
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    if (keyword) params.set('q', keyword);
+    if (location) params.set('location', location);
+    router.push(`/jobs/all?${params.toString()}`);
+  };
+
   const isLoading = !data && !error;
 
   return (
-    <div className="bg-gray-50 min-h-screen py-12">
-      <div className="container mx-auto max-w-6xl px-4">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold text-slate-900">Manufacturing Job Market Trends</h1>
-          <p className="mt-3 text-lg text-slate-600 max-w-3xl mx-auto">
-            Discover in-demand roles, skills, and locations based on current job openings across the manufacturing sector.
-          </p>
+    <div className="min-h-screen bg-gray-50 text-gray-800">
+      {/* Hero Section */}
+      <section className="bg-slate-900 text-white py-16 px-4">
+        <div className="max-w-3xl mx-auto text-center">
+          <h1 className="text-4xl md:text-5xl font-extrabold mb-4">Find Your Next Manufacturing Job</h1>
+          <p className="mb-8 text-lg text-slate-300">Explore opportunities for machine operators, technicians, and engineers.</p>
+          <div className="flex flex-col sm:flex-row gap-2 max-w-xl mx-auto">
+            <input 
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Job Title or Skill (e.g., CNC)" 
+              className="p-3 rounded-md flex-grow text-black" 
+            />
+            <input 
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="City or State" 
+              className="p-3 rounded-md sm:w-1/3 text-black" 
+            />
+            <button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md text-white font-semibold flex items-center justify-center">
+              <Search className="w-5 h-5 mr-2" /> Search
+            </button>
+          </div>
         </div>
+      </section>
 
-        {isLoading && <p className="text-center text-lg">Loading job market data...</p>}
-        {error && <p className="text-center text-red-500">Could not load job trends at this time.</p>}
+      {/* Quick Access / Trends Section */}
+      <section className="max-w-6xl mx-auto py-12 px-4">
+        {isLoading && <p className="text-center">Loading job market trends...</p>}
+        {error && <p className="text-center text-red-500">Failed to load job trends.</p>}
         
         {data && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -58,12 +89,11 @@ export default function JobsPage() {
             <TrendCard title="In-Demand Skills" icon={<ListChecks className="text-blue-600"/>} data={data.inDemandSkills} type="skills" />
           </div>
         )}
-        
-        <p className="text-center text-sm text-gray-500 mt-4">
-            In-demand job titles and skills are based on the most recent jobs in our database. Last updated today!
-        </p>
+      </section>
 
-        <div className="mt-16">
+      {/* Resources Section */}
+      <section className="bg-slate-100 py-16">
+        <div className="max-w-6xl mx-auto px-4">
             <h2 className="text-3xl font-bold text-center mb-8">Apprenticeships & Training Resources</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {resourceLinks.map(link => (
@@ -74,7 +104,17 @@ export default function JobsPage() {
                 ))}
             </div>
         </div>
-      </div>
+      </section>
+      
+       {/* Final CTA */}
+      <section className="py-16 text-center px-4">
+          <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>
+          <p className="mt-2 text-slate-600">Let our AI coach guide you to the perfect manufacturing career.</p>
+          <Link href="/chat" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+              <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
+          </Link>
+      </section>
+
     </div>
   );
 }
