@@ -40,8 +40,8 @@ export default function HomePage() {
           </p>
 
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link href="/explore" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-blue-700">
-              Explore Careers <ArrowRight className="w-5 h-5 ml-2" />
+            <Link href="/chat" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-blue-700">
+              Chat with Coach Mach <ArrowRight className="w-5 h-5 ml-2" />
             </Link>
             <Link href="/quiz" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white border border-white/15 hover:bg-white/15 backdrop-blur">
               Take the Interest Quiz
