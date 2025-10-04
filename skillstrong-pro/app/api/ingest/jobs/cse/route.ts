@@ -9,10 +9,9 @@ export const dynamic = 'force-dynamic';
 const SKILL_KEYWORDS = [
     'CNC', 'Machinist', 'Welder', 'Robotics', 'Maintenance', 'Quality Control', 'QC', 'QA',
     'PLC', 'CAD', 'CAM', 'SolidWorks', 'Mastercam', 'Fanuc', 'Blueprint Reading', 'GD&T',
-    'Metrology', 'CMM', 'ISO 9001', 'Six Sigma', 'Lean Manufacturing', '5S', 'Hydraulics',
+    'Metrology', 'CMM', 'ISO 9001', 'Six Sigma', 'Lean Manufacturing', , 'Hydraulics',
     'Pneumatics', 'TIG', 'MIG', 'Welding', 'Fabrication', 'Logistics', 'Supply Chain', 'APICS',
-    'Forklift', 'Shipping', 'Receiving', 'ERP', 'SAP', 'OSHA', 'Safety', 'Automation',
-    'RF Scanner', 'Pulling Orders', 'Deburring', 'Production Control'
+    'Forklift', 'Shipping', 'Receiving', 'ERP', 'SAP', 'OSHA', 'Safety', 'Automation'
 ];
 
 function normalizeTitle(rawTitle: string): string {
@@ -22,9 +21,11 @@ function normalizeTitle(rawTitle: string): string {
         .replace(/-\s*[A-Za-z\s]+,\s*[A-Z]{2}.*$/, '')
         .replace(/\(.*\)|\[.*\]/g, '');
     
-    title = title.split(/ - | \| /)[0];
+    title = title.split(/ - | \| /)[0].trim();
     
-    return title.trim();
+    // If a location is still in the title, remove it
+    const titleParts = title.split(' in ');
+    return titleParts[0].trim();
 }
 
 function extractSkills(text: string): string[] {
@@ -42,42 +43,36 @@ function extractSkills(text: string): string[] {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const featured = !!body.featured;
-    const maxPer = Math.min(10, body.maxPerQuery ?? 10);
+    // ** NEW: Extract location from the request body **
+    const { queries, location } = body; 
 
-    const queries: string[] = Array.isArray(body.queries) && body.queries.length 
-        ? body.queries 
-        : ['site:indeed.com/viewjob (manufacturing OR machinist OR welder OR robotics)'];
+    if (!Array.isArray(queries) || queries.length === 0) {
+        return NextResponse.json({ error: 'Queries array is required.' }, { status: 400 });
+    }
 
     let createdCount = 0;
     for (const q of queries) {
-      const items = await cseSearch(q, maxPer);
+      const items = await cseSearch(q, 10);
       for (const it of items) {
-        const locMatch = it.snippet?.match(/\b([A-Z][a-zA-Z\s.-]+,)\s*([A-Z]{2})\b/);
-
-        if (!locMatch || !locMatch[0]) {
-            continue; 
-        }
-        const location = locMatch[0];
-
         const title = normalizeTitle(it.title || '');
-        const fullText = `${title} ${it.snippet || ''}`;
-        const skills = extractSkills(fullText);
+        const skills = extractSkills(`${title} ${it.snippet || ''}`);
 
-        if (title.toLowerCase().includes('manufacturing job') || title.length < 5) {
+        // Skip generic or irrelevant titles
+        if (title.toLowerCase().includes('manufacturing job') || title.length < 5 || title.toLowerCase().includes('driver')) {
             continue;
         }
 
         await addJob({
           title,
           company: it.displayLink?.replace(/^www\./, '') || 'Manufacturing Company',
-          location,
+          // Use the location passed in the request, which is guaranteed to be correct
+          location: location, 
           description: it.snippet || undefined,
           skills,
           apprenticeship: /apprentice/i.test(title),
           external_url: it.link,
           apply_url: it.link,
-          featured,
+          featured: false,
         });
         createdCount++;
       }
