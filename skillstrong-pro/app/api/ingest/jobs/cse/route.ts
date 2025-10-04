@@ -9,21 +9,26 @@ export const dynamic = 'force-dynamic';
 const SKILL_KEYWORDS = [
     'CNC', 'Machinist', 'Welder', 'Robotics', 'Maintenance', 'Quality Control', 'QC', 'QA',
     'PLC', 'CAD', 'CAM', 'SolidWorks', 'Mastercam', 'Fanuc', 'Blueprint Reading', 'GD&T',
-    'Metrology', 'CMM', 'ISO 9001', 'Six Sigma', 'Lean Manufacturing', , 'Hydraulics',
+    'Metrology', 'CMM', 'ISO 9001', 'Six Sigma', 'Lean Manufacturing', '5S', 'Hydraulics',
     'Pneumatics', 'TIG', 'MIG', 'Welding', 'Fabrication', 'Logistics', 'Supply Chain', 'APICS',
     'Forklift', 'Shipping', 'Receiving', 'ERP', 'SAP', 'OSHA', 'Safety', 'Automation'
 ];
 
 function normalizeTitle(rawTitle: string): string {
     if (!rawTitle) return "Manufacturing Role";
+    // Aggressively remove noise from titles
     let title = rawTitle
         .replace(/-\s*Indeed.*$/i, '')
+        .replace(/-\s*ManufacturingJobs.com.*$/i, '')
+        .replace(/-\s*iHireManufacturing.*$/i, '')
+        .replace(/-\s*FactoryFix.*$/i, '')
         .replace(/-\s*[A-Za-z\s]+,\s*[A-Z]{2}.*$/, '')
         .replace(/\(.*\)|\[.*\]/g, '');
     
+    // Take the most relevant part of the title
     title = title.split(/ - | \| /)[0].trim();
     
-    // If a location is still in the title, remove it
+    // Remove the location if it's still in the title
     const titleParts = title.split(' in ');
     return titleParts[0].trim();
 }
@@ -32,7 +37,7 @@ function extractSkills(text: string): string[] {
     const foundSkills = new Set<string>();
     const textLower = text.toLowerCase();
     SKILL_KEYWORDS.forEach(skill => {
-        const regex = new RegExp(`\\b${skill.toLowerCase().replace(/\s/g, '\\s')}\\b`, 'i');
+        const regex = new RegExp(`\\b${skill.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
         if (regex.test(textLower)) {
             foundSkills.add(skill);
         }
@@ -42,12 +47,12 @@ function extractSkills(text: string): string[] {
 
 export async function POST(req: Request) {
   try {
+    // ** THE NEW LOGIC IS HERE **
     const body = await req.json().catch(() => ({}));
-    // ** NEW: Extract location from the request body **
-    const { queries, location } = body; 
+    const { queries, location } = body; // We now expect a 'location' in the body
 
-    if (!Array.isArray(queries) || queries.length === 0) {
-        return NextResponse.json({ error: 'Queries array is required.' }, { status: 400 });
+    if (!Array.isArray(queries) || queries.length === 0 || !location) {
+        return NextResponse.json({ error: 'A queries array and a location are required.' }, { status: 400 });
     }
 
     let createdCount = 0;
@@ -57,15 +62,15 @@ export async function POST(req: Request) {
         const title = normalizeTitle(it.title || '');
         const skills = extractSkills(`${title} ${it.snippet || ''}`);
 
-        // Skip generic or irrelevant titles
-        if (title.toLowerCase().includes('manufacturing job') || title.length < 5 || title.toLowerCase().includes('driver')) {
+        // Skip generic, irrelevant, or non-manufacturing titles
+        if (title.toLowerCase().includes('manufacturing job') || title.length < 5 || title.toLowerCase().includes('driver') || title.toLowerCase().includes('account manager')) {
             continue;
         }
 
         await addJob({
           title,
           company: it.displayLink?.replace(/^www\./, '') || 'Manufacturing Company',
-          // Use the location passed in the request, which is guaranteed to be correct
+          // Use the location passed in the request body, which is guaranteed to be correct
           location: location, 
           description: it.snippet || undefined,
           skills,
@@ -78,7 +83,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, count: createdCount });
+    return NextResponse.json({ ok: true, count: createdCount, query: queries[0] });
   } catch (e: any) {
     console.error("CSE Ingest Error:", e);
     return NextResponse.json({ error: e.message || 'CSE ingest failed' }, { status: 500 });
