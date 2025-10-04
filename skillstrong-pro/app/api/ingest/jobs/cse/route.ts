@@ -42,40 +42,31 @@ function extractSkills(text: string): string[] {
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const queries: string[] = Array.isArray(body.queries) ? body.queries : [];
-    
-    console.log(`--- Starting Job Ingestion for ${queries.length} queries ---`);
+    const featured = !!body.featured;
+    const maxPer = Math.min(10, body.maxPerQuery ?? 10);
+
+    const queries: string[] = Array.isArray(body.queries) && body.queries.length 
+        ? body.queries 
+        : ['site:indeed.com/viewjob (manufacturing OR machinist OR welder OR robotics)'];
+
     let createdCount = 0;
-
     for (const q of queries) {
-      const items = await cseSearch(q, 10);
-      console.log(`Query: "${q}" --- Found ${items.length} items.`);
-
+      const items = await cseSearch(q, maxPer);
       for (const it of items) {
-        console.log(`\n--- Processing Item ---`);
-        console.log(`  Raw Title: ${it.title}`);
-        console.log(`  Raw Snippet: ${it.snippet}`);
-
         const locMatch = it.snippet?.match(/\b([A-Z][a-zA-Z\s.-]+,)\s*([A-Z]{2})\b/);
-        
+
         if (!locMatch || !locMatch[0]) {
-            console.log(`  [SKIPPED] Reason: No valid location found.`);
             continue; 
         }
-        
         const location = locMatch[0];
+
         const title = normalizeTitle(it.title || '');
+        const fullText = `${title} ${it.snippet || ''}`;
+        const skills = extractSkills(fullText);
 
         if (title.toLowerCase().includes('manufacturing job') || title.length < 5) {
-            console.log(`  [SKIPPED] Reason: Generic or short title.`);
             continue;
         }
-
-        const skills = extractSkills(`${title} ${it.snippet || ''}`);
-
-        console.log(`  => Parsed Title: ${title}`);
-        console.log(`  => Parsed Location: ${location}`);
-        console.log(`  => Parsed Skills: [${skills.join(', ')}]`);
 
         await addJob({
           title,
@@ -86,18 +77,15 @@ export async function POST(req: Request) {
           apprenticeship: /apprentice/i.test(title),
           external_url: it.link,
           apply_url: it.link,
-          featured: false,
+          featured,
         });
         createdCount++;
-        console.log(`  [SUCCESS] Job saved to database.`);
       }
     }
 
-    console.log(`--- Job Ingestion Complete. Total Jobs Created: ${createdCount} ---`);
     return NextResponse.json({ ok: true, count: createdCount });
   } catch (e: any) {
-    console.error("FATAL CSE INGEST ERROR:", e);
+    console.error("CSE Ingest Error:", e);
     return NextResponse.json({ error: e.message || 'CSE ingest failed' }, { status: 500 });
   }
 }
-
