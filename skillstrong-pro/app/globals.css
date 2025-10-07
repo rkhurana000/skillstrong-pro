@@ -4,6 +4,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
+
+
 :root{
   --bg:#fff;--text:#0f172a;--muted:#64748b;--line:#e9eef5;--card:#fff;
   --shadow:0 10px 30px rgba(2,8,23,.06);--blue:#2563eb;--brand:#0f172a;
@@ -116,3 +127,5 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica
   font-style: italic;
   margin: .75rem 0;
 }
+
+// Add this helper class to your globals.css or a Tailwind CSS file to hide the scrollbar
