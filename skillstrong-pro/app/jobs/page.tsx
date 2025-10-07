@@ -1,19 +1,13 @@
 // /app/jobs/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Briefcase, MapPin, ListChecks, Search, Bot } from 'lucide-react';
+import { Briefcase, MapPin, ListChecks, Search, Bot, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
-
-const resourceLinks = [
-    { name: "Apprenticeship Finder", url: "https://www.apprenticeship.gov/apprenticeship-job-finder", description: "Official U.S. government finder for paid, on-the-job training." },
-    { name: "O*NET OnLine", url: "https://www.onetonline.org/", description: "Comprehensive occupation data from the U.S. Department of Labor." },
-    { name: "Job Corps", url: "https://www.jobcorps.gov/", description: "Free vocational training and job assistance for young adults." },
-];
 
 const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' | 'skills' }) => (
     <div className="bg-white p-6 rounded-lg border shadow-sm">
@@ -34,6 +28,61 @@ const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.Rea
         </div>
     </div>
 );
+
+// New Carousel Component for Featured Jobs
+const FeaturedJobsCarousel = () => {
+    const { data: featuredData, error: featuredError } = useSWR('/api/jobs?featured=true', fetcher);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    if (!featuredData || !featuredData.jobs || featuredData.jobs.length === 0) {
+        return null; // Don't render the section if there are no featured jobs
+    }
+    
+    const scroll = (direction: 'left' | 'right') => {
+        if (scrollContainerRef.current) {
+            const scrollAmount = scrollContainerRef.current.offsetWidth;
+            scrollContainerRef.current.scrollBy({ 
+                left: direction === 'left' ? -scrollAmount : scrollAmount, 
+                behavior: 'smooth' 
+            });
+        }
+    };
+
+    return (
+        <section className="bg-slate-100 py-16">
+            <div className="max-w-6xl mx-auto px-4">
+                <div className="flex justify-between items-center mb-8">
+                    <h2 className="text-3xl font-bold text-slate-800">Featured Jobs</h2>
+                    <div className="flex gap-2">
+                        <button onClick={() => scroll('left')} className="p-2 rounded-full bg-white border shadow-sm hover:bg-slate-50">
+                            <ChevronLeft size={24} />
+                        </button>
+                        <button onClick={() => scroll('right')} className="p-2 rounded-full bg-white border shadow-sm hover:bg-slate-50">
+                            <ChevronRight size={24} />
+                        </button>
+                    </div>
+                </div>
+                <div 
+                    ref={scrollContainerRef} 
+                    className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide"
+                    style={{ scrollSnapType: 'x mandatory' }}
+                >
+                    {featuredData.jobs.map((job: any) => (
+                        <div key={job.id} className="bg-white p-6 rounded-xl shadow-md border flex-shrink-0 w-full sm:w-1/2 lg:w-1/3" style={{ scrollSnapAlign: 'start' }}>
+                            <h3 className="font-bold text-lg text-blue-700">{job.title}</h3>
+                            <p className="text-md text-gray-700">{job.location}</p>
+                            <p className="text-sm text-gray-500 mt-2">{job.company}</p>
+                            <a href={job.apply_url || job.external_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 font-semibold">
+                                View & Apply
+                            </a>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
+
 
 export default function JobsPage() {
   const router = useRouter();
@@ -83,8 +132,8 @@ export default function JobsPage() {
         </div>
       </section>
 
-      {/* Trends Section - Moved Down */}
-      <section className="max-w-6xl mx-auto py-12 px-4">
+      {/* Trends Section */}
+      <section className="max-w-6xl mx-auto py-16 px-4">
         {isLoading && <p className="text-center">Loading job market trends...</p>}
         {error && <p className="text-center text-red-500">Failed to load job trends.</p>}
         
@@ -97,26 +146,31 @@ export default function JobsPage() {
         )}
       </section>
 
-      {/* Job Stats Banner */}
-      <section className="bg-slate-100 py-12 text-center">
-        <h2 className="text-3xl font-bold text-slate-800">10,000+ Manufacturing Jobs Available</h2>
-        <p className="mt-2 text-lg text-slate-600">Hand-picked roles from trusted employers across the U.S.</p>
-      </section>
+      {/* Featured Jobs Section */}
+      <FeaturedJobsCarousel />
       
-       {/* Resources Section */}
-      <section className="py-16">
-        <div className="max-w-6xl mx-auto px-4">
-            <h2 className="text-3xl font-bold text-center mb-8">Apprenticeships & Training Resources</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {resourceLinks.map(link => (
-                    <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer" className="block bg-white p-6 rounded-lg border shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all">
-                        <h3 className="font-bold text-lg text-blue-700">{link.name}</h3>
-                        <p className="text-sm text-gray-600 mt-2">{link.description}</p>
-                    </a>
-                ))}
-            </div>
-        </div>
+      {/* Final CTA */}
+      <section className="py-16 text-center px-4">
+          <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>
+          <p className="mt-2 text-slate-600">Let our AI coach guide you to the perfect manufacturing career.</p>
+          <Link href="/chat" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+              <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
+          </Link>
       </section>
+
     </div>
   );
 }
+
+// Add this helper class to your globals.css or a Tailwind CSS file to hide the scrollbar
+/*
+@layer utilities {
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+}
+*/
