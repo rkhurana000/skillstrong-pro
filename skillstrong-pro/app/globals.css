@@ -116,5 +116,3 @@ body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica
   font-style: italic;
   margin: .75rem 0;
 }
-
-// Add this helper class to your globals.css or a Tailwind CSS file to hide the scrollbar
