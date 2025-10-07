@@ -47,9 +47,8 @@ function extractSkills(text: string): string[] {
 
 export async function POST(req: Request) {
   try {
-    // ** THE NEW LOGIC IS HERE **
     const body = await req.json().catch(() => ({}));
-    const { queries, location } = body; // We now expect a 'location' in the body
+    const { queries, location } = body; // We now expect a 'location'
 
     if (!Array.isArray(queries) || queries.length === 0 || !location) {
         return NextResponse.json({ error: 'A queries array and a location are required.' }, { status: 400 });
@@ -60,18 +59,14 @@ export async function POST(req: Request) {
       const items = await cseSearch(q, 10);
       for (const it of items) {
         const title = normalizeTitle(it.title || '');
-        const skills = extractSkills(`${title} ${it.snippet || ''}`);
+        if (title.toLowerCase().includes('manufacturing job') || title.length < 5) continue;
 
-        // Skip generic, irrelevant, or non-manufacturing titles
-        if (title.toLowerCase().includes('manufacturing job') || title.length < 5 || title.toLowerCase().includes('driver') || title.toLowerCase().includes('account manager')) {
-            continue;
-        }
+        const skills = extractSkills(`${title} ${it.snippet || ''}`);
 
         await addJob({
           title,
           company: it.displayLink?.replace(/^www\./, '') || 'Manufacturing Company',
-          // Use the location passed in the request body, which is guaranteed to be correct
-          location: location, 
+          location: location, // Use the guaranteed correct location
           description: it.snippet || undefined,
           skills,
           apprenticeship: /apprentice/i.test(title),
@@ -82,10 +77,8 @@ export async function POST(req: Request) {
         createdCount++;
       }
     }
-
-    return NextResponse.json({ ok: true, count: createdCount, query: queries[0] });
+    return NextResponse.json({ ok: true, count: createdCount });
   } catch (e: any) {
-    console.error("CSE Ingest Error:", e);
     return NextResponse.json({ error: e.message || 'CSE ingest failed' }, { status: 500 });
   }
 }
