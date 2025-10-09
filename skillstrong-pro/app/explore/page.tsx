@@ -8,7 +8,7 @@ const careers = [
   { icon: Cpu, title: 'Robotics Technologist', href: '/careers/robotics-technician' },
   { icon: Wrench, title: 'Maintenance Tech', href: '/careers/industrial-maintenance' },
   { icon: Handshake, title: 'Quality Control Specialist', href: '/careers/quality-control' },
-  { icon: Printer, title: 'Additive Manufacturing', href: '/careers/logistics' },
+  { icon: Printer, title: 'Additive Manufacturing', href: '/careers/additive-manufacturing' },
 ];
 
 export default function ExplorePage() {
