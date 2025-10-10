@@ -10,9 +10,6 @@ export async function GET(req: NextRequest) {
   const location_q = u.searchParams.get("location")?.trim();
   const program_type = u.searchParams.get("program_type")?.trim();
   
-  // FIX: Allow 'all' as a valid type for delivery
-  const delivery = u.searchParams.get("delivery") as "in-person" | "online" | "hybrid" | "all" | null;
-  
   const page = parseInt(u.searchParams.get("page") || "1");
   const limit = parseInt(u.searchParams.get("limit") || "20");
   const offset = (page - 1) * limit;
@@ -24,45 +21,39 @@ export async function GET(req: NextRequest) {
     query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%,description.ilike.%${q}%`);
   }
 
-  // Location filter
+  // **IMPROVED LOCATION FILTER LOGIC**
   if (location_q) {
-      query = query.or(`city.ilike.%${location_q}%,state.ilike.%${location_q}%,zip_code.ilike.%${location_q}%,metro.ilike.%${location_q}%`);
+    const parts = location_q.split(',').map(p => p.trim()).filter(Boolean);
+    const firstPart = parts[0];
+    const secondPart = parts.length > 1 ? parts[1] : null;
+
+    if (secondPart) {
+      // Handles "City, State" or "City, Zip"
+      query = query.ilike('city', `%${firstPart}%`).ilike('state', `%${secondPart}%`);
+    } else {
+      // Handles a single term (City, State, ZIP, or Metro)
+      query = query.or(
+        `city.ilike.%${firstPart}%,state.eq.${firstPart},zip_code.eq.${firstPart},metro.ilike.%${firstPart}%`
+      );
+    }
   }
 
-  // Dropdown filters
+  // Dropdown filter for Program Type
   if (program_type && program_type !== 'all') {
     query = query.eq('program_type', program_type);
   }
-  if (delivery && delivery !== 'all') {
-    query = query.eq('delivery', delivery);
-  }
+
+  // Delivery filter has been removed as requested.
 
   query = query.range(offset, offset + limit - 1);
   query = query.order("featured", { ascending: false }).order("school", { ascending: true });
 
-  let { data, error, count } = await query;
-
-  // FALLBACK LOGIC
-  if (count === 0 && location_q) {
-    console.log(`No results for "${location_q}", attempting fallback search...`);
-    
-    let fallbackQuery = supabaseAdmin.from("programs").select("*", { count: 'exact' });
-    if (q) {
-       fallbackQuery = fallbackQuery.or(`school.ilike.%${q}%,title.ilike.%${q}%,description.ilike.%${q}%`);
-    }
-    
-    const { data: fallbackData, error: fallbackError, count: fallbackCount } = await fallbackQuery;
-    
-    if (!fallbackError) {
-        data = fallbackData;
-        count = fallbackCount;
-    }
-  }
+  const { data, error, count } = await query;
 
   if (error) {
     console.error("Program search error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   
-  return NextResponse.json({ programs: data, count, page, limit }, { status: 200 });
+  return NextResponse.json({ programs: data, count, page, limit });
 }
