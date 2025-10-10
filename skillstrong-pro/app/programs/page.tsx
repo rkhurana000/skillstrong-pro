@@ -16,13 +16,12 @@ type Program = {
   state?: string | null;
   metro?: string | null;
   delivery?: 'in-person' | 'online' | 'hybrid' | null;
-  lengthWeeks?: number | null;
+  length_weeks?: number | null;
   cost?: number | null;
-  cip?: string | null;
+  program_type?: 'Certificate' | 'Associate Degree' | 'Apprenticeship' | 'Non-Credit';
   description?: string | null;
   url?: string | null;
   external_url?: string | null;
-  featured?: boolean | null;
 };
 
 const CIP_INFO: Record<string, { name: string; blurb: string }> = {
@@ -44,20 +43,13 @@ function safeHostname(u?: string | null) {
   }
 }
 
-function cityStateFromLocation(loc?: string | null) {
-  const [city = '', state = ''] = (loc || '').split(',').map(s => s.trim());
-  return { city, state };
-}
-
-function cipKeyFor(p: Program) {
-  const k = (String(p.cip || '')).trim().replace(/\D/g, '').slice(0, 6);
-  return { full: k, short: k.slice(0, 4) };
-}
-
 export default function ProgramsPage() {
-  const [q, setQ] = useState('');
-  const [metro, setMetro] = useState('');
-  const [delivery, setDelivery] = useState<'all' | 'in-person' | 'online' | 'hybrid'>('all');
+  const [filters, setFilters] = useState({
+      q: '',
+      location: '',
+      program_type: 'all',
+      delivery: 'all',
+  });
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [count, setCount] = useState<number>(0);
@@ -66,20 +58,19 @@ export default function ProgramsPage() {
   const totalPages = Math.ceil(count / limit);
   const isInitialMount = useRef(true);
 
-  // Fetch the dynamic metro filters
   const { data: filtersData } = useSWR('/api/programs/filters', fetcher);
   const metroChips = filtersData?.metros || [];
 
   const queryString = useMemo(() => {
     const p = new URLSearchParams();
-    if (q) p.set('q', q);
-    if (metro) p.set('metro', metro);
-    if (delivery !== 'all') p.set('delivery', delivery);
-    p.set('requireUrl', '1');
+    if (filters.q) p.set('q', filters.q);
+    if (filters.location) p.set('location', filters.location);
+    if (filters.program_type !== 'all') p.set('program_type', filters.program_type);
+    if (filters.delivery !== 'all') p.set('delivery', filters.delivery);
     p.set('page', String(currentPage));
     p.set('limit', String(limit));
     return p.toString();
-  }, [q, metro, delivery, currentPage]);
+  }, [filters, currentPage]);
 
   async function runSearch() {
     setLoading(true);
@@ -110,10 +101,8 @@ export default function ProgramsPage() {
       }
     }, 500);
 
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [q, metro, delivery]);
+    return () => clearTimeout(handler);
+  }, [filters]);
 
   useEffect(() => {
     if (!isInitialMount.current) {
@@ -121,31 +110,23 @@ export default function ProgramsPage() {
     }
   }, [currentPage]);
 
-  const items = programs
-    .filter(p => !!(p.url || p.external_url))
-    .map(p => {
-      const locParts = (p.city && p.state) ? { city: p.city, state: p.state } : cityStateFromLocation(p.location);
-      const { full, short } = cipKeyFor(p);
-      const cipInfo = CIP_INFO[full] || CIP_INFO[short] || null;
-      const programName = cipInfo?.name || p.title || 'Manufacturing Program';
-      const blurb = (p.description && p.description.trim()) ? p.description.trim() : (cipInfo?.blurb || 'Hands-on training for modern manufacturing careers.');
-      const link = p.url || p.external_url || null;
-      const domain = safeHostname(link);
-      const metaBits: string[] = [];
-      const place = [locParts.city, locParts.state].filter(Boolean).join(', ');
-      if (place) metaBits.push(place);
-      metaBits.push(p.delivery || 'in-person');
-      return { id: p.id, school: p.school, programName, blurb, lengthWeeks: p.lengthWeeks, cost: p.cost, link, domain, meta: metaBits.join(' • ') };
-    });
-
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="text-3xl font-extrabold mb-4">Training Programs</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-4 border rounded-lg bg-white sticky top-20 z-10 shadow-sm">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search program or school" className="md:col-span-2 border rounded-md px-3 py-2" />
-        <input value={metro} onChange={(e) => setMetro(e.target.value)} placeholder="Metro (e.g., Phoenix, AZ)" className="border rounded-md px-3 py-2" />
-        <select value={delivery} onChange={(e) => setDelivery(e.target.value as any)} className="border rounded-md px-3 py-2">
-          <option value="all">Delivery (all)</option>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3 p-4 border rounded-lg bg-white sticky top-20 z-10 shadow-sm">
+        <input value={filters.q} onChange={(e) => setFilters(s => ({...s, q: e.target.value}))} placeholder="Search program or school" className="md:col-span-2 border rounded-md px-3 py-2" />
+        <input value={filters.location} onChange={(e) => setFilters(s => ({...s, location: e.target.value}))} placeholder="City, State, or ZIP" className="border rounded-md px-3 py-2" />
+        
+        <select value={filters.program_type} onChange={(e) => setFilters(s => ({...s, program_type: e.target.value}))} className="border rounded-md px-3 py-2">
+          <option value="all">Program Type (All)</option>
+          <option value="Certificate">Certificate</option>
+          <option value="Associate Degree">Associate Degree</option>
+          <option value="Apprenticeship">Apprenticeship</option>
+          <option value="Non-Credit">Non-Credit</option>
+        </select>
+
+        <select value={filters.delivery} onChange={(e) => setFilters(s => ({...s, delivery: e.target.value as any}))} className="border rounded-md px-3 py-2">
+          <option value="all">Delivery (All)</option>
           <option value="in-person">In-person</option>
           <option value="online">Online</option>
           <option value="hybrid">Hybrid</option>
@@ -154,7 +135,7 @@ export default function ProgramsPage() {
 
       <div className="flex flex-wrap gap-2 mb-6">
         {metroChips.map((m: string) => (
-          <button key={m} onClick={() => { setMetro(m); }} className={`px-3 py-1 rounded-full border text-sm ${ metro === m ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50' }`}>
+          <button key={m} onClick={() => setFilters(s => ({...s, location: m}))} className={`px-3 py-1 rounded-full border text-sm ${ filters.location === m ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50' }`}>
             {m}
           </button>
         ))}
@@ -162,33 +143,29 @@ export default function ProgramsPage() {
 
       <div className="grid gap-5">
         {loading && <p className="text-center py-10">Loading programs...</p>}
-        {!loading && items.map((it) => (
-          <article key={it.id} className="rounded-xl border bg-white p-5 shadow-sm">
-            <h3 className="text-xl font-bold text-gray-900">{it.programName}</h3>
-            <div className="text-sm text-gray-500 mt-1">{it.meta}</div>
-            <div className="text-md font-semibold text-gray-700 mt-3">{it.school}</div>
-            <p className="text-gray-600 mt-2 line-clamp-3">{it.blurb}</p>
+        {!loading && programs.map((p: any) => (
+          <article key={p.id} className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="text-xl font-bold text-gray-900">{p.title}</h3>
+            <div className="text-sm text-gray-500 mt-1">{p.city}, {p.state} • {p.delivery} • {p.program_type}</div>
+            <div className="text-md font-semibold text-gray-700 mt-3">{p.school}</div>
+            <p className="text-gray-600 mt-2 line-clamp-3">{p.description}</p>
 
             <div className="text-sm text-gray-500 mt-4 flex flex-wrap gap-x-4 gap-y-2">
-              {typeof it.lengthWeeks === 'number' && it.lengthWeeks > 0 && (
-                <span>Length: ~{it.lengthWeeks} weeks</span>
-              )}
-              {typeof it.cost === 'number' && it.cost > 0 && (
-                <span>Est. cost: ${it.cost.toLocaleString()}</span>
-              )}
+              {p.length_weeks && <span>Length: ~{p.length_weeks} weeks</span>}
+              {p.cost && <span>Est. cost: ${p.cost.toLocaleString()}</span>}
             </div>
 
-            {it.link && (
+            {(p.url || p.external_url) && (
               <div className="mt-4">
-                <Link href={it.link} target="_blank" className="inline-block px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">
+                <Link href={p.url || p.external_url} target="_blank" className="inline-block px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">
                   Program Page
                 </Link>
               </div>
             )}
           </article>
         ))}
-        {!loading && items.length === 0 && (
-          <div className="text-center py-12 text-gray-500">No programs match your filters.</div>
+        {!loading && programs.length === 0 && (
+          <div className="text-center py-12 text-gray-500">No programs match your filters. Try a broader location.</div>
         )}
       </div>
       
