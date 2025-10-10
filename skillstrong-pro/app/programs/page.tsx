@@ -24,31 +24,11 @@ type Program = {
   external_url?: string | null;
 };
 
-const CIP_INFO: Record<string, { name: string; blurb: string }> = {
-  '4805': { name: 'Precision Metal Working (Welding & Machining)', blurb: 'Hands-on metal fabrication: cutting, forming, welding, and safe shop practices with print reading and CNC setup.' },
-  '4803': { name: 'CNC Machining Technology', blurb: 'CNC setup & operation: read prints, CAM/G-code basics, tool selection, work offsets, and quality checks for precision parts.' },
-  '1504': { name: 'Robotics & Automation', blurb: 'PLCs, sensors, motion systems, safety, and troubleshooting automated cells.' },
-  '1506': { name: 'Industrial Maintenance', blurb: 'Mechanical, electrical, hydraulics, pneumatics, and PLC troubleshooting with preventive maintenance.' },
-  '1507': { name: 'Quality Control / QA', blurb: 'GD&T, metrology, SPC and practical QA methods with common measurement tools.' },
-  '150702': { name: 'Quality Control Technology/Technician', blurb: 'Use measurement tools, SPC, and QA methods to keep product quality high.' },
-};
-
-function safeHostname(u?: string | null) {
-  try {
-    if (!u) return null;
-    const h = new URL(u).hostname;
-    return h.replace(/^www\./, '');
-  } catch {
-    return null;
-  }
-}
-
 export default function ProgramsPage() {
   const [filters, setFilters] = useState({
       q: '',
       location: '',
       program_type: 'all',
-      delivery: 'all',
   });
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +46,6 @@ export default function ProgramsPage() {
     if (filters.q) p.set('q', filters.q);
     if (filters.location) p.set('location', filters.location);
     if (filters.program_type !== 'all') p.set('program_type', filters.program_type);
-    if (filters.delivery !== 'all') p.set('delivery', filters.delivery);
     p.set('page', String(currentPage));
     p.set('limit', String(limit));
     return p.toString();
@@ -113,9 +92,9 @@ export default function ProgramsPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
       <h1 className="text-3xl font-extrabold mb-4">Training Programs</h1>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3 p-4 border rounded-lg bg-white sticky top-20 z-10 shadow-sm">
-        <input value={filters.q} onChange={(e) => setFilters(s => ({...s, q: e.target.value}))} placeholder="Search program or school" className="md:col-span-2 border rounded-md px-3 py-2" />
-        <input value={filters.location} onChange={(e) => setFilters(s => ({...s, location: e.target.value}))} placeholder="City, State, or ZIP" className="border rounded-md px-3 py-2" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-4 border rounded-lg bg-white sticky top-20 z-10 shadow-sm">
+        <input value={filters.q} onChange={(e) => setFilters(s => ({...s, q: e.target.value}))} placeholder="Search program or school" className="md:col-span-3 border rounded-md px-3 py-2" />
+        <input value={filters.location} onChange={(e) => setFilters(s => ({...s, location: e.target.value}))} placeholder="City, State, or ZIP" className="md:col-span-2 border rounded-md px-3 py-2" />
         
         <select value={filters.program_type} onChange={(e) => setFilters(s => ({...s, program_type: e.target.value}))} className="border rounded-md px-3 py-2">
           <option value="all">Program Type (All)</option>
@@ -123,13 +102,6 @@ export default function ProgramsPage() {
           <option value="Associate Degree">Associate Degree</option>
           <option value="Apprenticeship">Apprenticeship</option>
           <option value="Non-Credit">Non-Credit</option>
-        </select>
-
-        <select value={filters.delivery} onChange={(e) => setFilters(s => ({...s, delivery: e.target.value as any}))} className="border rounded-md px-3 py-2">
-          <option value="all">Delivery (All)</option>
-          <option value="in-person">In-person</option>
-          <option value="online">Online</option>
-          <option value="hybrid">Hybrid</option>
         </select>
       </div>
 
@@ -146,7 +118,7 @@ export default function ProgramsPage() {
         {!loading && programs.map((p: any) => (
           <article key={p.id} className="rounded-xl border bg-white p-5 shadow-sm">
             <h3 className="text-xl font-bold text-gray-900">{p.title}</h3>
-            <div className="text-sm text-gray-500 mt-1">{p.city}, {p.state} • {p.delivery} • {p.program_type}</div>
+            <div className="text-sm text-gray-500 mt-1">{p.city}, {p.state} • {p.program_type}</div>
             <div className="text-md font-semibold text-gray-700 mt-3">{p.school}</div>
             <p className="text-gray-600 mt-2 line-clamp-3">{p.description}</p>
 
@@ -165,7 +137,7 @@ export default function ProgramsPage() {
           </article>
         ))}
         {!loading && programs.length === 0 && (
-          <div className="text-center py-12 text-gray-500">No programs match your filters. Try a broader location.</div>
+          <div className="text-center py-12 text-gray-500">No programs match your filters. Try a broader search.</div>
         )}
       </div>
       
