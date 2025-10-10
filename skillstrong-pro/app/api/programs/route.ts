@@ -2,21 +2,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const u = new URL(req.url);
   const q = u.searchParams.get("q")?.trim();
   const location_q = u.searchParams.get("location")?.trim();
   const program_type = u.searchParams.get("program_type")?.trim();
-  const delivery = u.searchParams.get("delivery") as "in-person" | "online" | "hybrid" | null;
+  
+  // FIX: Allow 'all' as a valid type for delivery
+  const delivery = u.searchParams.get("delivery") as "in-person" | "online" | "hybrid" | "all" | null;
+  
   const page = parseInt(u.searchParams.get("page") || "1");
   const limit = parseInt(u.searchParams.get("limit") || "20");
   const offset = (page - 1) * limit;
 
-  // --- Location Fallback Search ---
-  // If no results for a specific city, we can broaden the search.
-  // This example uses a simple metro-area fallback, but you could also
-  // implement a radius search here if you have lat/lon for the location query.
-  
   let query = supabaseAdmin.from("programs").select("*", { count: 'exact' });
 
   // Keyword filter
@@ -42,18 +42,14 @@ export async function GET(req: NextRequest) {
 
   let { data, error, count } = await query;
 
-  // **FALLBACK LOGIC**: If no results and it was a specific location search, try searching the metro area.
+  // FALLBACK LOGIC
   if (count === 0 && location_q) {
     console.log(`No results for "${location_q}", attempting fallback search...`);
     
-    // A real implementation would geocode the user's input to find the metro area (cbsa_code)
-    // For this example, we'll just broaden the search to any location match.
-    // This is where you would call your `programs_in_radius` function if you had lat/lon.
     let fallbackQuery = supabaseAdmin.from("programs").select("*", { count: 'exact' });
     if (q) {
        fallbackQuery = fallbackQuery.or(`school.ilike.%${q}%,title.ilike.%${q}%,description.ilike.%${q}%`);
     }
-    // A simple fallback could be to just ignore location
     
     const { data: fallbackData, error: fallbackError, count: fallbackCount } = await fallbackQuery;
     
