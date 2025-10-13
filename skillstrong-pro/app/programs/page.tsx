@@ -5,11 +5,11 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, MapPin, BarChart3, Search, Bot } from 'lucide-react';
+import { BookOpen, MapPin, Clock, Search, Bot } from 'lucide-react'; // Changed BarChart3 to Clock
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'state' | 'program_type' }) => (
+const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' | 'program_type' }) => (
     <div className="bg-white p-6 rounded-lg border shadow-sm">
         <div className="flex items-center gap-3 mb-4">
             {icon}
@@ -88,9 +88,9 @@ export default function ProgramsPage() {
         
         {data && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <TrendCard title="In-Demand Programs" icon={<BookOpen className="text-blue-600"/>} data={data.inDemandPrograms} type="q" />
-            <TrendCard title="Popular Locations" icon={<MapPin className="text-blue-600"/>} data={data.popularLocations} type="state" />
-            <TrendCard title="Trending Fields" icon={<BarChart3 className="text-blue-600"/>} data={data.trendingFields} type="program_type" />
+            <TrendCard title="Trending Programs" icon={<BookOpen className="text-blue-600"/>} data={data.trendingPrograms} type="q" />
+            <TrendCard title="Popular Locations" icon={<MapPin className="text-blue-600"/>} data={data.popularLocations} type="location" />
+            <TrendCard title="Course Duration" icon={<Clock className="text-blue-600"/>} data={data.commonDurations} type="q" />
           </div>
         )}
       </section>
