@@ -1,159 +1,107 @@
 // /app/programs/page.tsx
 'use client';
 
-import { useEffect, useMemo, useState, useRef } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
 import useSWR from 'swr';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { BookOpen, MapPin, BarChart3, Search, Bot } from 'lucide-react';
 
-const fetcher = (url: string) => fetch(url).then(res => res.json());
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-type Program = {
-  id: string;
-  school: string;
-  title?: string | null;
-  location?: string | null;
-  city?: string | null;
-  state?: string | null;
-  metro?: string | null;
-  delivery?: 'in-person' | 'online' | 'hybrid' | null;
-  length_weeks?: number | null;
-  cost?: number | null;
-  program_type?: 'Certificate' | 'Associate Degree' | 'Apprenticeship' | 'Non-Credit';
-  description?: string | null;
-  url?: string | null;
-  external_url?: string | null;
-};
+const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'state' | 'program_type' }) => (
+    <div className="bg-white p-6 rounded-lg border shadow-sm">
+        <div className="flex items-center gap-3 mb-4">
+            {icon}
+            <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+            {data?.map((item) => (
+                <Link
+                  key={item}
+                  href={`/programs/all?${type}=${encodeURIComponent(item)}`}
+                  className="px-3 py-1 bg-slate-100 text-slate-700 rounded-full text-sm font-medium hover:bg-blue-100 hover:text-blue-800 transition-colors"
+                >
+                    {item}
+                </Link>
+            ))}
+        </div>
+    </div>
+);
+
+const states = ["All States", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
 
 export default function ProgramsPage() {
-  const [filters, setFilters] = useState({
-      q: '',
-      location: '',
-      program_type: 'all',
-  });
-  const [programs, setPrograms] = useState<Program[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [count, setCount] = useState<number>(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const limit = 20;
-  const totalPages = Math.ceil(count / limit);
-  const isInitialMount = useRef(true);
+  const router = useRouter();
+  const { data, error } = useSWR('/api/programs/trends', fetcher);
+  const [keyword, setKeyword] = useState('');
+  const [state, setState] = useState('All States');
+  const [programType, setProgramType] = useState('all');
 
-  const { data: filtersData } = useSWR('/api/programs/filters', fetcher);
-  const metroChips = filtersData?.metros || [];
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    if (keyword) params.set('q', keyword);
+    if (state !== 'All States') params.set('state', state);
+    if (programType !== 'all') params.set('program_type', programType);
+    router.push(`/programs/all?${params.toString()}`);
+  };
 
-  const queryString = useMemo(() => {
-    const p = new URLSearchParams();
-    if (filters.q) p.set('q', filters.q);
-    if (filters.location) p.set('location', filters.location);
-    if (filters.program_type !== 'all') p.set('program_type', filters.program_type);
-    p.set('page', String(currentPage));
-    p.set('limit', String(limit));
-    return p.toString();
-  }, [filters, currentPage]);
-
-  async function runSearch() {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/programs?${queryString}`, { cache: 'no-store' });
-      const data = await res.json();
-      setPrograms(Array.isArray(data.programs) ? data.programs : []);
-      setCount(typeof data.count === 'number' ? data.count : 0);
-    } catch {
-      setPrograms([]);
-      setCount(0);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      if (isInitialMount.current) {
-        runSearch();
-        isInitialMount.current = false;
-      } else {
-        if (currentPage !== 1) {
-          setCurrentPage(1);
-        } else {
-          runSearch();
-        }
-      }
-    }, 500);
-
-    return () => clearTimeout(handler);
-  }, [filters]);
-
-  useEffect(() => {
-    if (!isInitialMount.current) {
-        runSearch();
-    }
-  }, [currentPage]);
+  const isLoading = !data && !error;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <h1 className="text-3xl font-extrabold mb-4">Training Programs</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 p-4 border rounded-lg bg-white sticky top-20 z-10 shadow-sm">
-        <input value={filters.q} onChange={(e) => setFilters(s => ({...s, q: e.target.value}))} placeholder="Search program or school" className="md:col-span-3 border rounded-md px-3 py-2" />
-        <input value={filters.location} onChange={(e) => setFilters(s => ({...s, location: e.target.value}))} placeholder="City, State, or ZIP" className="md:col-span-2 border rounded-md px-3 py-2" />
-        
-        <select value={filters.program_type} onChange={(e) => setFilters(s => ({...s, program_type: e.target.value}))} className="border rounded-md px-3 py-2">
-          <option value="all">Program Type (All)</option>
-          <option value="Certificate">Certificate</option>
-          <option value="Associate Degree">Associate Degree</option>
-          <option value="Apprenticeship">Apprenticeship</option>
-          <option value="Non-Credit">Non-Credit</option>
-        </select>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mb-6">
-        {metroChips.map((m: string) => (
-          <button key={m} onClick={() => setFilters(s => ({...s, location: m}))} className={`px-3 py-1 rounded-full border text-sm ${ filters.location === m ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-gray-50' }`}>
-            {m}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid gap-5">
-        {loading && <p className="text-center py-10">Loading programs...</p>}
-        {!loading && programs.map((p: any) => (
-          <article key={p.id} className="rounded-xl border bg-white p-5 shadow-sm">
-            <h3 className="text-xl font-bold text-gray-900">{p.title}</h3>
-            <div className="text-sm text-gray-500 mt-1">{p.city}, {p.state} • {p.program_type}</div>
-            <div className="text-md font-semibold text-gray-700 mt-3">{p.school}</div>
-            <p className="text-gray-600 mt-2 line-clamp-3">{p.description}</p>
-
-            <div className="text-sm text-gray-500 mt-4 flex flex-wrap gap-x-4 gap-y-2">
-              {p.length_weeks && <span>Length: ~{p.length_weeks} weeks</span>}
-              {p.cost && <span>Est. cost: ${p.cost.toLocaleString()}</span>}
-            </div>
-
-            {(p.url || p.external_url) && (
-              <div className="mt-4">
-                <Link href={p.url || p.external_url} target="_blank" className="inline-block px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">
-                  Program Page
-                </Link>
-              </div>
-            )}
-          </article>
-        ))}
-        {!loading && programs.length === 0 && (
-          <div className="text-center py-12 text-gray-500">No programs match your filters. Try a broader search.</div>
-        )}
-      </div>
-      
-      {totalPages > 1 && (
-        <div className="mt-8 flex justify-center items-center gap-4">
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1 || loading} className="px-4 py-2 rounded-md border disabled:opacity-50">
-            Previous
-          </button>
-          <span className="text-gray-600">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || loading} className="px-4 py-2 rounded-md border disabled:opacity-50">
-            Next
-          </button>
+    <div className="min-h-screen bg-slate-50 text-slate-800">
+      <section className="bg-slate-800 text-white py-20 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-4xl md:text-5xl font-extrabold mb-4">Find Your Training Program</h1>
+          <p className="mb-8 text-lg text-slate-300 max-w-2xl mx-auto">
+            Discover certificates, degrees, and apprenticeships to launch your manufacturing career.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2 max-w-2xl mx-auto bg-white p-2 rounded-lg shadow-lg">
+            <input 
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="Program or School (e.g., Welding)" 
+              className="p-3 rounded-md flex-grow text-black border-gray-200 border" 
+            />
+            <select value={state} onChange={e => setState(e.target.value)} className="p-3 rounded-md text-black border-gray-200 border">
+                {states.map(st => <option key={st} value={st}>{st}</option>)}
+            </select>
+             <select value={programType} onChange={e => setProgramType(e.target.value)} className="p-3 rounded-md text-black border-gray-200 border">
+                <option value="all">Program Type (All)</option>
+                <option value="Certificate">Certificate</option>
+                <option value="Associate Degree">Associate Degree</option>
+                <option value="Apprenticeship">Apprenticeship</option>
+            </select>
+            <button 
+              onClick={handleSearch} 
+              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md text-white font-semibold flex items-center justify-center"
+            >
+              <Search className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-      )}
+      </section>
+
+      <section className="max-w-6xl mx-auto py-16 px-4">
+        {isLoading && <p className="text-center">Loading program trends...</p>}
+        {error && <p className="text-center text-red-500">Failed to load program trends.</p>}
+        
+        {data && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <TrendCard title="In-Demand Programs" icon={<BookOpen className="text-blue-600"/>} data={data.inDemandPrograms} type="q" />
+            <TrendCard title="Popular Locations" icon={<MapPin className="text-blue-600"/>} data={data.popularLocations} type="state" />
+            <TrendCard title="Trending Fields" icon={<BarChart3 className="text-blue-600"/>} data={data.trendingFields} type="program_type" />
+          </div>
+        )}
+      </section>
+      
+      <section className="py-16 text-center px-4">
+          <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>
+          <p className="mt-2 text-slate-600">Let our AI coach guide you to the perfect manufacturing career.</p>
+          <Link href="/chat" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+              <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
+          </Link>
+      </section>
     </div>
   );
 }
