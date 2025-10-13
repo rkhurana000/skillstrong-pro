@@ -5,11 +5,12 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, MapPin, Clock, Search, Bot } from 'lucide-react'; // Changed BarChart3 to Clock
+import { BookOpen, MapPin, Clock, Search, Bot } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' | 'program_type' }) => (
+// FIX: Added 'duration' to the possible types
+const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' | 'duration' }) => (
     <div className="bg-white p-6 rounded-lg border shadow-sm">
         <div className="flex items-center gap-3 mb-4">
             {icon}
@@ -90,7 +91,8 @@ export default function ProgramsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <TrendCard title="Trending Programs" icon={<BookOpen className="text-blue-600"/>} data={data.trendingPrograms} type="q" />
             <TrendCard title="Popular Locations" icon={<MapPin className="text-blue-600"/>} data={data.popularLocations} type="location" />
-            <TrendCard title="Course Duration" icon={<Clock className="text-blue-600"/>} data={data.commonDurations} type="q" />
+            {/* FIX: Changed type to "duration" */}
+            <TrendCard title="Course Duration" icon={<Clock className="text-blue-600"/>} data={data.commonDurations} type="duration" />
           </div>
         )}
       </section>
