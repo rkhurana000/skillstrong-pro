@@ -9,12 +9,15 @@ export async function GET() {
     const { data: programs, error } = await supabaseAdmin
       .from('programs')
       .select('title, city, state, length_weeks')
-      .limit(3000); // Increased limit to get a better sample size
+      .limit(3000);
 
     if (error) throw error;
 
-    // 1. Trending Programs in key fields
-    const keywords = ['welding', 'robotic', 'cnc', 'machinist', 'additive', 'quality', 'manufacturing'];
+    // 1. Trending Programs - Using a broader keyword list
+    const keywords = [
+        'welding', 'robotic', 'cnc', 'machinist', 'additive', 'quality', 
+        'manufacturing', 'metal work', 'maintenance', 'automation', 'technician'
+    ];
     const titleCounts: Record<string, number> = {};
     programs.forEach(({ title }) => {
       if (title && keywords.some(kw => title.toLowerCase().includes(kw))) {
