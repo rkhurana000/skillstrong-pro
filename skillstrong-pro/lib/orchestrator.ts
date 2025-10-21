@@ -188,11 +188,66 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
     // no-op
   }
 
-  const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
-  return { answer: finalAnswer, followups };
+// MODIFIED: Added logic for external search follow-up
+async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
+  let finalFollowups: string[] = [];
+  try {
+    const res = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Generate 4-6 SHORT follow-up prompts (<= 48 chars each) strictly about manufacturing careers, training, salaries, or apprenticeships. Return ONLY a JSON array of strings.',
+        },
+        { role: 'user', content: JSON.stringify({ question, answer, location }) },
+      ],
+    });
+    const raw = res.choices[0]?.message?.content ?? '[]';
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) {
+      finalFollowups = arr;
+    }
+  } catch {}
+
+  // --- NEW LOGIC FOR EXTERNAL SEARCH ---
+  const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
+  // Check for the specific heading we added
+  const answerHasInternal = /### 🛡️ SkillStrong Database Matches/i.test(answer);
+
+  if (userAskedForLocal && answerHasInternal) {
+    const hasExternalSearch = finalFollowups.some(f => /web|internet|external|more/i.test(f.toLowerCase()));
+    if (!hasExternalSearch) {
+      finalFollowups.push('Search the web for more results?');
+    }
+  }
+// --- END NEW LOGIC ---  
+  if (finalFollowups.length > 0) {
+    return sanitizeFollowups(finalFollowups);
+  }
+  
+  return defaultFollowups();
 }
 
-async function domainGuard(query: string): Promise<boolean> {
+function sanitizeFollowups(arr: any[]): string[] {
+  return arr
+    .filter((s) => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => s.trim().slice(0, 48))
+    .slice(0, 6);
+}
+
+function defaultFollowups(): string[] {
+  return [
+    'Find paid apprenticeships near me',
+    'Local training programs',
+    'Typical salaries (BLS)',
+    'Explore CNC Machinist',
+    'Explore Robotics Technician',
+    'Talk to Coach Mach',
+  ];
+}
+  async function domainGuard(query: string): Promise<boolean> {
   if (!query.trim()) return true;
   const allowHints =
     /(manufact|cnc|robot|weld|machin|apprentice|factory|plant|quality|maintenance|mechatronic|additive|3d\s*print|bls|o\*net|program|community\s*college|trade\s*school|career)/i;
