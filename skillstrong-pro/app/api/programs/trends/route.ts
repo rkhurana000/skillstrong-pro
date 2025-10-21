@@ -6,32 +6,37 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    // Fetch more programs to get a better sample for trends
     const { data: programs, error } = await supabaseAdmin
       .from('programs')
-      .select('title, city, state, length_weeks')
-      .limit(3000);
+      .select('title, city, state, length_weeks, program_type') // Added program_type
+      .limit(5000); // Increased limit further
 
     if (error) throw error;
+    if (!programs) throw new Error("No programs data returned from database.");
 
-    // 1. Trending Programs - Identify subjects from titles for better diversity
+
+    // 1. Trending Programs - Show most frequent titles containing keywords
     const keywords = [
-        'Welding', 'Robotics', 'CNC', 'Machinist', 'Additive', 'Quality', 
-        'Manufacturing', 'Metal Work', 'Maintenance', 'Automation', 'Technician'
+        'welding', 'robotic', 'cnc', 'machinist', 'additive', 'quality',
+        'manufacturing', 'metal work', 'maintenance', 'automation', 'technician',
+        'fabrication', 'mechatronics', 'industrial'
     ];
-    const subjectCounts: Record<string, number> = {};
+    const titleCounts: Record<string, number> = {};
     programs.forEach(({ title }) => {
-      if (title) {
-        for (const kw of keywords) {
-            if (title.toLowerCase().includes(kw.toLowerCase())) {
-                // Use a canonical name for the subject
-                const subject = kw === 'Metal Work' ? 'Welding' : kw;
-                subjectCounts[subject] = (subjectCounts[subject] || 0) + 1;
-                break; // Count first keyword match only
-            }
-        }
+      // Ensure title is treated as a string, even if null/undefined
+      const programTitle = String(title || '').toLowerCase();
+      if (programTitle && keywords.some(kw => programTitle.includes(kw))) {
+        // Use the original title casing for display
+        const displayTitle = title || "Unknown Program";
+        titleCounts[displayTitle] = (titleCounts[displayTitle] || 0) + 1;
       }
     });
-    const trendingPrograms = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(item => item[0]);
+    // Sort by count (descending), take top 10
+    const trendingPrograms = Object.entries(titleCounts)
+                                   .sort(([, countA], [, countB]) => countB - countA)
+                                   .slice(0, 10)
+                                   .map(([title]) => title); // Get only the title string
 
 
     // 2. Popular Locations (City, State)
@@ -47,23 +52,32 @@ export async function GET() {
     // 3. Common Course Durations
     const durationCounts: Record<number, number> = {};
     programs.forEach(({ length_weeks }) => {
-        if (length_weeks && length_weeks > 0) {
-            durationCounts[length_weeks] = (durationCounts[length_weeks] || 0) + 1;
+        // Ensure length_weeks is treated as a number, check > 0
+        const weeks = Number(length_weeks);
+        if (!isNaN(weeks) && weeks > 0) {
+            durationCounts[weeks] = (durationCounts[weeks] || 0) + 1;
         }
     });
     const commonDurations = Object.entries(durationCounts)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => Number(b[1]) - Number(a[1])) // Sort by count (numeric)
         .slice(0, 8)
-        .map(item => `${item[0]} weeks`);
+        .map(item => `${item[0]} weeks`); // Format as "X weeks"
+
+    // 4. (For Debugging/Confirming Program Types) - Get distinct program types present in data
+    const distinctProgramTypes = Array.from(new Set(programs.map(p => p.program_type).filter(Boolean)));
+
 
     return NextResponse.json({
       trendingPrograms,
       popularLocations,
       commonDurations,
+      // Include distinct types found, useful for frontend dropdown validation
+      availableProgramTypes: distinctProgramTypes
     });
 
   } catch (e: any) {
     console.error("Error fetching program trends:", e);
-    return NextResponse.json({ error: e.message || 'Failed to fetch trends' }, { status: 500 });
+    // Provide more detail in the error response if possible
+    return NextResponse.json({ error: e.message || 'Failed to fetch trends', details: e.toString() }, { status: 500 });
   }
 }
