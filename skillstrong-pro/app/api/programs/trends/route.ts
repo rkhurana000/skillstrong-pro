@@ -5,38 +5,58 @@ import { supabaseAdmin } from '@/lib/supabaseServer';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  console.log("--- Fetching Program Trends (Direct Count Method) ---");
+  console.log("--- Fetching Program Trends (JS Count Method) ---"); // Updated log
   try {
-    // 1. Trending Programs - Direct SQL-like count and ranking
-    const { data: topTitlesData, error: titlesError } = await supabaseAdmin
+    // Fetch necessary columns for all trend types
+    const { data: programs, error } = await supabaseAdmin
       .from('programs')
-      .select('title, count', { count: 'exact' }) // Select title and count occurrences
-      .not('title', 'is', null) // Ignore null titles
-      .neq('title', '') // Ignore empty titles
-      .order('count', { ascending: false }) // Order by count descending
-      .limit(15); // Get the top 15
+      .select('title, city, state, length_weeks, program_type')
+      .limit(5000); // Keep large limit
 
-    if (titlesError) {
-      console.error("Supabase error fetching top titles:", titlesError);
-      throw titlesError;
+    if (error) {
+        console.error("Supabase error fetching programs for trends:", error);
+        // Return a specific error response
+        return NextResponse.json({ error: `Supabase error: ${error.message}` }, { status: 500 });
     }
+    if (!programs) {
+        console.error("No programs data returned from database for trends.");
+         // Return a specific error response
+        return NextResponse.json({ error: "No program data found in database." }, { status: 404 });
+    }
+    console.log(`Fetched ${programs.length} programs for trend analysis.`);
 
-    // Extract just the titles from the result
-    const trendingPrograms = topTitlesData ? topTitlesData.map(item => item.title) : [];
-    console.log("Top 15 Trending Programs (Direct Query):", trendingPrograms);
+    // 1. Trending Programs - Count NORMALIZED exact titles using JavaScript
+    const titleCounts: Record<string, number> = {};
+    const originalTitleMapping: Record<string, string> = {}; // Store original casing
 
-    // --- Other Trends (Locations, Durations) - Fetch separately ---
-    const { data: otherTrendsData, error: otherTrendsError } = await supabaseAdmin
-      .from('programs')
-      .select('city, state, length_weeks, program_type')
-      .limit(5000); // Fetch data needed for other trends
+    programs.forEach(({ title }) => {
+        const originalTitle = String(title || '').trim();
+        if (originalTitle.length > 3) {
+            const normalizedTitle = originalTitle.toLowerCase();
+            titleCounts[normalizedTitle] = (titleCounts[normalizedTitle] || 0) + 1;
+            if (!originalTitleMapping[normalizedTitle]) {
+                originalTitleMapping[normalizedTitle] = originalTitle;
+            }
+        }
+    });
 
-    if (otherTrendsError) throw otherTrendsError;
-    if (!otherTrendsData) throw new Error("Could not fetch data for other trends.");
+    console.log("Raw Title Counts (Normalized):", JSON.stringify(Object.entries(titleCounts).slice(0, 50), null, 2)); // Log first 50 counts
 
-    // 2. Popular Locations (City, State)
+    const sortedTitles = Object.entries(titleCounts)
+                               .sort(([, countA], [, countB]) => countB - countA);
+
+    console.log(`Found ${sortedTitles.length} unique program titles.`);
+
+    const topTitlesNormalized = sortedTitles.slice(0, 15);
+
+    const trendingPrograms = topTitlesNormalized.map(([normalizedTitle]) => originalTitleMapping[normalizedTitle] || normalizedTitle);
+
+    console.log("Top 15 Trending Programs (Final):", trendingPrograms);
+
+
+    // --- Other Trends (Locations, Durations, Types) - Keep previous logic ---
     const locationCounts: Record<string, number> = {};
-    otherTrendsData.forEach(({ city, state }) => {
+    programs.forEach(({ city, state }) => {
         if (city && state) {
             const location = `${city}, ${state}`;
             locationCounts[location] = (locationCounts[location] || 0) + 1;
@@ -44,9 +64,8 @@ export async function GET() {
     });
     const popularLocations = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).slice(0, 15).map(item => item[0]);
 
-    // 3. Common Course Durations
     const durationCounts: Record<number, number> = {};
-    otherTrendsData.forEach(({ length_weeks }) => {
+    programs.forEach(({ length_weeks }) => {
         const weeks = Number(length_weeks);
         if (!isNaN(weeks) && weeks > 0) {
             durationCounts[weeks] = (durationCounts[weeks] || 0) + 1;
@@ -57,19 +76,20 @@ export async function GET() {
         .slice(0, 8)
         .map(item => `${item[0]} weeks`);
 
-    // 4. Get distinct program types
-    const distinctProgramTypes = Array.from(new Set(otherTrendsData.map(p => p.program_type).filter(Boolean)));
+    const distinctProgramTypes = Array.from(new Set(programs.map(p => p.program_type).filter(Boolean)));
 
-    console.log("Trends calculation complete.");
+    console.log("Trends calculation complete. Sending response.");
+    // Ensure response is always valid JSON, even if arrays are empty
     return NextResponse.json({
-      trendingPrograms,
-      popularLocations,
-      commonDurations,
-      availableProgramTypes: distinctProgramTypes
+      trendingPrograms: trendingPrograms || [],
+      popularLocations: popularLocations || [],
+      commonDurations: commonDurations || [],
+      availableProgramTypes: distinctProgramTypes || []
     });
 
   } catch (e: any) {
-    console.error("Error in /api/programs/trends:", e);
+    // Catch any unexpected errors during processing
+    console.error("Unhandled error in /api/programs/trends:", e);
     return NextResponse.json({ error: e.message || 'Failed to fetch trends', details: e.toString() }, { status: 500 });
   }
 }
