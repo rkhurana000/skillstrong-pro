@@ -8,13 +8,10 @@ export async function GET(req: NextRequest) {
   const u = new URL(req.url);
   const q = u.searchParams.get("q")?.trim(); // General keyword/program/school search
   const program_type = u.searchParams.get("program_type")?.trim();
-  
-  // FIX: Corrected search_params to searchParams
   const state = u.searchParams.get("state")?.trim(); // State dropdown
-  const location = u.searchParams.get("location")?.trim(); // Location term (from Trend card OR search bar if comma used)
+  const location = u.searchParams.get("location")?.trim(); // Location term (from Trend card "City, ST")
   const duration = u.searchParams.get("duration")?.trim(); // Duration term
 
-  // FIX: Corrected search_params to searchParams
   const page = parseInt(u.searchParams.get("page") || "1");
   const limit = parseInt(u.searchParams.get("limit") || "20");
   const offset = (page - 1) * limit;
@@ -23,37 +20,41 @@ export async function GET(req: NextRequest) {
 
   // --- Apply Filters ---
 
-  // Location Filtering Logic
-  if (location) {
+  // **STRICT City, State Filtering (from location trend card)**
+  if (location && location.includes(',')) {
     const parts = location.split(',').map(s => s.trim()).filter(Boolean);
-    const firstPart = parts[0];
-    const secondPart = parts.length > 1 ? parts[1] : null;
-
-    if (secondPart) { // Assume "City, State"
-       console.log(`Filtering by Location (Trend/Comma): City='${firstPart}', State='${secondPart}'`);
-       query = query.ilike('city', `%${firstPart}%`).eq('state', secondPart);
-    } else { // Assume a single term (could be City, Metro, maybe Zip)
-       console.log(`Filtering by Location (Trend/Single Term): '${firstPart}'`);
-       // FIX: Ensure correct state matching if the single term is a state abbr
-       if (firstPart.length === 2 && firstPart === firstPart.toUpperCase()) {
-           query = query.or(`city.ilike.%${firstPart}%,state.eq.${firstPart},metro.ilike.%${firstPart}%,zip_code.eq.${firstPart}%`);
-       } else {
-            query = query.or(`city.ilike.%${firstPart}%,metro.ilike.%${firstPart}%,zip_code.eq.${firstPart}%`); // Search city, metro, zip
-       }
+    if (parts.length === 2) {
+        const city = parts[0];
+        const stateAbbr = parts[1];
+        console.log(`Applying STRICT location filter: City='${city}', State='${stateAbbr}'`);
+        // Use .eq for exact match (case-insensitive depends on DB collation, ilike is safer for city)
+        query = query.ilike('city', city).eq('state', stateAbbr); // Strict AND
+    } else {
+         console.warn(`Could not parse location parameter: '${location}'`);
+         // Apply broader filter as fallback if parsing fails
+         query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
     }
-  } else if (state && state !== 'All States') {
+  }
+  // State Filter (from dropdown) - Applied only if specific location isn't set
+  else if (state && state !== 'All States') {
     console.log(`Filtering by State Dropdown: State='${state}'`);
     query = query.eq('state', state);
   }
+  // If only a single term was passed via 'location' (e.g., just "Sacramento"), treat it broadly
+  else if (location) {
+     console.log(`Applying BROAD location filter (single term): '${location}'`);
+     query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+  }
+
 
   // Keyword/Program/School Filter (Search Box 'q')
+  // This is applied *in addition* to any location filters
   if (q) {
      console.log(`Filtering by Keyword: q='${q}'`);
      const durationMatch = q.match(/^(\d+)\s+weeks$/i);
      if (durationMatch) {
         const weeks = parseInt(durationMatch[1], 10);
          if (!isNaN(weeks)) {
-            console.log(`Keyword interpreted as Duration: ${weeks} weeks`);
             query = query.eq('length_weeks', weeks);
          }
      } else {
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
 
   // Duration Filter (from Trend Card)
   if (duration) {
-      const weeks = parseInt(duration.split(' ')[0], 10); // Extract number before " weeks"
+      const weeks = parseInt(duration.split(' ')[0], 10);
       if (!isNaN(weeks)) {
           console.log(`Filtering by Duration Trend: ${weeks} weeks`);
           query = query.eq('length_weeks', weeks);
