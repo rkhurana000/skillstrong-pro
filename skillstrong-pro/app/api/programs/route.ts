@@ -16,7 +16,6 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(u.searchParams.get("limit") || "20");
   const offset = (page - 1) * limit;
 
-  // Start building the query
   let queryBuilder = supabaseAdmin.from("programs").select("*", { count: 'exact' });
 
   console.log("--- New Search Request ---");
@@ -26,16 +25,23 @@ export async function GET(req: NextRequest) {
 
   let locationFilterApplied = false;
 
-  // STRICT City, State Filtering (PRIORITY)
+  // STRICT City, State Filtering (PRIORITY if 'location' param exists and is "City, ST")
   if (location && location.includes(',')) {
     const parts = location.split(',').map(s => s.trim()).filter(Boolean);
     if (parts.length === 2) {
         const city = parts[0];
         const stateAbbr = parts[1];
-        console.log(`Applying STRICT location filter: City ILIKE '%${city}%' AND State = '${stateAbbr}'`);
-        // Apply filters directly and reassign queryBuilder
-        queryBuilder = queryBuilder.ilike('city', `%${city}%`).eq('state', stateAbbr);
-        locationFilterApplied = true;
+        // Validate state abbreviation format (optional but good practice)
+        if (stateAbbr.length === 2 && stateAbbr === stateAbbr.toUpperCase()) {
+            console.log(`Applying STRICT location filter: City ILIKE '%${city}%' AND State = '${stateAbbr}'`);
+            // Apply the filters directly using AND logic
+            queryBuilder = queryBuilder.ilike('city', `%${city}%`).eq('state', stateAbbr);
+            locationFilterApplied = true;
+        } else {
+             console.warn(`Invalid State format in location parameter '${location}'. Applying broad search.`);
+             queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+             locationFilterApplied = true; // Still mark as applied to prevent state dropdown override
+        }
     } else {
          console.warn(`Could not parse location parameter '${location}' as City, State. Applying broad search.`);
          queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
@@ -46,14 +52,14 @@ export async function GET(req: NextRequest) {
   // State Dropdown Filter (Only if strict location wasn't applied)
   if (!locationFilterApplied && state && state !== 'All States') {
     console.log(`Applying State Dropdown filter: State = '${state}'`);
-    queryBuilder = queryBuilder.eq('state', state); // Apply filter
+    queryBuilder = queryBuilder.eq('state', state);
     locationFilterApplied = true;
   }
 
-  // Broad Location Search (Single term 'location', no state dropdown)
+  // Broad Location Search (Single term 'location', no state dropdown, strict filter failed/not applicable)
   if (!locationFilterApplied && location) {
      console.log(`Applying BROAD location filter (single term): '${location}'`);
-     queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`); // Apply filter
+     queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
      locationFilterApplied = true;
   }
 
@@ -65,10 +71,10 @@ export async function GET(req: NextRequest) {
      if (durationMatch) {
         const weeks = parseInt(durationMatch[1], 10);
          if (!isNaN(weeks)) {
-            queryBuilder = queryBuilder.eq('length_weeks', weeks); // Apply filter
+            queryBuilder = queryBuilder.eq('length_weeks', weeks);
          }
      } else {
-        queryBuilder = queryBuilder.or(`school.ilike.%${q}%,title.ilike.%${q}%`); // Apply filter
+        queryBuilder = queryBuilder.or(`school.ilike.%${q}%,title.ilike.%${q}%`);
      }
   }
 
@@ -77,14 +83,14 @@ export async function GET(req: NextRequest) {
       const weeks = parseInt(duration.replace(/\s*weeks/i, ''), 10);
       if (!isNaN(weeks)) {
           console.log(`Applying Duration filter: ${weeks} weeks`);
-          queryBuilder = queryBuilder.eq('length_weeks', weeks); // Apply filter
+          queryBuilder = queryBuilder.eq('length_weeks', weeks);
       }
   }
 
   // Program Type Filter
   if (program_type && program_type !== 'all') {
     console.log(`Applying Program Type filter: '${program_type}'`);
-    queryBuilder = queryBuilder.eq('program_type', program_type); // Apply filter
+    queryBuilder = queryBuilder.eq('program_type', program_type);
   }
 
   // --- Add Pagination and Ordering AFTER all filters ---
