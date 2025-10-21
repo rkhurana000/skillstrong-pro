@@ -1,4 +1,4 @@
-// /lib/marketplace.ts
+// rkhurana000/skillstrong-pro/skillstrong-pro-main/skillstrong-pro/lib/marketplace.ts
 import { supabaseAdmin } from './supabaseServer';
 
 export type Job = {
@@ -124,4 +124,68 @@ export async function findFeaturedMatching(query?: string, location?: string) {
     }
   }
   return resolved.slice(0, 3);
+}
+
+// --- NEW INTERNAL SEARCH FUNCTIONS ---
+
+/**
+ * Searches the internal 'jobs' table.
+ */
+export async function searchJobs(filters: { q?: string; location?: string; apprenticeship?: boolean; limit?: number }) {
+  try {
+    let query = supabaseAdmin.from('jobs').select('*');
+    if (filters.q) {
+      query = query.or(`title.ilike.%${filters.q}%,description.ilike.%${filters.q}%`);
+    }
+    if (filters.location) {
+      query = query.ilike('location', `%${filters.location}%`);
+    }
+    if (filters.apprenticeship) {
+      query = query.eq('apprenticeship', true);
+    }
+    query = query.order('featured', { ascending: false }).order('created_at', { ascending: false }).limit(filters.limit || 3);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []) as Job[];
+  } catch (error) {
+    console.error("Error searching internal jobs:", error);
+    return [];
+  }
+}
+
+/**
+ * Searches the internal 'programs' table.
+ */
+export async function searchPrograms(filters: { q?: string; location?: string; limit?: number }) {
+  try {
+    let queryBuilder = supabaseAdmin.from("programs").select("title, school, location, url, external_url");
+    
+    if (filters.q) {
+      queryBuilder = queryBuilder.or(`school.ilike.%${filters.q}%,title.ilike.%${filters.q}%`);
+    }
+    
+    if (filters.location) {
+      const loc = filters.location;
+      if (loc.includes(',') && loc.split(',').map(s => s.trim()).filter(Boolean).length === 2) {
+          const parts = loc.split(',').map(s => s.trim());
+          const city = parts[0];
+          const stateAbbr = parts[1];
+          if (city && stateAbbr && stateAbbr.length === 2 && stateAbbr === stateAbbr.toUpperCase()) {
+              queryBuilder = queryBuilder.ilike('city', `%${city}%`).eq('state', stateAbbr);
+          } else {
+              queryBuilder = queryBuilder.or(`city.ilike.%${loc}%,metro.ilike.%${loc}%`);
+          }
+      } else {
+          queryBuilder = queryBuilder.or(`city.ilike.%${loc}%,metro.ilike.%${loc}%,zip_code.eq.${loc}%`);
+      }
+    }
+    
+    queryBuilder = queryBuilder.order('featured', { ascending: false }).limit(filters.limit || 3);
+    const { data, error } = await queryBuilder;
+    if (error) throw error;
+    return (data || []) as Partial<Program>[];
+  } catch (error) {
+    console.error("Error searching internal programs:", error);
+    return [];
+  }
 }
