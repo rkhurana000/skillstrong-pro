@@ -1,8 +1,8 @@
 // rkhurana000/skillstrong-pro/skillstrong-pro-main/skillstrong-pro/lib/orchestrator.ts
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
-// UPDATED: Import new functions
-import { findFeaturedMatching, searchJobs, searchPrograms } from '@/lib/marketplace';
+// UPDATED: Import new functions and types
+import { findFeaturedMatching, searchJobs, searchPrograms, Job, Program } from '@/lib/marketplace';
 
 
 export type Role = 'system' | 'user' | 'assistant';
@@ -12,7 +12,7 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// UPDATED: Added rule for internal data
+// UPDATED: Modified Core Rule 1
 const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillStrong.
 
 **Your Mission:** Guide users, especially high school students and career-switchers, to discover well-paid, hands-on vocational careers in the US manufacturing sector.
@@ -23,7 +23,7 @@ const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillS
 - **Action-Oriented:** Prefer bullet points and short paragraphs. End every response with a "Next Steps" section.
 
 **Core Rules:**
-1.  **Prioritize Internal Data:** If you are provided with 'Internal Job Listings' or 'Internal Program Listings' in a system message, you MUST prioritize summarizing these results first in your answer. Clearly state these results are from the SkillStrong database.
+1.  **Prioritize Internal Data:** If you are provided with 'Internal...Listings' in a system message, you MUST prioritize these results. Introduce them with the markdown heading "### 🛡️ SkillStrong Database Matches" to make them stand out.
 2.  **Vocational Filter:** ALL your answers—for jobs, training, and careers—MUST be filtered through a "vocational and skilled trades" lens. When a user asks for "robotics jobs," you must interpret this as "robotics TECHNICIAN jobs" and provide answers for that skill level.
 3.  **Answer the Question First:** Directly answer the user's specific question *first*. Provide other relevant information (like training or outlook) only *after* the direct question has been answered. If a user asks for job openings, list the openings first.
 4.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers. Do not discuss careers in other fields like healthcare or retail.
@@ -69,7 +69,7 @@ function buildOverviewPrompt(canonical: string): string {
 Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
 }
 
-// --- NEW: Internal Database Query Function ---
+// --- UPDATED: Internal Database Query Function (Formats links) ---
 async function queryInternalDatabase(query: string, location?: string): Promise<string> {
   const lowerQuery = query.toLowerCase();
   let internalContext = '';
@@ -77,6 +77,7 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
 
   const needsJobs = /jobs?|openings?|careers?|hiring|apprenticeships?/.test(lowerQuery);
   const needsPrograms = /programs?|training|certificates?|courses?|schools?|college/.test(lowerQuery);
+  let hasResults = false;
 
   if (needsJobs) {
     const jobs = await searchJobs({ 
@@ -86,10 +87,15 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
       limit: 3 
     });
     if (jobs.length > 0) {
-      internalContext += '\n\n**Internal Job Listings (from SkillStrong DB):**\n';
-      internalContext += jobs.map(j => 
-        `- **${j.title}** at ${j.company} (${j.location}). ${j.apprenticeship ? '[Apprenticeship]' : ''}`
-      ).join('\n');
+      hasResults = true;
+      internalContext += '\n**Job Listings:**\n';
+      internalContext += jobs.map(j => {
+        const url = j.apply_url || j.external_url;
+        const title = `**${j.title}** at ${j.company} (${j.location})`;
+        const tag = j.apprenticeship ? ' *(Apprenticeship)*' : '';
+        // Create markdown link if URL exists
+        return url ? `- [${title}](${url})${tag}` : `- ${title}${tag}`;
+      }).join('\n');
     }
   }
 
@@ -100,14 +106,22 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
       limit: 3 
     });
     if (programs.length > 0) {
-      internalContext += '\n\n**Internal Program Listings (from SkillStrong DB):**\n';
-      internalContext += programs.map(p => 
-        `- **${p.title}** at ${p.school} (${p.location}).`
-      ).join('\n');
+      hasResults = true;
+      internalContext += '\n\n**Program Listings:**\n';
+      internalContext += programs.map(p => {
+        const url = p.url || p.external_url;
+        const title = `**${p.title}** at ${p.school} (${p.location})`;
+        // Create markdown link if URL exists
+        return url ? `- [${title}](${url})` : `- ${title}`;
+      }).join('\n');
     }
   }
   
-  return internalContext.trim();
+  if (hasResults) {
+    // This is the highlighted heading the AI will be instructed to use
+    return `### 🛡️ SkillStrong Database Matches\n${internalContext}`;
+  }
+  return '';
 }
 
 
@@ -142,7 +156,8 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   const internalRAG = await queryInternalDatabase(lastUserRaw, input.location ?? undefined);
   const messagesForLocal = [...messages];
   if (internalRAG) {
-    messagesForLocal.push({ role: 'system', content: `Here is internal data from our database. Prioritize this in your answer:\n${internalRAG}` });
+    // Provide the pre-formatted markdown context to the AI
+    messagesForLocal.push({ role: 'system', content: `Here is internal data from our database. Prioritize this in your answer, using the provided markdown heading and links:\n${internalRAG}` });
   }
   // --- END MODIFICATION ---
 
@@ -151,7 +166,8 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   let finalAnswer = local;
 
   // Decide on Internet RAG
-  const needWeb = !overviewSeeded && (await needsInternetRag(lastUserRaw, local));
+  // MODIFIED: Pass internalRAG result to needsInternetRag
+  const needWeb = !overviewSeeded && (await needsInternetRag(lastUserRaw, local, internalRAG));
   if (needWeb) {
     const web = await internetRagCSE(lastUserRaw, input.location ?? undefined);
     if (web) {
@@ -201,16 +217,17 @@ async function answerLocal(messages: Message[], location?: string): Promise<stri
   return res.choices[0]?.message?.content ?? '';
 }
 
-// tighter RAG routing — skip for overview-ish asks unless they also include fresh/local needs
-async function needsInternetRag(query: string, draft: string): Promise<boolean> {
+// MODIFIED: Accept internalRAG string to inform decision
+async function needsInternetRag(query: string, draft: string, internalRAG: string): Promise<boolean> {
   const text = (query || '').toLowerCase();
 
   const overviewish = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills)/i;
   const webish = /(salary|pay|wage|median|bls|jobs?|openings|apprentice|programs?|tuition|cost|near|in\s+[a-z]+)/i;
   if (overviewish.test(text) && !webish.test(text)) return false;
 
-  // If internal RAG already found results, we might not need web RAG
-  if (/Internal (Job|Program) Listings/i.test(draft)) {
+  // If internal RAG already found results, we don't need web RAG *unless* user asks for more
+  // This logic is now handled by the follow-up prompt
+  if (internalRAG.length > 0) {
       return false; // Don't run web RAG if we already found internal results
   }
 
@@ -291,43 +308,4 @@ Write a concise markdown answer (bullets welcome). End with a short "Next steps"
     '\n\n**Sources**\n' + pages.map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`).join('\n');
 
   return answer + sourcesMd;
-}
-
-async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
-  try {
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Generate 4-6 SHORT follow-up prompts (<= 48 chars each) strictly about manufacturing careers, training, salaries, or apprenticeships. Return ONLY a JSON array of strings.',
-        },
-        { role: 'user', content: JSON.stringify({ question, answer, location }) },
-      ],
-    });
-    const raw = res.choices[0]?.message?.content ?? '[]';
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.length) return sanitizeFollowups(arr);
-  } catch {}
-  return defaultFollowups();
-}
-
-function sanitizeFollowups(arr: any[]): string[] {
-  return arr
-    .filter((s) => typeof s === 'string' && s.trim().length > 0)
-    .map((s) => s.trim().slice(0, 48))
-    .slice(0, 6);
-}
-
-function defaultFollowups(): string[] {
-  return [
-    'Find paid apprenticeships near me',
-    'Local training programs',
-    'Typical salaries (BLS)',
-    'Explore CNC Machinist',
-    'Explore Robotics Technician',
-    'Talk to Coach Mach',
-  ];
 }
