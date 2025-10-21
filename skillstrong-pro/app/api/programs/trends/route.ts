@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
-// Reminder: Ensure this SQL function exists in your Supabase project.
+// SQL function remains the same (fetching top titles)
 /*
 CREATE OR REPLACE FUNCTION get_top_program_titles(limit_count integer)
 RETURNS TABLE(title text, count bigint) AS $$
@@ -17,6 +17,8 @@ BEGIN
     public.programs p
   WHERE
     p.title IS NOT NULL AND p.title <> ''
+    AND length(p.title) < 80 -- Added length constraint
+    AND p.title NOT ILIKE 'CIP %' -- Exclude raw CIP codes
   GROUP BY
     p.title
   ORDER BY
@@ -26,14 +28,13 @@ END;
 $$ LANGUAGE plpgsql;
 */
 
-// Define the expected shape for clarity
 interface TopTitleResult {
   title: string;
   count: number;
 }
 
 export async function GET() {
-  console.log("--- Fetching Program Trends (RPC Method - Build Fix) ---");
+  console.log("--- Fetching Program Trends (API Update) ---");
   try {
     // 1. Trending Programs - Call the SQL function
     const { data: topTitlesData, error: titlesError } = await supabaseAdmin
@@ -41,32 +42,26 @@ export async function GET() {
 
     if (titlesError) {
       console.error("Supabase RPC error fetching top titles:", titlesError);
-      return NextResponse.json({
-          trendingPrograms: [], popularLocations: [], commonDurations: [], availableProgramTypes: []
-      }, { status: 500, statusText: titlesError.message });
+      // Don't throw immediately, try fetching others
     }
 
     let trendingPrograms: string[] = [];
-    // FIX: Add a type guard to ensure topTitlesData is an array before mapping
     if (Array.isArray(topTitlesData)) {
-        // Explicitly type 'item' to satisfy TypeScript during build
         trendingPrograms = topTitlesData.map((item: TopTitleResult) => item.title);
     } else {
         console.warn("RPC data for top titles was not an array:", topTitlesData);
     }
-    
-    console.log("Top 15 Trending Programs (RPC Query):", trendingPrograms);
-
 
     // --- Other Trends (Locations, Durations, Types) ---
     const { data: otherTrendsData, error: otherTrendsError } = await supabaseAdmin
       .from('programs')
-      .select('city, state, length_weeks, program_type')
-      .limit(5000);
+      .select('city, state, length_weeks') // Removed program_type for trends calculation
+      .limit(5000); // Increased limit slightly for better stats
 
      if (otherTrendsError) {
          console.error("Supabase error fetching data for other trends:", otherTrendsError);
-         if(!trendingPrograms) throw otherTrendsError; // Only fail if both fetches failed
+         // Only fail if both fetches failed
+         if (titlesError) throw otherTrendsError;
      }
     const safeOtherTrendsData = otherTrendsData || [];
 
@@ -80,28 +75,31 @@ export async function GET() {
     });
     const popularLocations = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).slice(0, 15).map(item => item[0]);
 
-    // 3. Common Course Durations
+    // 3. Common Course Durations (Return weeks as string)
     const durationCounts: Record<number, number> = {};
     safeOtherTrendsData.forEach(({ length_weeks }) => {
         const weeks = Number(length_weeks);
-        if (!isNaN(weeks) && weeks > 0) {
+        // Only count common, reasonable durations (e.g., > 1 week, < 4 years)
+        if (!isNaN(weeks) && weeks > 1 && weeks < 208) {
+             // Maybe round to nearest 4 weeks for cleaner grouping? Optional.
+            // const roundedWeeks = Math.round(weeks / 4) * 4;
+            // if (roundedWeeks > 0) durationCounts[roundedWeeks] = (durationCounts[roundedWeeks] || 0) + 1;
             durationCounts[weeks] = (durationCounts[weeks] || 0) + 1;
         }
     });
     const commonDurations = Object.entries(durationCounts)
-        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .sort((a, b) => Number(b[1]) - Number(a[1])) // Sort by frequency
         .slice(0, 8)
-        .map(item => `${item[0]} weeks`);
+        .map(item => `${item[0]} weeks`); // Return the week string
 
-    // 4. Get distinct program types
-    const distinctProgramTypes = Array.from(new Set(safeOtherTrendsData.map(p => p.program_type).filter(Boolean)));
+    // 4. REMOVED: Get distinct program types calculation
 
     console.log("Trends calculation complete.");
     return NextResponse.json({
       trendingPrograms,
       popularLocations,
       commonDurations,
-      availableProgramTypes: distinctProgramTypes
+      // REMOVED: availableProgramTypes: distinctProgramTypes
     });
 
   } catch (e: any) {
