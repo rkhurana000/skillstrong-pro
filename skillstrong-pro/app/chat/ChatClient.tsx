@@ -4,7 +4,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
+// ADDED: Menu icon
+import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Menu } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
@@ -52,6 +53,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     const { location } = useLocation();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const initialUrlHandled = useRef(false);
+    
+    // ADDED: State for sidebar collapse
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
     const activeConversationId = activeConversation?.id;
 
@@ -212,7 +216,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
     return (
       <div className="chat-container">
-        <aside className="chat-sidebar">
+        {/* ADDED: Conditional class */}
+        <aside className={`chat-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
           <div className="sidebar-header">
             <button onClick={createNewChat} className="new-chat-btn">
               <MessageSquarePlus size={20} style={{ marginRight: '0.5rem' }} />
@@ -235,7 +240,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
         <main className="chat-main">
           <div className="chat-header">
-            <h3>SkillStrong Coach</h3>
+            {/* ADDED: Wrapper and toggle button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="sidebar-toggle">
+                    <Menu size={20} />
+                </button>
+                <h3>SkillStrong Coach</h3>
+            </div>
             {activeConversation && (
               <div className="provider-switch">
                 <button onClick={() => handleProviderChange('openai')} className={activeConversation.provider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
