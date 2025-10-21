@@ -21,31 +21,27 @@ export async function GET(req: NextRequest) {
   console.log("--- New Search Request ---");
   console.log(`Params: q='${q}', program_type='${program_type}', state='${state}', location='${location}', duration='${duration}'`);
 
-  // --- Apply Filters Sequentially ---
+  // --- Apply Filters ---
 
   let locationFilterApplied = false;
 
-  // STRICT City, State Filtering (PRIORITY if 'location' param exists and is "City, ST")
-  if (location && location.includes(',')) {
-    const parts = location.split(',').map(s => s.trim()).filter(Boolean);
-    if (parts.length === 2) {
-        const city = parts[0];
-        const stateAbbr = parts[1];
-        // Validate state abbreviation format (optional but good practice)
-        if (stateAbbr.length === 2 && stateAbbr === stateAbbr.toUpperCase()) {
-            console.log(`Applying STRICT location filter: City ILIKE '%${city}%' AND State = '${stateAbbr}'`);
-            // Apply the filters directly using AND logic
-            queryBuilder = queryBuilder.ilike('city', `%${city}%`).eq('state', stateAbbr);
-            locationFilterApplied = true;
-        } else {
-             console.warn(`Invalid State format in location parameter '${location}'. Applying broad search.`);
-             queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
-             locationFilterApplied = true; // Still mark as applied to prevent state dropdown override
-        }
+  // STRICT City, State Filtering (PRIORITY: If 'location' param looks like "City, ST")
+  if (location && location.includes(',') && location.split(',').map(s => s.trim()).filter(Boolean).length === 2) {
+    const parts = location.split(',').map(s => s.trim());
+    const city = parts[0];
+    const stateAbbr = parts[1];
+
+    // Basic validation for state abbreviation
+    if (stateAbbr && stateAbbr.length === 2 && stateAbbr === stateAbbr.toUpperCase()) {
+        console.log(`Applying STRICT location filter: City ILIKE '%${city}%' AND State = '${stateAbbr}'`);
+        // Apply the filters directly using AND logic
+        queryBuilder = queryBuilder.ilike('city', `%${city}%`).eq('state', stateAbbr);
+        locationFilterApplied = true; // Mark that this specific filter was used
     } else {
-         console.warn(`Could not parse location parameter '${location}' as City, State. Applying broad search.`);
-         queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
-         locationFilterApplied = true;
+        console.warn(`Potentially invalid State format in location parameter '${location}'. Applying broad search.`);
+        // Fallback if state format looks wrong
+        queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+        locationFilterApplied = true;
     }
   }
 
@@ -57,12 +53,12 @@ export async function GET(req: NextRequest) {
   }
 
   // Broad Location Search (Single term 'location', no state dropdown, strict filter failed/not applicable)
+  // This handles cases where 'location' is just a city, zip, or metro without a state
   if (!locationFilterApplied && location) {
      console.log(`Applying BROAD location filter (single term): '${location}'`);
      queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
      locationFilterApplied = true;
   }
-
 
   // Keyword/Program/School Filter ('q')
   if (q) {
