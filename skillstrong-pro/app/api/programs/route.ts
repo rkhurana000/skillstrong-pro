@@ -6,11 +6,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const u = new URL(req.url);
-  const q = u.searchParams.get("q")?.trim(); // General keyword/program/school search
+  const q = u.searchParams.get("q")?.trim();
   const program_type = u.searchParams.get("program_type")?.trim();
-  const state = u.searchParams.get("state")?.trim(); // State dropdown
-  const location = u.searchParams.get("location")?.trim(); // Location term (from Trend card "City, ST")
-  const duration = u.searchParams.get("duration")?.trim(); // Duration term
+  const state = u.searchParams.get("state")?.trim();
+  const location = u.searchParams.get("location")?.trim(); // Expects "City, ST" from trend card
+  const duration = u.searchParams.get("duration")?.trim();
 
   const page = parseInt(u.searchParams.get("page") || "1");
   const limit = parseInt(u.searchParams.get("limit") || "20");
@@ -18,39 +18,49 @@ export async function GET(req: NextRequest) {
 
   let query = supabaseAdmin.from("programs").select("*", { count: 'exact' });
 
+  console.log("--- New Search Request ---");
+  console.log(`Params: q='${q}', program_type='${program_type}', state='${state}', location='${location}', duration='${duration}'`);
+
   // --- Apply Filters ---
 
-  // **STRICT City, State Filtering (from location trend card)**
+  let locationFilterApplied = false;
+
+  // STRICT City, State Filtering (PRIORITY if 'location' param exists and is parsable)
   if (location && location.includes(',')) {
     const parts = location.split(',').map(s => s.trim()).filter(Boolean);
     if (parts.length === 2) {
         const city = parts[0];
         const stateAbbr = parts[1];
-        console.log(`Applying STRICT location filter: City='${city}', State='${stateAbbr}'`);
-        // Use .eq for exact match (case-insensitive depends on DB collation, ilike is safer for city)
-        query = query.ilike('city', city).eq('state', stateAbbr); // Strict AND
+        console.log(`Applying STRICT location filter: City ILIKE '${city}' AND State = '${stateAbbr}'`);
+        // Use ILIKE for city (case-insensitive partial match), EQ for state (exact match)
+        query = query.ilike('city', `%${city}%`).eq('state', stateAbbr);
+        locationFilterApplied = true; // Mark that we applied this specific filter
     } else {
-         console.warn(`Could not parse location parameter: '${location}'`);
-         // Apply broader filter as fallback if parsing fails
-         query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+         console.warn(`Could not parse location parameter '${location}' as City, State. Applying broad search.`);
+         // Fallback to broad search if parsing fails
+          query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+          locationFilterApplied = true;
     }
   }
-  // State Filter (from dropdown) - Applied only if specific location isn't set
-  else if (state && state !== 'All States') {
-    console.log(`Filtering by State Dropdown: State='${state}'`);
+
+  // State Dropdown Filter (Applied only if strict location filter was NOT applied)
+  if (!locationFilterApplied && state && state !== 'All States') {
+    console.log(`Applying State Dropdown filter: State = '${state}'`);
     query = query.eq('state', state);
+    locationFilterApplied = true;
   }
-  // If only a single term was passed via 'location' (e.g., just "Sacramento"), treat it broadly
-  else if (location) {
+
+  // Broad Location Search (Applied if 'location' was single term and no state dropdown used)
+  if (!locationFilterApplied && location) {
      console.log(`Applying BROAD location filter (single term): '${location}'`);
      query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+     locationFilterApplied = true;
   }
 
 
   // Keyword/Program/School Filter (Search Box 'q')
-  // This is applied *in addition* to any location filters
   if (q) {
-     console.log(`Filtering by Keyword: q='${q}'`);
+     console.log(`Applying Keyword filter: q='${q}'`);
      const durationMatch = q.match(/^(\d+)\s+weeks$/i);
      if (durationMatch) {
         const weeks = parseInt(durationMatch[1], 10);
@@ -58,35 +68,39 @@ export async function GET(req: NextRequest) {
             query = query.eq('length_weeks', weeks);
          }
      } else {
+        // Apply general keyword search across title and school
         query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%`);
      }
   }
 
   // Duration Filter (from Trend Card)
   if (duration) {
-      const weeks = parseInt(duration.split(' ')[0], 10);
+      // Extract number, handle potential " weeks" suffix
+      const weeks = parseInt(duration.replace(/\s*weeks/i, ''), 10);
       if (!isNaN(weeks)) {
-          console.log(`Filtering by Duration Trend: ${weeks} weeks`);
+          console.log(`Applying Duration filter: ${weeks} weeks`);
           query = query.eq('length_weeks', weeks);
       }
   }
 
   // Program Type Filter
   if (program_type && program_type !== 'all') {
-    console.log(`Filtering by Program Type: '${program_type}'`);
+    console.log(`Applying Program Type filter: '${program_type}'`);
     query = query.eq('program_type', program_type);
   }
 
   // --- Execute Query ---
   query = query.range(offset, offset + limit - 1);
-  query = query.order("featured", { ascending: false }).order("created_at", { ascending: false });
+  // Keep sorting consistent
+  query = query.order("featured", { ascending: false }).order("state").order("city").order("school");
 
-  console.log('Executing Query...');
+  console.log('Executing final query structure...'); // Log before execution
 
   const { data, error, count } = await query;
 
   if (error) {
     console.error("Program search error:", error);
+    // Log the failing query structure if possible (Supabase might not expose it directly here)
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
