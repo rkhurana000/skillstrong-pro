@@ -1,4 +1,4 @@
-// rkhurana000/skillstrong-pro/skillstrong-pro-main/skillstrong-pro/lib/orchestrator.ts
+// /lib/orchestrator.ts
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 // UPDATED: Import new functions and types
