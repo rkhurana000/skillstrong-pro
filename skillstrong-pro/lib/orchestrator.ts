@@ -13,6 +13,7 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // UPDATED: Core Rule 1 is now much stricter about preserving links.
+// UPDATED: Core Rule 3 now specifies a single "Next Steps" at the end.
 const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillStrong.
 
 **Your Mission:** Guide users, especially high school students and career-switchers, to discover well-paid, hands-on vocational careers in the US manufacturing sector.
@@ -20,25 +21,25 @@ const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillS
 **Your Persona:**
 - **Focused:** You ONLY discuss vocational roles that do not require a 4-year degree. These include technicians, machinists, operators, and skilled trades. If asked about engineering or research roles, politely redirect the user back to technician-level jobs.
 - **Encouraging & Clear:** Use simple language. Be upbeat and practical.
-- **Action-Oriented:** Prefer bullet points and short paragraphs. End every response with a "Next Steps" section.
+- **Action-Oriented:** Prefer bullet points and short paragraphs.
 
 **Core Rules:**
 1.  **Prioritize Internal Data:** If you are provided with context under the heading \`### 🛡️ SkillStrong Database Matches\`, you MUST:
     a.  Introduce these results using that *exact* markdown heading: \`### 🛡️ SkillStrong Database Matches\`.
     b.  If the data provides markdown links (e.g., \`[Job Title](url)\`), you MUST preserve and use those exact links in your response. Do not re-write them as plain text.
 2.  **Vocational Filter:** ALL your answers—for jobs, training, and careers—MUST be filtered through a "vocational and skilled trades" lens. When a user asks for "robotics jobs," you must interpret this as "robotics TECHNICIAN jobs" and provide answers for that skill level.
-3.  **Answer the Question First:** Directly answer the user's specific question *first*. Provide other relevant information (like training or outlook) only *after* the direct question has been answered. If a user asks for job openings, list the openings first.
+3.  **Single Next Steps:** You MUST add one and only one 'Next Steps' section at the very end of your *entire* response. Do not add 'Next Steps' to individual sections.
 4.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers. Do not discuss careers in other fields like healthcare or retail.
 5.  **No Hallucinations:** NEVER invent URLs, job stats, or program details. If you don't know something, say so and suggest a way to find the information.`;
 
 // NEW: A separate, simpler prompt for the Web RAG function.
-// This prompt does NOT include Core Rule 1, which fixes the duplicate heading bug.
+// This prompt does NOT include Core Rule 1 (no duplicate heading) or 3 (no separate next steps).
 const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," an expert AI career coach for SkillStrong.
 Your persona is encouraging, clear, and action-oriented.
 **Core Rules:**
 1.  **Use Context Only:** You are performing a web search. You MUST base your answer *only* on the provided 'RAG Context'.
 2.  **Cite Sources:** Cite your sources in-line as [#1], [#2], etc.
-3.  **Vocational Filter:** ALL your answers MUST be filtered through a "vocational and skilled trades" lens (technicians, operators, etc.).
+3.  **Vocational Filter:** ALL your answers MUST be filtered through a "vocational and skilled trades" lens (technicians, operators, etc.). You MUST provide information *only* about manufacturing-related vocational roles. Discard any context not related to this topic.
 4.  **Answer the Question First:** Directly answer the user's specific question *first*.
 5.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers.
 6.  **No Hallucinations:** NEVER invent URLs, job stats, or program details.`;
@@ -66,6 +67,8 @@ function detectCanonicalCategory(query: string): string | null {
   }
   return null;
 }
+
+// UPDATED: Removed "Next Steps" from this prompt.
 function buildOverviewPrompt(canonical: string): string {
   return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:
 
@@ -76,19 +79,32 @@ function buildOverviewPrompt(canonical: string): string {
 💰 **Typical Pay (US)** — national ranges; note that local pay can vary.
 ⏱️ **Training Time** — common pathways & length (certs, bootcamps, apprenticeships).
 📜 **Helpful Certs** — 2–4 recognized credentials.
-🚀 **Next Steps** — 2–3 actions the student can take.
 
 Keep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
 }
 
-// --- UPDATED: Internal Database Query Function (Formats links) ---
+/**
+ * Extracts the domain from a URL for site-search.
+ * e.g., "https://www.example.com/page" -> "example.com"
+ */
+function getDomain(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const host = new URL(url).hostname;
+    return host.replace(/^www\./, ''); // remove www.
+  } catch {
+    return null;
+  }
+}
+
+// --- UPDATED: Internal Database Query Function (Generates Google site-search links) ---
 async function queryInternalDatabase(query: string, location?: string): Promise<string> {
   const lowerQuery = query.toLowerCase();
   let internalContext = '';
   const locationQuery = location?.split(',')[0].trim(); // Use city or ZIP for relevance
 
-  const needsJobs = /jobs?|openings?|careers?|hiring|apprenticeships?/.test(lowerQuery);
-  const needsPrograms = /programs?|training|certificates?|courses?|schools?|college/.test(lowerQuery);
+  const needsJobs = /jobs?|openings?|careers?|hiring|apprenticeships?|near me|in my area/.test(lowerQuery);
+  const needsPrograms = /programs?|training|certificates?|courses?|schools?|college|near me|in my area/.test(lowerQuery);
   let hasResults = false;
 
   if (needsJobs) {
@@ -122,9 +138,16 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
       internalContext += '\n\n**Program Listings:**\n';
       internalContext += programs.map(p => {
         const url = p.url || p.external_url;
+        const domain = getDomain(url);
         const title = `**${p.title}** at ${p.school} (${p.location})`;
-        // Create markdown link if URL exists
-        return url ? `- [${title}](${url})` : `- ${title}`;
+        
+        // If we have a domain, create a Google site-search link.
+        if (domain) {
+          const searchLink = `https://www.google.com/search?q=site%3A${domain}+${encodeURIComponent(p.title || 'manufacturing program')}`;
+          return `- [${title}](${searchLink})`;
+        }
+        // Fallback for no/invalid URL
+        return `- ${title}`;
       }).join('\n');
     }
   }
@@ -153,8 +176,8 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
     overviewSeeded = true;
   }
 
-  // Domain guard
-  let inDomain = await domainGuard(lastUserRaw);
+  // UPDATED: Pass full message history to domainGuard
+  let inDomain = await domainGuard(messages);
   if (!inDomain && canonical) inDomain = true;
   if (!inDomain) {
     return {
@@ -178,10 +201,10 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   let finalAnswer = local;
 
   // Decide on Internet RAG
-  // MODIFIED: Pass internalRAG result to needsInternetRag
   const needWeb = !overviewSeeded && (await needsInternetRag(lastUserRaw, local, internalRAG));
   if (needWeb) {
-    const web = await internetRagCSE(lastUserRaw, input.location ?? undefined);
+    // UPDATED: Pass canonical to web RAG for better query relevance
+    const web = await internetRagCSE(lastUserRaw, input.location ?? undefined, canonical);
     if (web) {
         // If we have both, combine them.
         finalAnswer = `${local}\n\n**Related Web Results:**\n${web}`;
@@ -204,17 +227,25 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   return { answer: finalAnswer, followups };
 }
 
-async function domainGuard(query: string): Promise<boolean> {
-  if (!query.trim()) return true;
+// UPDATED: Function now accepts all messages for context
+async function domainGuard(messages: Message[]): Promise<boolean> {
+  const lastUserQuery = messages[messages.length - 1]?.content || '';
+  if (!lastUserQuery.trim()) return true;
+  
+  // 1. Fast regex check on *last message only*
   const allowHints =
     /(manufact|cnc|robot|weld|machin|apprentice|factory|plant|quality|maintenance|mechatronic|additive|3d\s*print|bls|o\*net|program|community\s*college|trade\s*school|career)/i;
-  if (allowHints.test(query)) return true;
+  if (allowHints.test(lastUserQuery)) return true;
+
+  // 2. Slower AI check using last 3 messages for context
+  const contextQuery = messages.slice(-3).map(m => `${m.role}: ${m.content}`).join('\n');
+
   const res = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     temperature: 0,
     messages: [
       { role: 'system', content: 'Classify if the question is about MANUFACTURING careers/training/jobs. Answer only IN or OUT.' },
-      { role: 'user', content: query },
+      { role: 'user', content: contextQuery },
     ],
   });
   const out = res.choices[0]?.message?.content?.trim().toUpperCase();
@@ -233,16 +264,17 @@ async function answerLocal(messages: Message[], location?: string): Promise<stri
 async function needsInternetRag(query: string, draft: string, internalRAG: string): Promise<boolean> {
   const text = (query || '').toLowerCase();
 
+  // If user explicitly asks to search the web, always do it.
+  if (/web|internet|external|more/i.test(text)) {
+    return true;
+  }
+
   const overviewish = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills)/i;
   const webish = /(salary|pay|wage|median|bls|jobs?|openings|apprentice|programs?|tuition|cost|near|in\s+[a-z]+)/i;
   if (overviewish.test(text) && !webish.test(text)) return false;
 
-  // If internal RAG already found results, we don't need web RAG *unless* user asks for more
+  // If internal RAG already found results, don't run web RAG
   if (internalRAG.length > 0) {
-      // Don't run web RAG if we already found internal results, UNLESS the user explicitly asks to search the web
-      if (/web|internet|external|more/i.test(text)) {
-        return true;
-      }
       return false; 
   }
 
@@ -264,15 +296,24 @@ async function needsInternetRag(query: string, draft: string, internalRAG: strin
   return txt?.startsWith('Y') ?? false;
 }
 
+// UPDATED: Accepts canonical topic to improve query relevance
 /** Google CSE → fetch readable text → synthesize concise answer + Sources list (only when RAG runs). */
-async function internetRagCSE(query: string, location?: string): Promise<string | null> {
+async function internetRagCSE(query: string, location?: string, canonical?: string | null): Promise<string | null> {
+  
+  // If query is about salary/pay, prepend the canonical topic to make it specific
+  const baseQuery = (canonical && /salary|pay|wage/i.test(query))
+    ? `${canonical} ${query}`
+    : query;
+
   // steer query away from junk and toward reputable domains
-  let q = location ? `${query} near ${location}` : query;
+  let q = location ? `${baseQuery} near ${location}` : baseQuery;
+  
   q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org';
-  if (/(salary|pay|wage|median|bls)/i.test(query)) {
+  
+  if (/(salary|pay|wage|median|bls)/i.test(q)) {
     q += ' (site:bls.gov OR site:onetsoc.alaska.edu OR site:onetcenter.org)';
   }
-  if (/(program|training|certificate|certification|community college)/i.test(query)) {
+  if (/(program|training|certificate|certification|community college)/i.test(q)) {
     q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org)';
   }
 
@@ -307,7 +348,7 @@ Location: ${location || 'N/A'}
 RAG Context:
 ${context}
 
-Write a concise markdown answer (bullets welcome). End with a short "Next steps" line.`;
+Write a concise markdown answer (bullets welcome). Do NOT add a 'Next Steps' section.`;
 
   const out = await openai.chat.completions.create({
     model: 'gpt-4o',
@@ -324,7 +365,7 @@ Write a concise markdown answer (bullets welcome). End with a short "Next steps"
   return answer + sourcesMd;
 }
 
-// MODIFIED: Added logic for external search follow-up
+// MODIFIED: Updated external search prompt text
 async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
   let finalFollowups: string[] = [];
   try {
@@ -355,7 +396,7 @@ async function generateFollowups(question: string, answer: string, location?: st
   if (userAskedForLocal && answerHasInternal) {
     const hasExternalSearch = finalFollowups.some(f => /web|internet|external|more/i.test(f.toLowerCase()));
     if (!hasExternalSearch) {
-      finalFollowups.push('Search the web for more results?');
+      finalFollowups.push('Search external sites for more?');
     }
   }
   // --- END NEW LOGIC ---
