@@ -4,52 +4,75 @@ import { supabaseAdmin } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
+// Reminder: Ensure this SQL function exists in your Supabase project.
+/*
+CREATE OR REPLACE FUNCTION get_top_program_titles(limit_count integer)
+RETURNS TABLE(title text, count bigint) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    p.title,
+    COUNT(p.id) as count
+  FROM
+    public.programs p
+  WHERE
+    p.title IS NOT NULL AND p.title <> ''
+  GROUP BY
+    p.title
+  ORDER BY
+    count DESC
+  LIMIT limit_count;
+END;
+$$ LANGUAGE plpgsql;
+*/
+
+// Define the expected shape for clarity
+interface TopTitleResult {
+  title: string;
+  count: number;
+}
+
 export async function GET() {
-  console.log("--- Fetching Program Trends (Focused JS Count) ---");
+  console.log("--- Fetching Program Trends (RPC Method - Build Fix) ---");
   try {
-    const { data: programs, error } = await supabaseAdmin
+    // 1. Trending Programs - Call the SQL function
+    const { data: topTitlesData, error: titlesError } = await supabaseAdmin
+      .rpc('get_top_program_titles', { limit_count: 15 });
+
+    if (titlesError) {
+      console.error("Supabase RPC error fetching top titles:", titlesError);
+      return NextResponse.json({
+          trendingPrograms: [], popularLocations: [], commonDurations: [], availableProgramTypes: []
+      }, { status: 500, statusText: titlesError.message });
+    }
+
+    let trendingPrograms: string[] = [];
+    // FIX: Add a type guard to ensure topTitlesData is an array before mapping
+    if (Array.isArray(topTitlesData)) {
+        // Explicitly type 'item' to satisfy TypeScript during build
+        trendingPrograms = topTitlesData.map((item: TopTitleResult) => item.title);
+    } else {
+        console.warn("RPC data for top titles was not an array:", topTitlesData);
+    }
+    
+    console.log("Top 15 Trending Programs (RPC Query):", trendingPrograms);
+
+
+    // --- Other Trends (Locations, Durations, Types) ---
+    const { data: otherTrendsData, error: otherTrendsError } = await supabaseAdmin
       .from('programs')
-      .select('title, city, state, length_weeks, program_type')
-      .limit(5000); // Fetch a large sample
+      .select('city, state, length_weeks, program_type')
+      .limit(5000);
 
-    if (error) {
-        console.error("Supabase error fetching programs for trends:", error);
-        return NextResponse.json({ error: `Supabase error: ${error.message}` }, { status: 500 });
-    }
-    if (!programs || programs.length === 0) { // Check for empty array too
-        console.error("No programs data returned from database for trends.");
-        return NextResponse.json({ error: "No program data found." }, { status: 404 });
-    }
-    console.log(`Fetched ${programs.length} programs for trend analysis.`);
+     if (otherTrendsError) {
+         console.error("Supabase error fetching data for other trends:", otherTrendsError);
+         if(!trendingPrograms) throw otherTrendsError; // Only fail if both fetches failed
+     }
+    const safeOtherTrendsData = otherTrendsData || [];
 
-    // 1. Trending Programs - Count NORMALIZED (lowercase, trimmed) exact titles
-    const titleCounts: Record<string, number> = {};
-    const originalTitleMapping: Record<string, string> = {}; // Store original casing
-
-    programs.forEach(({ title }) => {
-        const originalTitle = String(title || '').trim(); // Ensure string and trim
-        if (originalTitle.length > 3) { // Only count titles with some substance
-            const normalizedTitle = originalTitle.toLowerCase(); // Normalize case
-            titleCounts[normalizedTitle] = (titleCounts[normalizedTitle] || 0) + 1;
-            // Keep the first encountered original casing
-            if (!originalTitleMapping[normalizedTitle]) {
-                originalTitleMapping[normalizedTitle] = originalTitle;
-            }
-        }
-    });
-
-    // Log the raw counts before sorting/slicing
-    const sortedCounts = Object.entries(titleCounts).sort(([, countA], [, countB]) => countB - countA);
-    console.log(`Found ${sortedCounts.length} unique normalized titles.`);
-    console.log("Raw Title Counts (Top 50 Normalized):", sortedCounts.slice(0, 50)); // Log top 50 counts
-
-    // Get the top 15 titles using original casing
-    const trendingPrograms = sortedCounts.slice(0, 15).map(([normalizedTitle]) => originalTitleMapping[normalizedTitle] || normalizedTitle);
-    console.log("Top 15 Trending Programs (Final):", trendingPrograms);
-
-    // --- Other Trends (Keep as before) ---
+    // 2. Popular Locations
     const locationCounts: Record<string, number> = {};
-    programs.forEach(({ city, state }) => {
+    safeOtherTrendsData.forEach(({ city, state }) => {
         if (city && state) {
             const location = `${city}, ${state}`;
             locationCounts[location] = (locationCounts[location] || 0) + 1;
@@ -57,8 +80,9 @@ export async function GET() {
     });
     const popularLocations = Object.entries(locationCounts).sort((a, b) => b[1] - a[1]).slice(0, 15).map(item => item[0]);
 
+    // 3. Common Course Durations
     const durationCounts: Record<number, number> = {};
-    programs.forEach(({ length_weeks }) => {
+    safeOtherTrendsData.forEach(({ length_weeks }) => {
         const weeks = Number(length_weeks);
         if (!isNaN(weeks) && weeks > 0) {
             durationCounts[weeks] = (durationCounts[weeks] || 0) + 1;
@@ -69,18 +93,19 @@ export async function GET() {
         .slice(0, 8)
         .map(item => `${item[0]} weeks`);
 
-    const distinctProgramTypes = Array.from(new Set(programs.map(p => p.program_type).filter(Boolean)));
+    // 4. Get distinct program types
+    const distinctProgramTypes = Array.from(new Set(safeOtherTrendsData.map(p => p.program_type).filter(Boolean)));
 
     console.log("Trends calculation complete.");
     return NextResponse.json({
-      trendingPrograms: trendingPrograms || [],
-      popularLocations: popularLocations || [],
-      commonDurations: commonDurations || [],
-      availableProgramTypes: distinctProgramTypes || []
+      trendingPrograms,
+      popularLocations,
+      commonDurations,
+      availableProgramTypes: distinctProgramTypes
     });
 
   } catch (e: any) {
-    console.error("Unhandled error in /api/programs/trends:", e);
+    console.error("Error in /api/programs/trends:", e);
     return NextResponse.json({ error: e.message || 'Failed to fetch trends', details: e.toString() }, { status: 500 });
   }
 }
