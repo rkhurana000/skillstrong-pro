@@ -4,8 +4,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-// UPDATED: Added Edit, MessageSquareText, Trash2, X icons. Removed Menu.
-import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Edit, MessageSquareText, Trash2, X } from 'lucide-react';
+// UPDATED: Added Menu icon again (for expanding)
+import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Edit, MessageSquareText, Trash2, X, Menu } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
@@ -72,7 +72,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
       const convoId = searchParams.get('id');
       const category = searchParams.get('category');
-      
+
       if (convoId) {
         initialUrlHandled.current = true;
         handleHistoryClick(convoId, false);
@@ -103,7 +103,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           router.push(`${pathname}?id=${id}`);
         }
         // Ensure sidebar is open when clicking history on mobile/small screens if needed
-        // setIsSidebarCollapsed(false); 
+        // setIsSidebarCollapsed(false);
       } catch (error) {
         console.error("Error loading history:", error);
         createNewChat();
@@ -111,7 +111,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         setIsLoading(false);
       }
     };
-    
+
     const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
         // Title generation logic (unchanged)
         if (convo.messages?.length === 2 && (!convo.id || convo.id.startsWith('temp-'))) {
@@ -147,14 +147,14 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       setIsLoading(true);
       setInputValue('');
       setCurrentFollowUps([]);
-      
+
       const isNewConversation = !activeConversationId || activeConversationId.startsWith('temp-');
       const currentMessages: Message[] = activeConversation?.messages || [];
       const newUserMessage: Message = { role: 'user', content: text };
       const messages = [...currentMessages, newUserMessage];
-      
+
       const currentProvider = activeConversation?.provider || 'openai';
-      
+
       const tempId = `temp-${Date.now()}`;
       setActiveConversation(prev => ({
         id: prev?.id || tempId,
@@ -162,19 +162,19 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         messages,
         provider: currentProvider,
       }));
-      
+
       try {
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages, location, provider: currentProvider }),
         });
-        
+
         if (!res.ok) throw new Error('Failed to get AI response');
         const data: { answer: string; followups: string[] } = await res.json();
-        
+
         const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
-        
+
         // Pass the potentially updated title from state
         const savedConvo = await saveConversation({
           id: isNewConversation ? undefined : activeConversationId,
@@ -182,14 +182,14 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           provider: currentProvider,
           title: activeConversation?.title, // Pass title from state
         });
-        
+
         const finalConversationState: Conversation = {
             ...(activeConversation || { id: tempId, title: 'New Conversation' }),
             ...savedConvo, // savedConvo includes the final ID and potentially updated title
             messages: newMessages
         };
         setActiveConversation(finalConversationState);
-        
+
         // Corrected History Update Logic
         setHistory(prev => {
             const newHistoryItem = { id: finalConversationState.id, title: finalConversationState.title, updated_at: finalConversationState.updated_at };
@@ -203,7 +203,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         if (isNewConversation) {
           router.push(`${pathname}?id=${savedConvo.id}`);
         }
-        
+
         setCurrentFollowUps(data.followups || []);
       } catch (error) {
         console.error("Error in sendMessage:", error);
@@ -213,7 +213,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         setIsLoading(false);
       }
     };
-    
+
     const handleProviderChange = (provider: 'openai' | 'gemini') => {
       if (!activeConversation) return;
       const updatedConvo = { ...activeConversation, provider };
@@ -242,52 +242,73 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
     return (
       <div className="chat-container">
+        {/* --- UPDATED SIDEBAR STRUCTURE --- */}
         <aside className={`chat-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
-           {/* --- UPDATED: Header --- */}
-          <div className="sidebar-header-controls"> {/* New wrapper */}
-             {/* Collapse button moved here */}
-            <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="sidebar-toggle">
-              {/* Use X to close (un-collapse) if it's collapsed, otherwise Menu */}
-              {isSidebarCollapsed ? <Edit size={20}/> : <X size={20} />}
-            </button>
-            {/* Gemini-style New Chat button */}
-            <button onClick={createNewChat} className="new-chat-btn-gemini" title="New Chat">
-              <Edit size={20} />
-            </button>
-             {/* Clear History Button */}
-             {user && history.length > 0 && (
-                 <button onClick={() => setShowClearConfirm(true)} className="clear-history-btn" title="Clear History">
-                     <Trash2 size={18} />
-                 </button>
-             )}
-          </div>
-          <nav className="history-list">
-            {history.map(item => (
-              <button // Changed div to button for better accessibility
-                key={item.id}
-                className={`history-item ${item.id === activeConversationId ? 'active' : ''}`}
-                onClick={() => handleHistoryClick(item.id)}
-                title={item.title}
-              >
-                {item.title}
-              </button>
-            ))}
-          </nav>
+           <div className="sidebar-header-controls">
+                {/* Always show the toggle button */}
+                <button
+                    onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                    className="sidebar-toggle"
+                    title={isSidebarCollapsed ? "Expand menu" : "Collapse menu"}
+                >
+                  {/* Icon changes based on state */}
+                  {isSidebarCollapsed ? <Menu size={20} /> : <X size={20} />}
+                </button>
 
+                {/* Conditionally render New Chat button text or icon */}
+                {!isSidebarCollapsed && (
+                    <button onClick={createNewChat} className="new-chat-btn-gemini-expanded" title="New Chat">
+                         <Edit size={20} /> <span className="ml-2">New Chat</span>
+                    </button>
+                )}
+                 {isSidebarCollapsed && (
+                    <button onClick={createNewChat} className="new-chat-btn-gemini-collapsed" title="New Chat">
+                        <Edit size={20} />
+                    </button>
+                 )}
+
+                {/* Conditionally render Clear History - always icon only in collapsed */}
+                {user && history.length > 0 && (
+                    <button
+                        onClick={() => setShowClearConfirm(true)}
+                        className={`clear-history-btn ${isSidebarCollapsed ? 'collapsed' : ''}`}
+                        title="Clear History"
+                    >
+                        <Trash2 size={isSidebarCollapsed ? 20 : 18} />
+                    </button>
+                )}
+           </div>
+
+           {/* History List - only render content when NOT collapsed */}
+           {!isSidebarCollapsed && (
+             <nav className="history-list">
+               {history.map(item => (
+                 <button // Changed div to button for better accessibility
+                   key={item.id}
+                   className={`history-item ${item.id === activeConversationId ? 'active' : ''}`}
+                   onClick={() => handleHistoryClick(item.id)}
+                   title={item.title}
+                 >
+                   {item.title}
+                 </button>
+               ))}
+             </nav>
+           )}
         </aside>
 
+        {/* --- MAIN PANEL (No Changes) --- */}
         <main className="chat-main">
-          <div className="chat-header">
-             {/* UPDATED: Changed title */}
-            <h3>Coach Mach</h3>
-            {activeConversation && (
-              <div className="provider-switch">
-                <button onClick={() => handleProviderChange('openai')} className={activeConversation.provider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
-                <button onClick={() => handleProviderChange('gemini')} className={activeConversation.provider === 'gemini' ? 'active' : ''}><Gem size={16}/> Gemini</button>
-              </div>
-            )}
-          </div>
-          <div ref={chatContainerRef} className="chat-messages">
+          {/* ... (Chat Header, Messages, Footer remain the same) ... */}
+           <div className="chat-header">
+             <h3>Coach Mach</h3>
+             {activeConversation && (
+               <div className="provider-switch">
+                 <button onClick={() => handleProviderChange('openai')} className={activeConversation.provider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
+                 <button onClick={() => handleProviderChange('gemini')} className={activeConversation.provider === 'gemini' ? 'active' : ''}><Gem size={16}/> Gemini</button>
+               </div>
+             )}
+           </div>
+           <div ref={chatContainerRef} className="chat-messages">
             {!activeConversation ? (
               <div className="welcome-view">
                 <Bot size={48} className="text-blue-600 mb-4" />
@@ -303,7 +324,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
                 </div>
               </div>
             ) : (
-              // Message list rendering (unchanged)
               <div className="message-list">
                 {activeConversation.messages.map((msg, idx) => (
                   <div key={idx} className={`message-wrapper ${msg.role}`}>
@@ -326,46 +346,45 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
               </div>
             )}
           </div>
-          
-          {/* Footer rendering (unchanged) */}
-          <footer className="chat-footer">
-              <div className="footer-content">
-                  {currentFollowUps.length > 0 && !isLoading && (
-                      <div className="follow-ups">
-                          {currentFollowUps.map((prompt, i) => (
-                              <button key={i} onClick={() => sendMessage(prompt)} className="follow-up-btn">
-                                  {prompt}
-                              </button>
-                          ))}
-                      </div>
-                  )}
-                  <form onSubmit={(e) => { e.preventDefault(); sendMessage(inputValue); }} className="input-form">
-                      <input
-                          value={inputValue}
-                          onChange={e => setInputValue(e.target.value)}
-                          placeholder={user ? "Ask anything..." : "Please sign in to chat"}
-                          className="chat-input"
-                          disabled={isLoading || !user}
-                      />
-                      <button type="submit" className="send-btn" disabled={isLoading || !inputValue.trim() || !user}>
-                          <Send size={20} />
-                      </button>
-                  </form>
-              </div>
-          </footer>
+           <footer className="chat-footer">
+               <div className="footer-content">
+                   {currentFollowUps.length > 0 && !isLoading && (
+                       <div className="follow-ups">
+                           {currentFollowUps.map((prompt, i) => (
+                               <button key={i} onClick={() => sendMessage(prompt)} className="follow-up-btn">
+                                   {prompt}
+                               </button>
+                           ))}
+                       </div>
+                   )}
+                   <form onSubmit={(e) => { e.preventDefault(); sendMessage(inputValue); }} className="input-form">
+                       <input
+                           value={inputValue}
+                           onChange={e => setInputValue(e.target.value)}
+                           placeholder={user ? "Ask anything..." : "Please sign in to chat"}
+                           className="chat-input"
+                           disabled={isLoading || !user}
+                       />
+                       <button type="submit" className="send-btn" disabled={isLoading || !inputValue.trim() || !user}>
+                           <Send size={20} />
+                       </button>
+                   </form>
+               </div>
+           </footer>
         </main>
 
-        {/* --- NEW: Clear History Confirmation Dialog --- */}
+        {/* --- Confirmation Dialog (No Changes) --- */}
         {showClearConfirm && (
              <div className="clear-confirm-backdrop">
-                <div className="clear-confirm-dialog">
-                    <h4>Clear Chat History?</h4>
-                    <p>This will permanently delete all your conversations.</p>
-                    <div className="clear-confirm-actions">
-                        <button onClick={() => setShowClearConfirm(false)} className="cancel-btn">Cancel</button>
-                        <button onClick={handleClearHistory} className="confirm-btn">Clear History</button>
-                    </div>
-                </div>
+                {/* ... (dialog remains the same) ... */}
+                 <div className="clear-confirm-dialog">
+                     <h4>Clear Chat History?</h4>
+                     <p>This will permanently delete all your conversations.</p>
+                     <div className="clear-confirm-actions">
+                         <button onClick={() => setShowClearConfirm(false)} className="cancel-btn">Cancel</button>
+                         <button onClick={handleClearHistory} className="confirm-btn">Clear History</button>
+                     </div>
+                 </div>
              </div>
         )}
       </div>
