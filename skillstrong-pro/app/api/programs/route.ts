@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(u.searchParams.get("limit") || "20");
   const offset = (page - 1) * limit;
 
-  let queryBuilder = supabaseAdmin.from("programs").select("*", { count: 'exact' });
+  // Start base query
+  let query = supabaseAdmin.from("programs").select("*", { count: 'exact' });
 
   console.log("--- New Search Request ---");
   console.log(`Params: q='${q}', program_type='${program_type}', state='${state}', location='${location}', duration='${duration}'`);
@@ -25,85 +26,80 @@ export async function GET(req: NextRequest) {
 
   let locationFilterApplied = false;
 
-  // STRICT City, State Filtering (PRIORITY: If 'location' param looks like "City, ST")
+  // Filter 1: STRICT City, State (Highest Priority)
   if (location && location.includes(',') && location.split(',').map(s => s.trim()).filter(Boolean).length === 2) {
     const parts = location.split(',').map(s => s.trim());
     const city = parts[0];
     const stateAbbr = parts[1];
-
-    // Basic validation for state abbreviation
     if (stateAbbr && stateAbbr.length === 2 && stateAbbr === stateAbbr.toUpperCase()) {
         console.log(`Applying STRICT location filter: City ILIKE '%${city}%' AND State = '${stateAbbr}'`);
-        // Apply the filters directly using AND logic
-        queryBuilder = queryBuilder.ilike('city', `%${city}%`).eq('state', stateAbbr);
-        locationFilterApplied = true; // Mark that this specific filter was used
+        query = query.ilike('city', `%${city}%`).eq('state', stateAbbr); // Modify query
+        locationFilterApplied = true;
     } else {
-        console.warn(`Potentially invalid State format in location parameter '${location}'. Applying broad search.`);
-        // Fallback if state format looks wrong
-        queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+        console.warn(`Invalid State format in location '${location}'. Applying broad location search instead.`);
+        query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`); // Modify query
         locationFilterApplied = true;
     }
   }
 
-  // State Dropdown Filter (Only if strict location wasn't applied)
+  // Filter 2: State Dropdown (Only if strict location wasn't applied)
   if (!locationFilterApplied && state && state !== 'All States') {
     console.log(`Applying State Dropdown filter: State = '${state}'`);
-    queryBuilder = queryBuilder.eq('state', state);
+    query = query.eq('state', state); // Modify query
     locationFilterApplied = true;
   }
 
-  // Broad Location Search (Single term 'location', no state dropdown, strict filter failed/not applicable)
-  // This handles cases where 'location' is just a city, zip, or metro without a state
+  // Filter 3: Broad Location (Single term 'location', no state dropdown, strict filter failed/not applicable)
   if (!locationFilterApplied && location) {
      console.log(`Applying BROAD location filter (single term): '${location}'`);
-     queryBuilder = queryBuilder.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`);
+     query = query.or(`city.ilike.%${location}%,metro.ilike.%${location}%,zip_code.eq.${location}%`); // Modify query
      locationFilterApplied = true;
   }
 
-  // Keyword/Program/School Filter ('q')
+  // Filter 4: Keyword/Program/School ('q')
   if (q) {
      console.log(`Applying Keyword filter: q='${q}'`);
      const durationMatch = q.match(/^(\d+)\s+weeks$/i);
      if (durationMatch) {
         const weeks = parseInt(durationMatch[1], 10);
          if (!isNaN(weeks)) {
-            queryBuilder = queryBuilder.eq('length_weeks', weeks);
+            query = query.eq('length_weeks', weeks); // Modify query
          }
      } else {
-        queryBuilder = queryBuilder.or(`school.ilike.%${q}%,title.ilike.%${q}%`);
+        query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%`); // Modify query
      }
   }
 
-  // Duration Filter (from Trend Card)
+  // Filter 5: Duration (from Trend Card)
   if (duration) {
       const weeks = parseInt(duration.replace(/\s*weeks/i, ''), 10);
       if (!isNaN(weeks)) {
           console.log(`Applying Duration filter: ${weeks} weeks`);
-          queryBuilder = queryBuilder.eq('length_weeks', weeks);
+          query = query.eq('length_weeks', weeks); // Modify query
       }
   }
 
-  // Program Type Filter
+  // Filter 6: Program Type
   if (program_type && program_type !== 'all') {
     console.log(`Applying Program Type filter: '${program_type}'`);
-    queryBuilder = queryBuilder.eq('program_type', program_type);
+    query = query.eq('program_type', program_type); // Modify query
   }
 
   // --- Add Pagination and Ordering AFTER all filters ---
-  queryBuilder = queryBuilder.range(offset, offset + limit - 1);
-  queryBuilder = queryBuilder.order("featured", { ascending: false }).order("state").order("city").order("school");
+  query = query.range(offset, offset + limit - 1);
+  query = query.order("featured", { ascending: false }).order("state").order("city").order("school");
 
   console.log('Executing final query...');
 
-  // Execute the fully built query
-  const { data, error, count } = await queryBuilder;
+  // Execute the query *after* all filters have been chained
+  const { data, error, count } = await query;
 
   if (error) {
     console.error("Program search error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  console.log(`Query successful: Found ${count} results.`);
+  console.log(`Query successful: Found ${count} results.`); // This count should now reflect the filters
 
   return NextResponse.json({ programs: data, count, page, limit });
 }
