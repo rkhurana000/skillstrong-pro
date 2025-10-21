@@ -188,66 +188,11 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
     // no-op
   }
 
-// MODIFIED: Added logic for external search follow-up
-async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
-  let finalFollowups: string[] = [];
-  try {
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'Generate 4-6 SHORT follow-up prompts (<= 48 chars each) strictly about manufacturing careers, training, salaries, or apprenticeships. Return ONLY a JSON array of strings.',
-        },
-        { role: 'user', content: JSON.stringify({ question, answer, location }) },
-      ],
-    });
-    const raw = res.choices[0]?.message?.content ?? '[]';
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.length) {
-      finalFollowups = arr;
-    }
-  } catch {}
-
-  // --- NEW LOGIC FOR EXTERNAL SEARCH ---
-  const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
-  // Check for the specific heading we added
-  const answerHasInternal = /### 🛡️ SkillStrong Database Matches/i.test(answer);
-
-  if (userAskedForLocal && answerHasInternal) {
-    const hasExternalSearch = finalFollowups.some(f => /web|internet|external|more/i.test(f.toLowerCase()));
-    if (!hasExternalSearch) {
-      finalFollowups.push('Search the web for more results?');
-    }
-  }
-// --- END NEW LOGIC ---  
-  if (finalFollowups.length > 0) {
-    return sanitizeFollowups(finalFollowups);
-  }
-  
-  return defaultFollowups();
+  const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
+  return { answer: finalAnswer, followups };
 }
 
-function sanitizeFollowups(arr: any[]): string[] {
-  return arr
-    .filter((s) => typeof s === 'string' && s.trim().length > 0)
-    .map((s) => s.trim().slice(0, 48))
-    .slice(0, 6);
-}
-
-function defaultFollowups(): string[] {
-  return [
-    'Find paid apprenticeships near me',
-    'Local training programs',
-    'Typical salaries (BLS)',
-    'Explore CNC Machinist',
-    'Explore Robotics Technician',
-    'Talk to Coach Mach',
-  ];
-}
-  async function domainGuard(query: string): Promise<boolean> {
+async function domainGuard(query: string): Promise<boolean> {
   if (!query.trim()) return true;
   const allowHints =
     /(manufact|cnc|robot|weld|machin|apprentice|factory|plant|quality|maintenance|mechatronic|additive|3d\s*print|bls|o\*net|program|community\s*college|trade\s*school|career)/i;
@@ -283,7 +228,11 @@ async function needsInternetRag(query: string, draft: string, internalRAG: strin
   // If internal RAG already found results, we don't need web RAG *unless* user asks for more
   // This logic is now handled by the follow-up prompt
   if (internalRAG.length > 0) {
-      return false; // Don't run web RAG if we already found internal results
+      // Don't run web RAG if we already found internal results, UNLESS the user explicitly asks to search the web
+      if (/web|internet|external|more/i.test(text)) {
+        return true;
+      }
+      return false; 
   }
 
   const heuristics =
@@ -363,4 +312,65 @@ Write a concise markdown answer (bullets welcome). End with a short "Next steps"
     '\n\n**Sources**\n' + pages.map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`).join('\n');
 
   return answer + sourcesMd;
+}
+
+// MODIFIED: Added logic for external search follow-up
+async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
+  let finalFollowups: string[] = [];
+  try {
+    const res = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Generate 4-6 SHORT follow-up prompts (<= 48 chars each) strictly about manufacturing careers, training, salaries, or apprenticeships. Return ONLY a JSON array of strings.',
+        },
+        { role: 'user', content: JSON.stringify({ question, answer, location }) },
+      ],
+    });
+    const raw = res.choices[0]?.message?.content ?? '[]';
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr) && arr.length) {
+      finalFollowups = arr;
+    }
+  } catch {}
+
+  // --- NEW LOGIC FOR EXTERNAL SEARCH ---
+  const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
+  // Check for the specific heading we added
+  const answerHasInternal = /### 🛡️ SkillStrong Database Matches/i.test(answer);
+
+  if (userAskedForLocal && answerHasInternal) {
+    const hasExternalSearch = finalFollowups.some(f => /web|internet|external|more/i.test(f.toLowerCase()));
+    if (!hasExternalSearch) {
+      finalFollowups.push('Search the web for more results?');
+    }
+  }
+  // --- END NEW LOGIC ---
+
+  if (finalFollowups.length > 0) {
+    return sanitizeFollowups(finalFollowups);
+  }
+  
+  return defaultFollowups();
+}
+
+function sanitizeFollowups(arr: any[]): string[] {
+  return arr
+    .filter((s) => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => s.trim().slice(0, 48))
+    .slice(0, 6);
+}
+
+function defaultFollowups(): string[] {
+  return [
+    'Find paid apprenticeships near me',
+    'Local training programs',
+    'Typical salaries (BLS)',
+    'Explore CNC Machinist',
+    'Explore Robotics Technician',
+    'Talk to Coach Mach',
+  ];
 }
