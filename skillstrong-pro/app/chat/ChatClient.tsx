@@ -4,12 +4,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
-// ADDED: Menu icon
-import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Menu } from 'lucide-react';
+// UPDATED: Added Edit, MessageSquareText, Trash2, X icons. Removed Menu.
+import { MessageSquarePlus, Send, Bot, Gem, Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Edit, MessageSquareText, Trash2, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
-import './chat.css';
+import './chat.css'; // Ensure chat.css is imported
 
 // Type Definitions
 type Role = 'user' | 'assistant';
@@ -53,9 +53,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     const { location } = useLocation();
     const chatContainerRef = useRef<HTMLDivElement>(null);
     const initialUrlHandled = useRef(false);
-    
-    // ADDED: State for sidebar collapse
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    // ADDED: State for confirmation dialog
+    const [showClearConfirm, setShowClearConfirm] = useState(false);
 
     const activeConversationId = activeConversation?.id;
 
@@ -102,6 +102,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         if (navigate) {
           router.push(`${pathname}?id=${id}`);
         }
+        // Ensure sidebar is open when clicking history on mobile/small screens if needed
+        // setIsSidebarCollapsed(false); 
       } catch (error) {
         console.error("Error loading history:", error);
         createNewChat();
@@ -111,20 +113,22 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     };
     
     const saveConversation = async (convo: Partial<Conversation>): Promise<Conversation> => {
+        // Title generation logic (unchanged)
         if (convo.messages?.length === 2 && (!convo.id || convo.id.startsWith('temp-'))) {
-            const titleRes = await fetch('/api/title', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages: convo.messages }),
-            });
-            const { title } = await titleRes.json();
-            convo.title = title || 'New Conversation';
+            // Check for existing title generation logic and duplicate handling
+             const titleRes = await fetch('/api/title', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ messages: convo.messages }),
+             });
+             const { title: generatedTitle } = await titleRes.json();
+            convo.title = generatedTitle || 'New Conversation';
         }
 
         const res = await fetch('/api/chat/history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(convo),
+            body: JSON.stringify(convo), // Sends potentially updated title too
         });
         if (!res.ok) {
             const err = await res.json();
@@ -132,6 +136,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         }
         return await res.json();
     };
+
 
     const sendMessage = async (text: string) => {
       if (!text.trim() || !user) {
@@ -170,28 +175,30 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         
         const newMessages: Message[] = [...messages, { role: 'assistant', content: data.answer }];
         
+        // Pass the potentially updated title from state
         const savedConvo = await saveConversation({
           id: isNewConversation ? undefined : activeConversationId,
           messages: newMessages,
           provider: currentProvider,
-          title: activeConversation?.title,
+          title: activeConversation?.title, // Pass title from state
         });
         
         const finalConversationState: Conversation = {
             ...(activeConversation || { id: tempId, title: 'New Conversation' }),
-            ...savedConvo,
+            ...savedConvo, // savedConvo includes the final ID and potentially updated title
             messages: newMessages
         };
         setActiveConversation(finalConversationState);
         
-        // ** THIS IS THE SIMPLIFIED AND CORRECTED HISTORY LOGIC **
+        // Corrected History Update Logic
         setHistory(prev => {
             const newHistoryItem = { id: finalConversationState.id, title: finalConversationState.title, updated_at: finalConversationState.updated_at };
-            // Remove any old versions of this conversation (including temporary ones)
+            // Filter out both temp ID and final ID before adding the new item
             const filteredPrev = prev.filter(h => h.id !== tempId && h.id !== finalConversationState.id);
-            // Add the newest version to the top and re-sort
+            // Add the new item and sort
             return [newHistoryItem, ...filteredPrev].sort((a,b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
+
 
         if (isNewConversation) {
           router.push(`${pathname}?id=${savedConvo.id}`);
@@ -214,39 +221,65 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       saveConversation(updatedConvo);
     };
 
+    // --- NEW: Clear History Function ---
+    const handleClearHistory = async () => {
+        if (!user) return; // Should not happen if button is shown
+        setShowClearConfirm(false); // Close confirm dialog
+        setIsLoading(true);
+        try {
+            const res = await fetch('/api/chat/history/clear', { method: 'POST' });
+            if (!res.ok) throw new Error('Failed to clear history');
+            setHistory([]);
+            createNewChat(); // Go back to the welcome screen
+        } catch (error) {
+            console.error("Error clearing history:", error);
+            // Optionally show an error message to the user
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+
     return (
       <div className="chat-container">
-        {/* ADDED: Conditional class */}
         <aside className={`chat-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
-          <div className="sidebar-header">
-            <button onClick={createNewChat} className="new-chat-btn">
-              <MessageSquarePlus size={20} style={{ marginRight: '0.5rem' }} />
-              New Chat
+           {/* --- UPDATED: Header --- */}
+          <div className="sidebar-header-controls"> {/* New wrapper */}
+             {/* Collapse button moved here */}
+            <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="sidebar-toggle">
+              {/* Use X to close (un-collapse) if it's collapsed, otherwise Menu */}
+              {isSidebarCollapsed ? <Edit size={20}/> : <X size={20} />}
             </button>
+            {/* Gemini-style New Chat button */}
+            <button onClick={createNewChat} className="new-chat-btn-gemini" title="New Chat">
+              <Edit size={20} />
+            </button>
+             {/* Clear History Button */}
+             {user && history.length > 0 && (
+                 <button onClick={() => setShowClearConfirm(true)} className="clear-history-btn" title="Clear History">
+                     <Trash2 size={18} />
+                 </button>
+             )}
           </div>
           <nav className="history-list">
             {history.map(item => (
-              <div
+              <button // Changed div to button for better accessibility
                 key={item.id}
                 className={`history-item ${item.id === activeConversationId ? 'active' : ''}`}
                 onClick={() => handleHistoryClick(item.id)}
                 title={item.title}
               >
                 {item.title}
-              </div>
+              </button>
             ))}
           </nav>
+
         </aside>
 
         <main className="chat-main">
           <div className="chat-header">
-            {/* ADDED: Wrapper and toggle button */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="sidebar-toggle">
-                    <Menu size={20} />
-                </button>
-                <h3>SkillStrong Coach</h3>
-            </div>
+             {/* UPDATED: Changed title */}
+            <h3>Coach Mach</h3>
             {activeConversation && (
               <div className="provider-switch">
                 <button onClick={() => handleProviderChange('openai')} className={activeConversation.provider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
@@ -259,7 +292,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
               <div className="welcome-view">
                 <Bot size={48} className="text-blue-600 mb-4" />
                 <h2>Start a Conversation</h2>
-                <p>Select a category to begin exploring.</p>
+                <p>Select a category to begin exploring, or ask anything.</p>
                 <div className="explore-grid">
                   {welcomeCareers.map(({icon: Icon, title}) => (
                     <button key={title} onClick={() => sendMessage(`Tell me about ${title}`)} className="explore-btn" style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
@@ -270,6 +303,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
                 </div>
               </div>
             ) : (
+              // Message list rendering (unchanged)
               <div className="message-list">
                 {activeConversation.messages.map((msg, idx) => (
                   <div key={idx} className={`message-wrapper ${msg.role}`}>
@@ -293,6 +327,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
             )}
           </div>
           
+          {/* Footer rendering (unchanged) */}
           <footer className="chat-footer">
               <div className="footer-content">
                   {currentFollowUps.length > 0 && !isLoading && (
@@ -319,6 +354,20 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
               </div>
           </footer>
         </main>
+
+        {/* --- NEW: Clear History Confirmation Dialog --- */}
+        {showClearConfirm && (
+             <div className="clear-confirm-backdrop">
+                <div className="clear-confirm-dialog">
+                    <h4>Clear Chat History?</h4>
+                    <p>This will permanently delete all your conversations.</p>
+                    <div className="clear-confirm-actions">
+                        <button onClick={() => setShowClearConfirm(false)} className="cancel-btn">Cancel</button>
+                        <button onClick={handleClearHistory} className="confirm-btn">Clear History</button>
+                    </div>
+                </div>
+             </div>
+        )}
       </div>
     );
 }
