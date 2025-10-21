@@ -4,39 +4,51 @@ import { supabaseAdmin } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
+// Helper function to extract a core subject keyword from a title
+function extractSubject(title: string | null): string | null {
+    if (!title) return null;
+    const lowerTitle = title.toLowerCase();
+
+    // Prioritized keywords
+    if (lowerTitle.includes('cnc')) return 'CNC Machining';
+    if (lowerTitle.includes('machinist') || lowerTitle.includes('machining')) return 'Machining';
+    if (lowerTitle.includes('welding')) return 'Welding';
+    if (lowerTitle.includes('robotic')) return 'Robotics / Automation';
+    if (lowerTitle.includes('additive') || lowerTitle.includes('3d print')) return 'Additive Manufacturing';
+    if (lowerTitle.includes('quality control') || lowerTitle.includes('quality assurance') || lowerTitle.includes('inspector')) return 'Quality Control';
+    if (lowerTitle.includes('maintenance') || lowerTitle.includes('industrial tech')) return 'Industrial Maintenance';
+    if (lowerTitle.includes('mechatronics')) return 'Mechatronics';
+    if (lowerTitle.includes('automation')) return 'Automation'; // Catch-all for automation if not robotics
+    if (lowerTitle.includes('manufacturing')) return 'Manufacturing Technology'; // Generic fallback
+
+    return null; // Return null if no specific keyword found
+}
+
+
 export async function GET() {
   try {
-    // Fetch more programs to get a better sample for trends
     const { data: programs, error } = await supabaseAdmin
       .from('programs')
-      .select('title, city, state, length_weeks, program_type') // Added program_type
-      .limit(5000); // Increased limit further
+      .select('title, city, state, length_weeks, program_type')
+      .limit(5000); // Keep large limit for accuracy
 
     if (error) throw error;
     if (!programs) throw new Error("No programs data returned from database.");
 
 
-    // 1. Trending Programs - Show most frequent titles containing keywords
-    const keywords = [
-        'welding', 'robotic', 'cnc', 'machinist', 'additive', 'quality',
-        'manufacturing', 'metal work', 'maintenance', 'automation', 'technician',
-        'fabrication', 'mechatronics', 'industrial'
-    ];
-    const titleCounts: Record<string, number> = {};
+    // 1. Trending Programs - Count core subjects extracted from titles
+    const subjectCounts: Record<string, number> = {};
     programs.forEach(({ title }) => {
-      // Ensure title is treated as a string, even if null/undefined
-      const programTitle = String(title || '').toLowerCase();
-      if (programTitle && keywords.some(kw => programTitle.includes(kw))) {
-        // Use the original title casing for display
-        const displayTitle = title || "Unknown Program";
-        titleCounts[displayTitle] = (titleCounts[displayTitle] || 0) + 1;
-      }
+        const subject = extractSubject(title);
+        if (subject) {
+            subjectCounts[subject] = (subjectCounts[subject] || 0) + 1;
+        }
     });
-    // Sort by count (descending), take top 10
-    const trendingPrograms = Object.entries(titleCounts)
+     // Sort subjects by count, take top 10
+    const trendingPrograms = Object.entries(subjectCounts)
                                    .sort(([, countA], [, countB]) => countB - countA)
                                    .slice(0, 10)
-                                   .map(([title]) => title); // Get only the title string
+                                   .map(([subject]) => subject);
 
 
     // 2. Popular Locations (City, State)
@@ -52,32 +64,29 @@ export async function GET() {
     // 3. Common Course Durations
     const durationCounts: Record<number, number> = {};
     programs.forEach(({ length_weeks }) => {
-        // Ensure length_weeks is treated as a number, check > 0
         const weeks = Number(length_weeks);
         if (!isNaN(weeks) && weeks > 0) {
             durationCounts[weeks] = (durationCounts[weeks] || 0) + 1;
         }
     });
     const commonDurations = Object.entries(durationCounts)
-        .sort((a, b) => Number(b[1]) - Number(a[1])) // Sort by count (numeric)
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
         .slice(0, 8)
-        .map(item => `${item[0]} weeks`); // Format as "X weeks"
+        .map(item => `${item[0]} weeks`);
 
-    // 4. (For Debugging/Confirming Program Types) - Get distinct program types present in data
+    // 4. Get distinct program types
     const distinctProgramTypes = Array.from(new Set(programs.map(p => p.program_type).filter(Boolean)));
 
 
     return NextResponse.json({
-      trendingPrograms,
+      trendingPrograms, // Now contains subjects like 'Welding', 'CNC Machining', etc.
       popularLocations,
       commonDurations,
-      // Include distinct types found, useful for frontend dropdown validation
       availableProgramTypes: distinctProgramTypes
     });
 
   } catch (e: any) {
     console.error("Error fetching program trends:", e);
-    // Provide more detail in the error response if possible
     return NextResponse.json({ error: e.message || 'Failed to fetch trends', details: e.toString() }, { status: 500 });
   }
 }
