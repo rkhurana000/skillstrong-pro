@@ -9,8 +9,6 @@ export async function GET(req: NextRequest) {
   const q = u.searchParams.get("q")?.trim();
   const program_type = u.searchParams.get("program_type")?.trim();
   const state = u.searchParams.get("state")?.trim();
-  
-  // NEW: Read location and duration params from trend card clicks
   const location = u.searchParams.get("location")?.trim();
   const duration = u.searchParams.get("duration")?.trim();
   
@@ -22,19 +20,24 @@ export async function GET(req: NextRequest) {
 
   // Keyword filter
   if (q) {
-    query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%`);
+    // If the keyword is a location, search location fields too
+    const isLocationLike = q.includes(',') || /^\d{5}$/.test(q);
+    if (isLocationLike) {
+        query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%,city.ilike.%${q}%,metro.ilike.%${q}%`);
+    } else {
+        query = query.or(`school.ilike.%${q}%,title.ilike.%${q}%`);
+    }
   }
 
-  // State dropdown filter
-  if (state && state !== 'All States') {
-    query = query.eq('state', state);
-  }
-
-  // Location trend card filter
+  // **FIXED LOCATION LOGIC**
+  // Prioritize the specific 'location' param from trend cards.
+  // Otherwise, use the 'state' param from the dropdown.
   if (location) {
     const [city, stateAbbr] = location.split(',').map(s => s.trim());
     if (city) query = query.ilike('city', `%${city}%`);
     if (stateAbbr) query = query.eq('state', stateAbbr);
+  } else if (state && state !== 'All States') {
+    query = query.eq('state', state);
   }
   
   // Duration trend card filter
