@@ -366,27 +366,42 @@ Write a concise markdown answer (bullets welcome). Do NOT add a 'Next Steps' sec
 }
 
 // MODIFIED: Updated external search prompt text
+
+// MODIFIED: Strengthened system prompt for relevance
 async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
   let finalFollowups: string[] = [];
   try {
     const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.2,
+      model: 'gpt-4o-mini', // Keep using the mini model for speed/cost
+      temperature: 0.4, // Slightly increased temperature for a bit more variety
       messages: [
         {
           role: 'system',
-          content:
-            'Generate 4-6 SHORT follow-up prompts (<= 48 chars each) strictly about manufacturing careers, training, salaries, or apprenticeships. Return ONLY a JSON array of strings.',
+          // UPDATED PROMPT: Emphasizes relevance to the provided question/answer
+          content: `You are an assistant that generates relevant follow-up questions based on a user query and the AI's answer.
+Generate 4-5 SHORT follow-up prompts (<= 48 chars).
+**Crucially, these prompts MUST be directly related to the specific topics mentioned in the user's question or the AI's answer provided below.**
+Do NOT generate generic questions about manufacturing if they don't relate to the specific context. Focus on suggesting next logical steps or deeper dives related to the current discussion.
+Return ONLY a JSON array of strings.`,
         },
+        // Pass the current turn's Q&A as context
         { role: 'user', content: JSON.stringify({ question, answer, location }) },
       ],
     });
     const raw = res.choices[0]?.message?.content ?? '[]';
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr) && arr.length) {
-      finalFollowups = arr;
+    // Basic safety check for JSON parsing
+    if (raw.startsWith('[') && raw.endsWith(']')) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length) {
+          finalFollowups = arr;
+        }
+    } else {
+        console.warn("Follow-up generation did not return a valid JSON array:", raw);
     }
-  } catch {}
+  } catch (error) {
+      console.error("Error generating follow-ups:", error);
+      // Fallback to default if generation fails
+  }
 
   // --- NEW LOGIC FOR EXTERNAL SEARCH ---
   const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
@@ -401,19 +416,34 @@ async function generateFollowups(question: string, answer: string, location?: st
   }
   // --- END NEW LOGIC ---
 
+
+// Ensure sanitization and fallback
   if (finalFollowups.length > 0) {
     return sanitizeFollowups(finalFollowups);
+  } else {
+    // If generation failed or produced nothing relevant, provide safe defaults
+    console.warn("Falling back to default follow-ups for question:", question);
+    return defaultFollowups();
   }
-  
-  return defaultFollowups();
 }
 
 function sanitizeFollowups(arr: any[]): string[] {
+  // Increased max length slightly for more flexibility
+  const MAX_LEN = 55;
   return arr
-    .filter((s) => typeof s === 'string' && s.trim().length > 0)
-    .map((s) => s.trim().slice(0, 48))
-    .slice(0, 6);
+    .filter((s): s is string => typeof s === 'string' && s.trim().length > 0) // Type guard
+    .map((s) => {
+        let trimmed = s.trim();
+        // Remove trailing punctuation if unnecessary
+        if (trimmed.endsWith('?') || trimmed.endsWith('.')) {
+            trimmed = trimmed.slice(0, -1);
+        }
+        return trimmed.slice(0, MAX_LEN);
+     })
+    .filter((s, index, self) => self.indexOf(s) === index) // Remove duplicates
+    .slice(0, 6); // Max 6 follow-ups
 }
+
 
 function defaultFollowups(): string[] {
   return [
