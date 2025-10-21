@@ -12,7 +12,7 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// UPDATED: Modified Core Rule 1
+// UPDATED: Core Rule 1 is now much stricter about preserving links.
 const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillStrong.
 
 **Your Mission:** Guide users, especially high school students and career-switchers, to discover well-paid, hands-on vocational careers in the US manufacturing sector.
@@ -23,13 +23,25 @@ const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillS
 - **Action-Oriented:** Prefer bullet points and short paragraphs. End every response with a "Next Steps" section.
 
 **Core Rules:**
-1.  **Prioritize Internal Data:** If you are provided with 'Internal...Listings' in a system message, you MUST prioritize these results. Introduce them with the markdown heading "### 🛡️ SkillStrong Database Matches" to make them stand out.
+1.  **Prioritize Internal Data:** If you are provided with context under the heading \`### 🛡️ SkillStrong Database Matches\`, you MUST:
+    a.  Introduce these results using that *exact* markdown heading: \`### 🛡️ SkillStrong Database Matches\`.
+    b.  If the data provides markdown links (e.g., \`[Job Title](url)\`), you MUST preserve and use those exact links in your response. Do not re-write them as plain text.
 2.  **Vocational Filter:** ALL your answers—for jobs, training, and careers—MUST be filtered through a "vocational and skilled trades" lens. When a user asks for "robotics jobs," you must interpret this as "robotics TECHNICIAN jobs" and provide answers for that skill level.
 3.  **Answer the Question First:** Directly answer the user's specific question *first*. Provide other relevant information (like training or outlook) only *after* the direct question has been answered. If a user asks for job openings, list the openings first.
 4.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers. Do not discuss careers in other fields like healthcare or retail.
 5.  **No Hallucinations:** NEVER invent URLs, job stats, or program details. If you don't know something, say so and suggest a way to find the information.`;
 
-
+// NEW: A separate, simpler prompt for the Web RAG function.
+// This prompt does NOT include Core Rule 1, which fixes the duplicate heading bug.
+const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," an expert AI career coach for SkillStrong.
+Your persona is encouraging, clear, and action-oriented.
+**Core Rules:**
+1.  **Use Context Only:** You are performing a web search. You MUST base your answer *only* on the provided 'RAG Context'.
+2.  **Cite Sources:** Cite your sources in-line as [#1], [#2], etc.
+3.  **Vocational Filter:** ALL your answers MUST be filtered through a "vocational and skilled trades" lens (technicians, operators, etc.).
+4.  **Answer the Question First:** Directly answer the user's specific question *first*.
+5.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers.
+6.  **No Hallucinations:** NEVER invent URLs, job stats, or program details.`;
 
 
 // ------- Category auto-detect (for typed queries) -------
@@ -226,7 +238,6 @@ async function needsInternetRag(query: string, draft: string, internalRAG: strin
   if (overviewish.test(text) && !webish.test(text)) return false;
 
   // If internal RAG already found results, we don't need web RAG *unless* user asks for more
-  // This logic is now handled by the follow-up prompt
   if (internalRAG.length > 0) {
       // Don't run web RAG if we already found internal results, UNLESS the user explicitly asks to search the web
       if (/web|internet|external|more/i.test(text)) {
@@ -287,9 +298,8 @@ async function internetRagCSE(query: string, location?: string): Promise<string 
 
   const context = pages.map((p, i) => `[#${i + 1}] ${p.title}\n${p.text.slice(0, 3000)}\n${p.url}`).join('\n\n---\n\n');
 
-  const sys = `${COACH_SYSTEM}
-You are doing Internet RAG. Use ONLY the provided context; do not invent URLs.
-Cite sources in-line as [#1], [#2] where helpful.`;
+  // UPDATED: Use the new, separate system prompt for web RAG
+  const sys = `${COACH_SYSTEM_WEB_RAG}`;
 
   const prompt = `User question: ${query}
 Location: ${location || 'N/A'}
