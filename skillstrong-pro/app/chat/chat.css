@@ -1,109 +1,17 @@
-/* /app/chat/chat.css - NEW Dark Theme Design */
+/* /app/chat/chat.css - Additions for UI Changes */
 
-:root {
-  --sidebar-width: 280px;
-  --header-height: 65px;
-}
+/* ... (Keep all existing styles) ... */
 
-.chat-container {
-  display: flex;
-  height: calc(100vh - var(--header-height));
-  overflow: hidden;
-  background-color: #0f172a; /* slate-900 */
-  color: #cbd5e1; /* slate-300 */
-}
-
-/* --- Collapsible Sidebar --- */
-.chat-sidebar {
-  width: var(--sidebar-width);
-  background-color: #020617; /* slate-950 */
-  border-right: 1px solid #1e293b; /* slate-800 */
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  transition: margin-left 0.3s ease;
-}
-.chat-sidebar.collapsed {
-  margin-left: calc(-1 * var(--sidebar-width));
-}
-
-.sidebar-header {
-  padding: 1rem;
-  border-bottom: 1px solid #1e293b; /* slate-800 */
-}
-.new-chat-btn {
+/* --- Sidebar Header Controls --- */
+.sidebar-header-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  font-weight: 600;
-  color: #ffffff;
-  background-color: #2563eb; /* blue-600 */
-  border: none;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-.new-chat-btn:hover {
-  background-color: #1d4ed8; /* blue-700 */
-}
-
-.history-list {
-  flex-grow: 1;
-  overflow-y: auto;
-  padding: 0.5rem;
-}
-.history-item {
-  display: block;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.25rem;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 0.875rem;
-  text-align: left;
-  color: #94a3b8; /* slate-400 */
-  background: none;
-  border: none;
-  transition: background-color 0.2s;
-}
-.history-item:hover {
-  background-color: #1e293b; /* slate-800 */
-}
-.history-item.active {
-  background-color: #2563eb; /* blue-600 */
-  font-weight: 600;
-  color: #ffffff;
-}
-
-/* --- Main Chat Panel --- */
-.chat-main {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
-}
-
-.chat-header {
+  justify-content: space-between; /* Space out buttons */
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #1e293b; /* slate-800 */
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background-color: #0f172a; /* slate-900 */
-  color: #f1f5f9; /* slate-100 */
-  flex-shrink: 0;
-}
-.chat-header h3 {
-  font-weight: 600;
-  font-size: 1.125rem;
 }
 
+/* Updated Sidebar Toggle (was in chat-header) */
 .sidebar-toggle {
     color: #94a3b8; /* slate-400 */
     background: none;
@@ -111,210 +19,117 @@
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 9999px;
-    margin-right: 0.5rem;
+    /* Removed margin-right */
 }
 .sidebar-toggle:hover {
   background-color: #1e293b; /* slate-800 */
 }
 
-.provider-switch {
-  display: flex;
-  gap: 0.25rem;
+
+/* Gemini-style New Chat Button */
+.new-chat-btn-gemini {
+    color: #cbd5e1; /* slate-300 */
+    background: none;
+    border: 1px solid #334155; /* slate-700 */
+    cursor: pointer;
+    padding: 0.6rem; /* Slightly larger padding */
+    border-radius: 9999px; /* Make it circular */
+    display: flex; /* Needed for centering icon */
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+.new-chat-btn-gemini:hover {
   background-color: #1e293b; /* slate-800 */
-  padding: 0.25rem;
-  border-radius: 9999px;
-}
-.provider-switch button {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  border: none;
-  padding: 0.375rem 0.75rem;
-  font-size: 0.875rem;
-  border-radius: 9999px;
-  background-color: transparent;
-  cursor: pointer;
-  color: #94a3b8; /* slate-400 */
-}
-.provider-switch button.active {
-  background-color: #020617; /* slate-950 */
-  color: #f1f5f9; /* slate-100 */
-  font-weight: 500;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 
-.chat-messages {
-  flex-grow: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
+/* Clear History Button */
+.clear-history-btn {
+    color: #94a3b8; /* slate-400 */
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 9999px;
 }
-.messages-content {
-    max-width: 800px;
-    margin: 0 auto;
-    width: 100%;
-}
-
-.welcome-view {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  text-align: center;
-}
-.welcome-view h2 {
-  font-size: 1.875rem;
-  font-weight: 800;
-  margin-bottom: 0.5rem;
-  color: #f1f5f9; /* slate-100 */
-}
-.welcome-view p {
-  color: #64748b; /* slate-500 */
-  margin-bottom: 2rem;
-}
-.explore-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
-  width: 100%;
-  max-width: 600px;
-}
-.explore-btn {
-  padding: 1.25rem;
-  border-radius: 0.75rem;
-  background-color: #1e293b; /* slate-800 */
-  border: 1px solid #334155; /* slate-700 */
-  text-align: left;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #cbd5e1; /* slate-300 */
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.explore-btn:hover {
-  border-color: #475569; /* slate-600 */
-  background-color: #334155; /* slate-700 */
+.clear-history-btn:hover {
+    color: #f87171; /* red-400 */
+    background-color: #1e293b; /* slate-800 */
 }
 
-/* --- Chat Bubbles (New Theme & Sizing) --- */
-.message-wrapper {
-  display: flex;
-  margin-bottom: 1.25rem;
-  width: 100%;
+
+/* Sidebar Collapse Transition */
+.chat-sidebar {
+  /* ... existing styles ... */
+  transition: margin-left 0.3s ease; /* Ensure transition is smooth */
 }
-.message-wrapper.user {
-  justify-content: flex-end;
-}
-.message-bubble {
-  padding: 0.75rem 1.25rem;
-  border-radius: 1rem;
-  max-width: 90%;
-}
-.message-bubble.assistant {
-  background-color: #1e293b; /* slate-800 */
-  border-bottom-left-radius: 0.25rem;
-}
-.message-bubble.user {
-  background-color: #2563eb; /* blue-600 */
-  color: #ffffff;
-  border-bottom-right-radius: 0.25rem;
-  max-width: fit-content;
-  margin-left: auto;
+.chat-sidebar.collapsed {
+  margin-left: calc(-1 * var(--sidebar-width));
 }
 
-/* --- Footer & Input (New Theme) --- */
-.chat-footer {
-  padding: 1rem 1.5rem 1.5rem;
-  border-top: 1px solid #1e293b; /* slate-800 */
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0) 0%, #0f172a 70%);
-  flex-shrink: 0;
-}
-.footer-content {
-  max-width: 800px;
-  margin: 0 auto;
-}
-.follow-ups {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-.follow-up-btn {
-  padding: 0.375rem 0.875rem;
-  border-radius: 9999px;
-  border: 1px solid #334155; /* slate-700 */
-  background-color: #1e293b; /* slate-800 */
-  color: #cbd5e1; /* slate-300 */
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.follow-up-btn:hover {
-  background-color: #334155; /* slate-700 */
+
+/* --- Clear History Confirmation Dialog Styles --- */
+.clear-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100; /* Ensure it's on top */
 }
 
-.input-form {
-  display: flex;
-  gap: 0.75rem;
-  background-color: #1e293b; /* slate-800 */
-  border-radius: 0.75rem;
-  padding: 0.5rem;
-  border: 1px solid #334155; /* slate-700 */
-}
-.chat-input {
-  flex-grow: 1;
-  padding: 0.625rem;
-  border: none;
-  background-color: transparent;
-  font-size: 1rem;
-  color: #f1f5f9; /* slate-100 */
-}
-.chat-input:focus {
-  outline: none;
-}
-.send-btn {
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  background-color: #2563eb; /* blue-600 */
-  color: #ffffff;
-  border: none;
-  cursor: pointer;
-}
-.send-btn:disabled {
-  background-color: #334155; /* slate-700 */
-  cursor: not-allowed;
+.clear-confirm-dialog {
+    background-color: #1e293b; /* slate-800 */
+    color: #cbd5e1; /* slate-300 */
+    padding: 1.5rem 2rem;
+    border-radius: 0.75rem;
+    border: 1px solid #334155; /* slate-700 */
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    max-width: 400px;
+    text-align: center;
 }
 
-/* --- Markdown & Prose Styles (New Theme) --- */
-.prose {
-  color: #cbd5e1; /* slate-300 */
-  max-width: 100%;
+.clear-confirm-dialog h4 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #f1f5f9; /* slate-100 */
+    margin-bottom: 0.5rem;
 }
-.prose.prose-invert {
-  color: #ffffff;
+
+.clear-confirm-dialog p {
+    font-size: 0.875rem;
+    color: #94a3b8; /* slate-400 */
+    margin-bottom: 1.5rem;
 }
-.prose h3 {
-  margin-top: 1.5em;
-  margin-bottom: 0.75em;
-  font-size: 1.2em;
-  color: #f1f5f9; /* slate-100 */
+
+.clear-confirm-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
 }
-.prose ul {
-  padding-left: 1.5em;
+
+.clear-confirm-actions button {
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
 }
-.prose a {
-  color: #60a5fa; /* blue-400 */
-  text-decoration: none;
-  font-weight: 500;
+
+.clear-confirm-actions .cancel-btn {
+    background-color: #334155; /* slate-700 */
+    color: #cbd5e1; /* slate-300 */
 }
-.prose a:hover {
-  text-decoration: underline;
+.clear-confirm-actions .cancel-btn:hover {
+    background-color: #475569; /* slate-600 */
 }
-.prose.prose-invert a {
-  color: #bfdbfe; /* blue-200 */
-}
-.prose strong {
+
+.clear-confirm-actions .confirm-btn {
+    background-color: #dc2626; /* red-600 */
     color: #ffffff;
+}
+.clear-confirm-actions .confirm-btn:hover {
+    background-color: #b91c1c; /* red-700 */
 }
