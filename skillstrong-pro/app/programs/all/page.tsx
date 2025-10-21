@@ -16,6 +16,7 @@ function ProgramResults() {
         q: searchParams.get('q') || '',
         state: searchParams.get('state') || 'All States',
         program_type: searchParams.get('program_type') || 'all',
+        location: searchParams.get('location') || '', // ADDED
     });
 
     const qs = useMemo(() => {
@@ -23,8 +24,9 @@ function ProgramResults() {
         if (filters.q) sp.set('q', filters.q);
         if (filters.state && filters.state !== 'All States') sp.set('state', filters.state);
         if (filters.program_type && filters.program_type !== 'all') sp.set('program_type', filters.program_type);
+        if (filters.location) sp.set('location', filters.location); // ADDED
         return sp.toString();
-    }, [filters]);
+    }, [filters.q, filters.state, filters.program_type, filters.location]); // UPDATED dependencies
 
     const { data, error } = useSWR(`/api/programs?${qs}`, fetcher);
     const programs = data?.programs || [];
@@ -35,15 +37,19 @@ function ProgramResults() {
             <h1 className="text-3xl font-bold mb-4">Program Listings</h1>
             <p className="text-gray-600 mb-6">Browse all available programs or use the filters to narrow your search.</p>
 
-            <div className="grid md:grid-cols-3 gap-3 p-4 border rounded-lg bg-white mb-6 sticky top-20 z-10 shadow-sm">
-                <input className="border rounded-md p-2 md:col-span-3" placeholder="Search program or school"
+            {/* UPDATED: Added location input and changed grid cols */}
+            <div className="grid md:grid-cols-4 gap-3 p-4 border rounded-lg bg-white mb-6 sticky top-20 z-10 shadow-sm">
+                <input className="border rounded-md p-2 md:col-span-2" placeholder="Search program or school"
                     value={filters.q} onChange={e => setFilters(s => ({ ...s, q: e.target.value }))} />
                 
-                <select className="border rounded-md p-2" value={filters.state} onChange={e => setFilters(s => ({...s, state: e.target.value}))}>
+                <input className="border rounded-md p-2 md:col-span-2" placeholder="Location (City, ST)"
+                    value={filters.location} onChange={e => setFilters(s => ({ ...s, location: e.target.value, state: 'All States' }))} />
+                
+                <select className="border rounded-md p-2 md:col-span-2" value={filters.state} onChange={e => setFilters(s => ({...s, state: e.target.value, location: ''}))}>
                     {states.map(st => <option key={st} value={st}>{st}</option>)}
                 </select>
 
-                <select className="border rounded-md p-2" value={filters.program_type} onChange={e => setFilters(s => ({...s, program_type: e.target.value}))}>
+                <select className="border rounded-md p-2 md:col-span-2" value={filters.program_type} onChange={e => setFilters(s => ({...s, program_type: e.target.value}))}>
                     <option value="all">Program Type (All)</option>
                     <option value="Certificate">Certificate</option>
                     <option value="Associate Degree">Associate Degree</option>
@@ -56,7 +62,15 @@ function ProgramResults() {
             <div className="grid gap-4">
                 {!isLoading && programs.map((p: any) => (
                     <div key={p.id} className="p-4 border rounded-lg bg-white shadow-sm">
-                         <h3 className="text-lg font-semibold text-blue-700 hover:underline">{p.title}</h3>
+                         {/* CHANGED: Wrapped title in a link */}
+                         <a 
+                           href={p.url || p.external_url} 
+                           target="_blank" 
+                           rel="noopener noreferrer"
+                           className="text-lg font-semibold text-blue-700 hover:underline"
+                         >
+                           {p.title}
+                         </a>
                          <div className="text-md font-semibold text-gray-700 mt-1">{p.school}</div>
                          <div className="text-sm text-gray-600 mt-1">{p.city}, {p.state} • {p.program_type}</div>
                         {p.description && <p className="text-sm mt-2 text-gray-700">{p.description.substring(0, 250)}...</p>}
