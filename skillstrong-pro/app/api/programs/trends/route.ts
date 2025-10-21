@@ -8,28 +8,38 @@ export async function GET() {
   try {
     const { data: programs, error } = await supabaseAdmin
       .from('programs')
-      // Select only necessary columns
       .select('title, city, state, length_weeks, program_type')
       .limit(5000); // Fetch a good sample size
 
     if (error) throw error;
     if (!programs) throw new Error("No programs data returned from database.");
 
-    // 1. Trending Programs - Count exact titles
+    // 1. Trending Programs - Count NORMALIZED exact titles
     const titleCounts: Record<string, number> = {};
+    const originalTitleMapping: Record<string, string> = {}; // To store original casing
+
     programs.forEach(({ title }) => {
-        // Ensure title is treated as a string, handle nulls/undefined
-        const programTitle = String(title || '').trim();
-        // Only count non-empty titles
-        if (programTitle) {
-            titleCounts[programTitle] = (titleCounts[programTitle] || 0) + 1;
+        const originalTitle = String(title || '').trim();
+        if (originalTitle) {
+            const normalizedTitle = originalTitle.toLowerCase(); // Normalize
+            titleCounts[normalizedTitle] = (titleCounts[normalizedTitle] || 0) + 1;
+            // Store the first encountered original casing for this normalized title
+            if (!originalTitleMapping[normalizedTitle]) {
+                originalTitleMapping[normalizedTitle] = originalTitle;
+            }
         }
     });
+
+    // Log the counts before slicing (for debugging)
+    console.log("Full Title Counts (Normalized):", titleCounts);
+
     // Sort by count (descending), take top 15
-    const trendingPrograms = Object.entries(titleCounts)
+    const trendingProgramsNormalized = Object.entries(titleCounts)
                                    .sort(([, countA], [, countB]) => countB - countA)
                                    .slice(0, 15) // Show top 15
-                                   .map(([title]) => title); // Get only the title string
+                                   .map(([normalizedTitle]) => originalTitleMapping[normalizedTitle] || normalizedTitle); // Map back to original casing
+
+    console.log("Top 15 Trending Programs:", trendingProgramsNormalized); // Debug log
 
     // 2. Popular Locations (City, State) - Logic remains the same
     const locationCounts: Record<string, number> = {};
@@ -58,7 +68,7 @@ export async function GET() {
     const distinctProgramTypes = Array.from(new Set(programs.map(p => p.program_type).filter(Boolean)));
 
     return NextResponse.json({
-      trendingPrograms, // Now contains exact titles
+      trendingPrograms: trendingProgramsNormalized, // Use the titles with original casing
       popularLocations,
       commonDurations,
       availableProgramTypes: distinctProgramTypes
