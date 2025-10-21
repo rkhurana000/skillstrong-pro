@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
-// Create this SQL function in your Supabase SQL Editor ONCE:
+// Reminder: Ensure this SQL function exists in your Supabase project:
 /*
 CREATE OR REPLACE FUNCTION get_top_program_titles(limit_count integer)
 RETURNS TABLE(title text, count bigint) AS $$
@@ -16,7 +16,7 @@ BEGIN
   FROM
     public.programs p
   WHERE
-    p.title IS NOT NULL AND p.title <> '' -- Ignore null or empty titles
+    p.title IS NOT NULL AND p.title <> ''
   GROUP BY
     p.title
   ORDER BY
@@ -26,42 +26,45 @@ END;
 $$ LANGUAGE plpgsql;
 */
 
+// Define the expected shape of the data returned by the RPC function
+interface TopTitleResult {
+  title: string;
+  count: bigint; // Or number, depending on how Supabase returns bigint
+}
+
+
 export async function GET() {
-  console.log("--- Fetching Program Trends (RPC Method) ---");
+  console.log("--- Fetching Program Trends (RPC Method - Build Fix) ---");
   try {
     // 1. Trending Programs - Call the SQL function
+    // Explicitly type the expected return data
     const { data: topTitlesData, error: titlesError } = await supabaseAdmin
-      .rpc('get_top_program_titles', { limit_count: 15 }); // Call the function
+      .rpc('get_top_program_titles', { limit_count: 15 })
+      .returns<TopTitleResult[]>(); // Specify the return type here
 
     if (titlesError) {
       console.error("Supabase RPC error fetching top titles:", titlesError);
-      // Try to return a valid empty structure on error
       return NextResponse.json({
           trendingPrograms: [], popularLocations: [], commonDurations: [], availableProgramTypes: []
       }, { status: 500, statusText: titlesError.message });
     }
 
-    // Extract just the titles
-    const trendingPrograms = topTitlesData ? topTitlesData.map(item => item.title) : [];
+    // FIX: Explicitly type 'item' in the map function
+    const trendingPrograms = topTitlesData ? topTitlesData.map((item: TopTitleResult) => item.title) : [];
     console.log("Top 15 Trending Programs (RPC Query):", trendingPrograms);
 
 
-    // --- Other Trends (Locations, Durations, Types) - Fetch separately for efficiency ---
-    // Note: Fetching less data here as titles are handled by RPC
+    // --- Other Trends ---
     const { data: otherTrendsData, error: otherTrendsError } = await supabaseAdmin
       .from('programs')
       .select('city, state, length_weeks, program_type')
-      .limit(5000); // Fetch data needed for other trends
+      .limit(5000);
 
      if (otherTrendsError) {
-         // Log the error but potentially continue if possible, or return error
          console.error("Supabase error fetching data for other trends:", otherTrendsError);
-         // Depending on requirements, you might want to return an error or partial data
-         // For now, let's try returning what we have if titles worked
-         if(!topTitlesData) throw otherTrendsError; // Only throw if titles also failed
+         // Return partial data if possible
+         if(!topTitlesData) throw otherTrendsError;
      }
-
-    // Safely process other trends even if data fetching failed partially
     const safeOtherTrendsData = otherTrendsData || [];
 
     // 2. Popular Locations
@@ -100,7 +103,6 @@ export async function GET() {
 
   } catch (e: any) {
     console.error("Error in /api/programs/trends:", e);
-    // Ensure a JSON response even on unexpected errors
     return NextResponse.json({ error: e.message || 'Failed to fetch trends', details: e.toString() }, { status: 500 });
   }
 }
