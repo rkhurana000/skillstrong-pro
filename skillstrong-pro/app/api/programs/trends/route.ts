@@ -13,18 +13,26 @@ export async function GET() {
 
     if (error) throw error;
 
-    // 1. Trending Programs - Using a broader keyword list
+    // 1. Trending Programs - Identify subjects from titles for better diversity
     const keywords = [
-        'welding', 'robotic', 'cnc', 'machinist', 'additive', 'quality', 
-        'manufacturing', 'metal work', 'maintenance', 'automation', 'technician'
+        'Welding', 'Robotics', 'CNC', 'Machinist', 'Additive', 'Quality', 
+        'Manufacturing', 'Metal Work', 'Maintenance', 'Automation', 'Technician'
     ];
-    const titleCounts: Record<string, number> = {};
+    const subjectCounts: Record<string, number> = {};
     programs.forEach(({ title }) => {
-      if (title && keywords.some(kw => title.toLowerCase().includes(kw))) {
-        titleCounts[title] = (titleCounts[title] || 0) + 1;
+      if (title) {
+        for (const kw of keywords) {
+            if (title.toLowerCase().includes(kw.toLowerCase())) {
+                // Use a canonical name for the subject
+                const subject = kw === 'Metal Work' ? 'Welding' : kw;
+                subjectCounts[subject] = (subjectCounts[subject] || 0) + 1;
+                break; // Count first keyword match only
+            }
+        }
       }
     });
-    const trendingPrograms = Object.entries(titleCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(item => item[0]);
+    const trendingPrograms = Object.entries(subjectCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(item => item[0]);
+
 
     // 2. Popular Locations (City, State)
     const locationCounts: Record<string, number> = {};
