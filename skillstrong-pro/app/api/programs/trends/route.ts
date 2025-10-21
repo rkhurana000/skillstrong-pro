@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
-// Reminder: Ensure this SQL function exists in your Supabase project:
+// Reminder: Ensure this SQL function exists in your Supabase project.
 /*
 CREATE OR REPLACE FUNCTION get_top_program_titles(limit_count integer)
 RETURNS TABLE(title text, count bigint) AS $$
@@ -26,21 +26,18 @@ END;
 $$ LANGUAGE plpgsql;
 */
 
-// Define the expected shape of the data returned by the RPC function
+// Define the expected shape for clarity
 interface TopTitleResult {
   title: string;
-  count: bigint; // Or number, depending on how Supabase returns bigint
+  count: number;
 }
-
 
 export async function GET() {
   console.log("--- Fetching Program Trends (RPC Method - Build Fix) ---");
   try {
     // 1. Trending Programs - Call the SQL function
-    // Explicitly type the expected return data
     const { data: topTitlesData, error: titlesError } = await supabaseAdmin
-      .rpc('get_top_program_titles', { limit_count: 15 })
-      .returns<TopTitleResult[]>(); // Specify the return type here
+      .rpc('get_top_program_titles', { limit_count: 15 });
 
     if (titlesError) {
       console.error("Supabase RPC error fetching top titles:", titlesError);
@@ -49,12 +46,19 @@ export async function GET() {
       }, { status: 500, statusText: titlesError.message });
     }
 
-    // FIX: Explicitly type 'item' in the map function
-    const trendingPrograms = topTitlesData ? topTitlesData.map((item: TopTitleResult) => item.title) : [];
+    let trendingPrograms: string[] = [];
+    // FIX: Add a type guard to ensure topTitlesData is an array before mapping
+    if (Array.isArray(topTitlesData)) {
+        // Explicitly type 'item' to satisfy TypeScript during build
+        trendingPrograms = topTitlesData.map((item: TopTitleResult) => item.title);
+    } else {
+        console.warn("RPC data for top titles was not an array:", topTitlesData);
+    }
+    
     console.log("Top 15 Trending Programs (RPC Query):", trendingPrograms);
 
 
-    // --- Other Trends ---
+    // --- Other Trends (Locations, Durations, Types) ---
     const { data: otherTrendsData, error: otherTrendsError } = await supabaseAdmin
       .from('programs')
       .select('city, state, length_weeks, program_type')
@@ -62,8 +66,7 @@ export async function GET() {
 
      if (otherTrendsError) {
          console.error("Supabase error fetching data for other trends:", otherTrendsError);
-         // Return partial data if possible
-         if(!topTitlesData) throw otherTrendsError;
+         if(!trendingPrograms) throw otherTrendsError; // Only fail if both fetches failed
      }
     const safeOtherTrendsData = otherTrendsData || [];
 
