@@ -11,6 +11,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 // Function to convert weeks to a month string
 const weeksToMonthsStr = (weeks: number): string => {
+    if (isNaN(weeks) || weeks <= 0) return ""; // Handle invalid input
     if (weeks <= 4) return "1 month";
     const months = Math.round(weeks / 4.33); // Use average weeks per month
     return `${months} months`;
@@ -27,8 +28,11 @@ const TrendCard = ({ title, icon, data, type, isDuration = false }: { title: str
             {data?.map((item) => {
                 // If it's duration data, convert weeks number string to months string for display
                 const displayItem = isDuration ? weeksToMonthsStr(parseInt(item.replace(/\D/g,''), 10)) : item;
-                // Keep the link parameter as weeks for filtering consistency for now
-                const linkParam = isDuration ? item : item; // Link still uses weeks value
+                // Keep the link parameter as weeks for filtering consistency
+                const linkParam = item; // Link always uses original value (weeks or location string)
+
+                // Skip rendering if displayItem is empty (e.g., invalid duration)
+                if (!displayItem) return null;
 
                 return (
                     <Link
@@ -51,14 +55,14 @@ export default function ProgramsPage() {
   const router = useRouter();
   const { data, error } = useSWR('/api/programs/trends', fetcher);
   const [keyword, setKeyword] = useState('');
+  const [city, setCity] = useState(''); // NEW city state
   const [state, setState] = useState('All States');
-  // REMOVED: const [programType, setProgramType] = useState('all');
 
   const handleSearch = () => {
     const params = new URLSearchParams();
     if (keyword) params.set('q', keyword);
+    if (city) params.set('city', city); // Use city param
     if (state !== 'All States') params.set('state', state);
-    // REMOVED: if (programType !== 'all') params.set('program_type', programType);
     router.push(`/programs/all?${params.toString()}`);
   };
 
@@ -73,48 +77,56 @@ export default function ProgramsPage() {
             Discover certificates, degrees, and apprenticeships to launch your manufacturing career.
           </p>
           {/* --- UPDATED Search Bar --- */}
-          <div className="flex flex-col sm:flex-row gap-2 max-w-xl mx-auto bg-white p-2 rounded-lg shadow-lg">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-2xl mx-auto bg-white p-2 rounded-lg shadow-lg">
             <input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Program or School (e.g., Welding)"
-              className="p-3 rounded-md flex-grow text-black border-gray-200 border"
+              placeholder="Program or School"
+              className="p-3 rounded-md text-black border-gray-200 border w-full sm:col-span-1" // Adjusted width
             />
-            <select value={state} onChange={e => setState(e.target.value)} className="p-3 rounded-md text-black border-gray-200 border">
-                {states.map(st => <option key={st} value={st}>{st}</option>)}
-            </select>
-            {/* REMOVED Program Type Select */}
-            <button
-              onClick={handleSearch}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-md text-white font-semibold flex items-center justify-center"
-            >
-              <Search className="w-5 h-5" />
-            </button>
+            {/* NEW City Input */}
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="City (Optional)"
+              className="p-3 rounded-md text-black border-gray-200 border w-full sm:col-span-1" // Adjusted width
+            />
+            {/* State Dropdown */}
+            <div className="flex gap-2 sm:col-span-1"> {/* Wrapper for dropdown and button */}
+                <select value={state} onChange={e => setState(e.target.value)} className="p-3 rounded-md text-black border-gray-200 border flex-grow">
+                    {states.map(st => <option key={st} value={st}>{st}</option>)}
+                </select>
+                <button
+                  onClick={handleSearch}
+                  className="bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-md text-white font-semibold flex items-center justify-center" // Adjusted padding
+                >
+                  <Search className="w-5 h-5" />
+                </button>
+            </div>
           </div>
           {/* --- END UPDATED Search Bar --- */}
         </div>
       </section>
 
+      {/* Trend Cards and CTA sections */}
       <section className="max-w-6xl mx-auto py-16 px-4">
-        {isLoading && <p className="text-center">Loading program trends...</p>}
-        {error && <p className="text-center text-red-500">Failed to load program trends.</p>}
-
-        {data && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <TrendCard title="Trending Programs" icon={<BookOpen className="text-blue-600"/>} data={data.trendingPrograms} type="q" />
-            <TrendCard title="Popular Locations" icon={<MapPin className="text-blue-600"/>} data={data.popularLocations} type="location" />
-            {/* UPDATED: Pass isDuration flag */}
-            <TrendCard title="Course Duration" icon={<Clock className="text-blue-600"/>} data={data.commonDurations} type="duration" isDuration={true}/>
-          </div>
-        )}
+             {isLoading && <p className="text-center">Loading program trends...</p>}
+             {error && <p className="text-center text-red-500">Failed to load program trends.</p>}
+             {data && (
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 <TrendCard title="Trending Programs" icon={<BookOpen className="text-blue-600"/>} data={data.trendingPrograms || []} type="q" />
+                 {/* Update Trend Card link generation if needed, though location string might still work */}
+                 <TrendCard title="Popular Locations" icon={<MapPin className="text-blue-600"/>} data={data.popularLocations || []} type="location" />
+                 <TrendCard title="Course Duration" icon={<Clock className="text-blue-600"/>} data={data.commonDurations || []} type="duration" isDuration={true}/>
+               </div>
+             )}
       </section>
-
       <section className="py-16 text-center px-4">
-          <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>
-          <p className="mt-2 text-slate-600">Let our AI coach guide you to the perfect manufacturing career.</p>
-          <Link href="/chat" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
-              <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
-          </Link>
+           <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>
+           <p className="mt-2 text-slate-600">Let our AI coach guide you to the perfect manufacturing career.</p>
+           <Link href="/chat" className="mt-6 inline-flex items-center justify-center px-8 py-3 bg-blue-600 text-white font-semibold rounded-full shadow-lg hover:bg-blue-700 transition-transform hover:scale-105">
+               <Bot className="w-5 h-5 mr-2" /> Chat with Coach Mach
+           </Link>
       </section>
     </div>
   );
