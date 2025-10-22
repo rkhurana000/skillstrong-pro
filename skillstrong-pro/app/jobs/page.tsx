@@ -31,10 +31,52 @@ const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.Rea
 );
 
 
-// FeaturedJobsCarousel component (keep as is)
+// FeaturedJobsCarousel component
 const FeaturedJobsCarousel = () => {
     const { data: featuredData, error: featuredError } = useSWR('/api/jobs?featured=true', fetcher);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    // State to manage button disabled status
+    const [canScrollLeft, setCanScrollLeft] = useState(false);
+    const [canScrollRight, setCanScrollRight] = useState(true);
+
+
+    const scroll = (direction: 'left' | 'right') => {
+        if (scrollContainerRef.current) {
+            const scrollAmount = scrollContainerRef.current.offsetWidth * 0.8; // Scroll 80% width
+            scrollContainerRef.current.scrollBy({
+                left: direction === 'left' ? -scrollAmount : scrollAmount,
+                behavior: 'smooth'
+            });
+        }
+    };
+
+    // Effect to check scroll position and update button state
+    const checkScrollButtons = () => {
+        if (scrollContainerRef.current) {
+            const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
+            setCanScrollLeft(scrollLeft > 0);
+            // Check if scrollLeft is at the end (with a small buffer for precision)
+            setCanScrollRight(scrollLeft + clientWidth < scrollWidth - 5);
+        }
+    };
+
+    // Add event listener on mount and data change
+    useEffect(() => {
+        const currentRef = scrollContainerRef.current;
+        if (currentRef) {
+            // Check initially
+            checkScrollButtons();
+            // Add listener
+            currentRef.addEventListener('scroll', checkScrollButtons);
+        }
+        // Cleanup
+        return () => {
+            if (currentRef) {
+                currentRef.removeEventListener('scroll', checkScrollButtons);
+            }
+        };
+    }, [featuredData]); // Re-check if data changes
+
 
     if (featuredError) {
         console.error("Failed to load featured jobs:", featuredError);
@@ -47,15 +89,6 @@ const FeaturedJobsCarousel = () => {
         return null; // Don't render the section if there are no featured jobs
     }
 
-    const scroll = (direction: 'left' | 'right') => {
-        if (scrollContainerRef.current) {
-            const scrollAmount = scrollContainerRef.current.offsetWidth * 0.8; // Scroll 80% width
-            scrollContainerRef.current.scrollBy({
-                left: direction === 'left' ? -scrollAmount : scrollAmount,
-                behavior: 'smooth'
-            });
-        }
-    };
 
     return (
         <section className="bg-slate-100 py-16">
@@ -63,10 +96,11 @@ const FeaturedJobsCarousel = () => {
                 <div className="flex justify-between items-center mb-8">
                     <h2 className="text-3xl font-bold text-slate-800">Featured Jobs</h2>
                     <div className="flex gap-2">
-                        <button onClick={()={() => scroll('left')} className="p-2 rounded-full bg-white border shadow-sm hover:bg-slate-50 disabled:opacity-50" disabled={!scrollContainerRef.current || scrollContainerRef.current.scrollLeft === 0}>
+                        {/* --- SYNTAX FIX HERE --- */}
+                        <button onClick={() => scroll('left')} className="p-2 rounded-full bg-white border shadow-sm hover:bg-slate-50 disabled:opacity-50" disabled={!canScrollLeft}>
                             <ChevronLeft size={24} />
                         </button>
-                        <button onClick={() => scroll('right')} className="p-2 rounded-full bg-white border shadow-sm hover:bg-slate-50 disabled:opacity-50" disabled={!scrollContainerRef.current || scrollContainerRef.current.scrollLeft + scrollContainerRef.current.offsetWidth >= scrollContainerRef.current.scrollWidth}>
+                        <button onClick={() => scroll('right')} className="p-2 rounded-full bg-white border shadow-sm hover:bg-slate-50 disabled:opacity-50" disabled={!canScrollRight}>
                             <ChevronRight size={24} />
                         </button>
                     </div>
