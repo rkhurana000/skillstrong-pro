@@ -138,7 +138,7 @@ function JobResults() {
                                      {j.pay_min && `$${Number(j.pay_min).toLocaleString()}`}
                                      {(j.pay_min && j.pay_max) && ' – '}
                                      {j.pay_max && `$${Number(j.pay_max).toLocaleString()}`}
-                                     { (j.pay_min || j.pay_max) && ' / yr'}
+                                     { (j.pay_min || j.pay_max) && ' / hr'}
                                  </div>
                              )}
                          </div>
