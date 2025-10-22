@@ -1,42 +1,47 @@
 // /app/account/auth-form.tsx
 'use client'
 
-import { useState } from 'react'
-import { login, signup, forgotPassword } from './actions'
+import { useState, useTransition } from 'react'; // Import useTransition
+import { login, signup, forgotPassword } from './actions';
 
 export default function AuthForm() {
   const [view, setView] = useState<'signIn' | 'signUp' | 'forgotPassword'>('signIn');
-  const [message, setMessage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false); // Add loading state
+  // Message state for forgot password feedback ONLY (as login/signup redirect with message)
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState<string | null>(null);
+  // useTransition provides pending state for Server Actions
+  const [isPending, startTransition] = useTransition();
 
-  const handleAuthAction = async (event: React.FormEvent<HTMLFormElement>, action: typeof login | typeof signup) => {
-      event.preventDefault();
-      setLoading(true);
-      setMessage(null);
-      const formData = new FormData(event.currentTarget);
-      // Server actions redirect on error/success, so we might not see a message here unless explicitly returned
-      await action(formData);
-      // setLoading(false); // Might not be reached due to redirect
+  const handleAuthAction = (action: typeof login | typeof signup) => {
+      // Wrap the server action call in startTransition
+      startTransition(async () => {
+          // No need for event or manual FormData here if using formAction
+          // The form's default submission will trigger the action
+          // We don't manually call `await action()` here when using formAction
+      });
   };
 
   const handleForgotPassword = async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setLoading(true);
-      setMessage(null);
+      event.preventDefault(); // Prevent default since this uses onSubmit
       const formData = new FormData(event.currentTarget);
-      const result = await forgotPassword(formData);
-      setLoading(false);
-      setMessage(result?.message || null);
+      // Wrap the server action call in startTransition
+      startTransition(async () => {
+          setForgotPasswordMessage(null); // Clear previous message
+          const result = await forgotPassword(formData);
+          setForgotPasswordMessage(result?.message || null); // Display feedback
+      });
   };
+
+  // Determine combined loading state
+  const loading = isPending;
 
 
   if (view === 'forgotPassword') {
     return (
         <form className="space-y-6" onSubmit={handleForgotPassword}>
              {/* Use consistent message styling */}
-             {message && (
+             {forgotPasswordMessage && (
                  <p className="my-4 p-3 bg-slate-700 text-slate-200 text-center rounded-md text-sm border border-slate-600">
-                     {message}
+                     {forgotPasswordMessage}
                  </p>
              )}
             <div>
@@ -53,7 +58,7 @@ export default function AuthForm() {
                 </button>
             </div>
              <div className="text-center text-sm">
-                 <button type="button" disabled={loading} onClick={() => { setView('signIn'); setMessage(null); }} className="font-medium text-blue-400 hover:text-blue-300 disabled:opacity-70">
+                 <button type="button" disabled={loading} onClick={() => { setView('signIn'); setForgotPasswordMessage(null); }} className="font-medium text-blue-400 hover:text-blue-300 disabled:opacity-70">
                      Back to Sign In
                  </button>
              </div>
@@ -62,8 +67,9 @@ export default function AuthForm() {
   }
 
   // Original Sign In / Sign Up Form
+  // Use formAction directly on the button, managed by useTransition
   return (
-    <form className="space-y-6" onSubmit={(e) => handleAuthAction(e, view === 'signUp' ? signup : login)}>
+    <form className="space-y-6">
        {/* Email Input */}
       <div>
         <label htmlFor="email" className="block text-sm font-medium text-slate-300">Email address</label>
@@ -90,10 +96,14 @@ export default function AuthForm() {
         </div>
       )}
 
-      {/* Submit Button */}
+      {/* Submit Button - Uses formAction */}
       <div>
-         {/* Using type="submit" and onSubmit on the form */}
-        <button type="submit" disabled={loading} className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70">
+        <button
+            formAction={view === 'signUp' ? signup : login} // Use formAction directly
+            type="submit" // Ensure it's a submit button
+            disabled={loading} // Disable based on useTransition state
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70"
+        >
            {loading ? 'Processing...' : (view === 'signUp' ? 'Create Account' : 'Sign In')}
         </button>
       </div>
@@ -101,7 +111,7 @@ export default function AuthForm() {
       {/* Switch View & Forgot Password */}
       <div className="flex items-center justify-between text-sm">
          {view === 'signIn' && (
-             <button type="button" disabled={loading} onClick={() => { setView('forgotPassword'); setMessage(null); }} className="font-medium text-blue-400 hover:text-blue-300 disabled:opacity-70">
+             <button type="button" disabled={loading} onClick={() => { setView('forgotPassword'); setForgotPasswordMessage(null); }} className="font-medium text-blue-400 hover:text-blue-300 disabled:opacity-70">
                  Forgot your password?
              </button>
          )}
