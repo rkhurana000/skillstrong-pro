@@ -8,23 +8,18 @@ import { createClient } from '@/utils/supabase/server'
 
 export async function login(formData: FormData) {
   const supabase = createClient()
-
   const data = {
     email: formData.get('email') as string,
     password: formData.get('password') as string,
   }
-
-  // Basic validation
   if (!data.email || !data.password) {
       return redirect('/account?message=Email and password are required.')
   }
-
   const { error } = await supabase.auth.signInWithPassword(data)
-
   if (error) {
-    return redirect('/account?message=Could not authenticate user. Check email/password.') // More specific message
+    // Provide a clearer login error message
+    return redirect('/account?message=Sign in failed. Please check your email and password.')
   }
-
   revalidatePath('/', 'layout')
   redirect('/')
 }
@@ -36,7 +31,6 @@ export async function signup(formData: FormData) {
   const password = formData.get('password') as string;
   const confirmPassword = formData.get('confirm-password') as string;
 
-  // Basic validation
   if (!email || !password || !confirmPassword) {
       return redirect('/account?message=Email, password, and confirmation are required.');
   }
@@ -44,19 +38,26 @@ export async function signup(formData: FormData) {
       return redirect('/account?message=Passwords do not match.');
   }
 
+  // Attempt Signup
   const { error } = await supabase.auth.signUp({ email, password });
 
+  // --- MODIFIED ERROR HANDLING ---
+  // If ANY error occurs during signup, redirect back with the error message.
+  // This handles the "existing user" case even if Supabase doesn't throw the specific expected error,
+  // as well as any other potential signup problems (like weak password if rules are set).
   if (error) {
-    console.error("Signup Error:", error.message);
-    // --- CHECK FOR EXISTING USER ---
-    if (error.message.includes('User already registered')) { // Check for Supabase's specific error text
-        return redirect('/account?message=Email already registered. Try signing in or use Forgot Password.');
-    }
-    // --- END CHECK ---
-    return redirect('/account?message=Could not create account. Please try again.'); // Generic error
-  }
+    // Log the full error for debugging on the server
+    console.error("Detailed Signup Error:", JSON.stringify(error, null, 2));
 
-  // --- ADD SPAM FOLDER NOTE ---
+    // Redirect back to the account page displaying the actual error message from Supabase
+    // Make sure the message parameter can handle potentially longer messages
+    return redirect(`/account?message=${encodeURIComponent(error.message)}`);
+  }
+  // --- END MODIFIED ERROR HANDLING ---
+
+
+  // Only redirect to success if there was NO error.
+  console.log("Signup successful (confirmation email sent) for:", email);
   return redirect('/account?message=Check your email (and spam folder) to complete the sign up process.');
 }
 
