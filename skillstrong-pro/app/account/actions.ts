@@ -61,7 +61,6 @@ export async function signup(formData: FormData) {
 }
 
 
-// --- NEW FUNCTION: Send Password Reset Email ---
 export async function forgotPassword(formData: FormData): Promise<{ success?: boolean; message: string }> {
     const supabase = createClient();
     const email = formData.get('email') as string;
@@ -70,9 +69,14 @@ export async function forgotPassword(formData: FormData): Promise<{ success?: bo
         return { message: 'Email address is required.' };
     }
 
-    // Generate the redirect URL pointing to your /reset page
-    // Ensure NEXT_PUBLIC_SITE_URL is set in your environment variables (e.g., http://localhost:3000 or your production URL)
-    const redirectUrl = process.env.NEXT_PUBLIC_SITE_URL ? `${process.env.NEXT_PUBLIC_SITE_URL}/reset` : '/reset';
+    // --- CHANGE redirectTo ---
+    // Point to the callback, which will then redirect to /reset
+    const redirectUrl = process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/reset` // Target callback, next=/reset
+        : '/auth/callback?next=/reset'; // Fallback if URL isn't set (less ideal)
+    // --- END CHANGE ---
+
+    console.log("Sending password reset email with redirect To:", redirectUrl); // Logging
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
@@ -80,10 +84,8 @@ export async function forgotPassword(formData: FormData): Promise<{ success?: bo
 
     if (error) {
         console.error("Forgot Password Error:", error);
-        // Don't reveal if the email exists or not for security
         return { message: 'If an account exists for this email, a password reset link has been sent. Please check your inbox (and spam folder).' };
     }
 
     return { success: true, message: 'Password reset link sent. Please check your email (and spam folder).' };
 }
-// --- END NEW FUNCTION ---
