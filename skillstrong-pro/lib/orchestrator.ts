@@ -238,55 +238,10 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
         }
   } catch (err) { console.error("Error fetching featured items:", err); }
 
-async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
-    let finalFollowups: string[] = [];
-    try {
-        const res = await openai.chat.completions.create({
-            model: 'gpt-4o-mini',
-            temperature: 0.4,
-            messages: [
-                {
-                    role: 'system',
-                    // *** UPDATED: Ask for fewer prompts ***
-                    content: `You are an assistant that generates relevant follow-up questions based on a user query and the AI's answer.
-Generate 3-4 SHORT follow-up prompts (<= 55 chars).
-**Crucially, these prompts MUST be directly related to the specific topics mentioned in the user's question or the AI's answer provided below.**
-Do NOT generate generic questions about manufacturing if they don't relate to the specific context. Focus on suggesting next logical steps or deeper dives related to the current discussion.
-Return ONLY a JSON array of strings.`,
-                },
-                { role: 'user', content: JSON.stringify({ question, answer, location }) },
-            ],
-        });
-        const raw = res.choices[0]?.message?.content ?? '[]';
-        if (raw.startsWith('[') && raw.endsWith(']')) {
-             const arr = JSON.parse(raw);
-             if (Array.isArray(arr) && arr.length) { finalFollowups = arr; }
-        } else { console.warn("Follow-up generation did not return a valid JSON array:", raw); }
-    } catch (error) { console.error("Error generating follow-ups:", error); }
-
-    // Logic for adding "Search external sites" (remains the same)
-    const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
-    const answerHasInternal = /### 🛡️ SkillStrong Database Matches/i.test(answer);
-    const answerHasWeb = /Related Web Results|Web Search Results/i.test(answer);
-
-    if (userAskedForLocal && answerHasInternal && !answerHasWeb) {
-         const hasExternalSearch = finalFollowups.some(f => /web|internet|external|more|other sites/i.test(f.toLowerCase()));
-         if (!hasExternalSearch) { finalFollowups.push('Search external sites for more?'); }
-    }
-
-    // Pass results to sanitize (which now limits to 4)
-    if (finalFollowups.length > 0) { return sanitizeFollowups(finalFollowups); }
-    else { console.warn("Falling back to default follow-ups for question:", question); return defaultFollowups(); } // Keep fallback
-}function sanitizeFollowups(arr: any[]): string[] {
-    const MAX_LEN = 55;
-    // *** UPDATED: Slice to limit to max 4 prompts ***
-    const MAX_PROMPTS = 4;
-    return arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-        .map((s) => { let t = s.trim(); if (t.endsWith('.') || (t.endsWith('?') && !t.toLowerCase().startsWith('what') && !t.toLowerCase().startsWith('how'))) { t = t.slice(0, -1); } return t.slice(0, MAX_LEN); })
-        .filter((s, index, self) => self.indexOf(s) === index) // Remove duplicates first
-        .slice(0, MAX_PROMPTS); // Limit the final count
+  // Generate Followups
+  const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
+  return { answer: finalAnswer.trim(), followups }; // Trim final answer
 }
-
 
 // --- Domain Guard ---
 async function domainGuard(messages: Message[]): Promise<boolean> {
@@ -393,7 +348,14 @@ async function generateFollowups(question: string, answer: string, location?: st
         const res = await openai.chat.completions.create({
             model: 'gpt-4o-mini', temperature: 0.4,
             messages: [
-                { role: 'system', content: `You are an assistant that generates relevant follow-up questions... Focus on suggesting next logical steps or deeper dives related to the current discussion... Return ONLY a JSON array of strings.`},
+                {
+                    role: 'system',
+                    content: `You are an assistant that generates relevant follow-up questions based on a user query and the AI's answer.
+Generate 3-4 SHORT follow-up prompts (<= 55 chars).
+**Crucially, these prompts MUST be directly related to the specific topics mentioned in the user's question or the AI's answer provided below.**
+Do NOT generate generic questions about manufacturing if they don't relate to the specific context. Focus on suggesting next logical steps or deeper dives related to the current discussion.
+Return ONLY a JSON array of strings.`,
+                },
                 { role: 'user', content: JSON.stringify({ question, answer, location }) },
         ],});
         const raw = res.choices[0]?.message?.content ?? '[]';
@@ -401,7 +363,7 @@ async function generateFollowups(question: string, answer: string, location?: st
         else { console.warn("Follow-up generation did not return a valid JSON array:", raw); }
     } catch (error) { console.error("Error generating follow-ups:", error); }
 
-    const userAskedForLocal = /jobs?|openings?|...|near me|in my area/i.test(question.toLowerCase());
+    const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
     const answerHasInternal = /### 🛡️ SkillStrong Database Matches/i.test(answer);
     const answerHasWeb = /Related Web Results|Web Search Results/i.test(answer);
 
@@ -411,19 +373,19 @@ async function generateFollowups(question: string, answer: string, location?: st
     }
 
     if (finalFollowups.length > 0) { return sanitizeFollowups(finalFollowups); }
-    else { console.warn("Falling back to default follow-ups for question:", question); return defaultFollowups(); }
+    else { console.warn("Falling back to default follow-ups for question:", question); return defaultFollowups(); } // Keep fallback
 }
 
 // --- Sanitization and Defaults ---
 function sanitizeFollowups(arr: any[]): string[] {
     const MAX_LEN = 55;
-    // *** UPDATED: Slice to limit to max 4 prompts ***
     const MAX_PROMPTS = 4;
     return arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
         .map((s) => { let t = s.trim(); if (t.endsWith('.') || (t.endsWith('?') && !t.toLowerCase().startsWith('what') && !t.toLowerCase().startsWith('how'))) { t = t.slice(0, -1); } return t.slice(0, MAX_LEN); })
         .filter((s, index, self) => self.indexOf(s) === index) // Remove duplicates first
         .slice(0, MAX_PROMPTS); // Limit the final count
 }
+
 function defaultFollowups(): string[] {
     return [
         'Find paid apprenticeships near me',
@@ -433,4 +395,4 @@ function defaultFollowups(): string[] {
         // 'Explore Robotics Technician',
         // 'Talk to Coach Mach',
     ].slice(0, 4); // Also limit defaults
-} // <-- *** THIS IS THE MISSING BRACE ***
+}
