@@ -433,6 +433,5 @@ function defaultFollowups(): string[] {
         'Typical salaries (BLS)',
         'Explore CNC Machinist', // Can reduce defaults too if needed
         'Explore Robotics Technician',
-        // 'Talk to Coach Mach',
     ].slice(0, 4); // Also limit defaults
 }
