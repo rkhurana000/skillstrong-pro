@@ -1,4 +1,4 @@
-/* /app/chat/chat.css - NEW Dark Theme Design + Collapsed Sidebar */
+/* /app/chat/chat.css - NEW Dark Theme Design + Collapsed Sidebar + Follow-up Wrap Fix */
 
 :root {
   --sidebar-width: 280px;
@@ -90,7 +90,7 @@
 
 /* Expanded New Chat Button (with Text) */
 .new-chat-btn-gemini-expanded {
-    /* composes: new-chat-btn-gemini-base; (Use direct styles instead) */
+    /* Base styles manually included for clarity */
     color: #cbd5e1; /* slate-300 */
     background: none;
     border: 1px solid #334155; /* slate-700 */
@@ -102,6 +102,7 @@
     transition: background-color 0.2s;
     flex-shrink: 0;
     font-weight: 500;
+    /* Specific styles */
     padding: 0.6rem 1rem; /* Padding for text */
     margin-left: auto; /* Push to the right */
 }
@@ -113,7 +114,7 @@
 
 /* Collapsed New Chat Button (Icon Only) */
 .new-chat-btn-gemini-collapsed {
-    /* composes: new-chat-btn-gemini-base; (Use direct styles instead) */
+    /* Base styles manually included */
     color: #cbd5e1; /* slate-300 */
     background: none;
     border: 1px solid #334155; /* slate-700 */
@@ -125,6 +126,7 @@
     transition: background-color 0.2s;
     flex-shrink: 0;
     font-weight: 500;
+    /* Specific styles */
     padding: 0.6rem; /* Square padding for icon */
 }
 .new-chat-btn-gemini-collapsed:hover {
@@ -344,38 +346,52 @@
   max-width: 800px;
   margin: 0 auto;
 }
+
+/* --- UPDATED Follow-up Button Styles --- */
 .follow-ups {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem; /* Increased gap slightly */
+  flex-wrap: wrap; /* Allows buttons to wrap onto the next line */
+  justify-content: center; /* Center the buttons horizontally */
+  gap: 0.75rem; /* Space between buttons */
   margin-bottom: 1rem;
+  padding: 0 0.5rem; /* Add slight padding if buttons touch edges */
 }
 .follow-up-btn {
-  padding: 0.5rem 1rem; /* Slightly more padding */
-  border-radius: 9999px;
+  /* Basic styling */
+  padding: 0.6rem 1.1rem; /* Adjusted padding */
+  border-radius: 9999px; /* Pill shape */
   border: 1px solid #334155; /* slate-700 */
   background-color: #1e293b; /* slate-800 */
   color: #cbd5e1; /* slate-300 */
-  font-size: 0.875rem;
+  font-size: 0.875rem; /* 14px */
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  /* --- ADD/MODIFY THESE --- */
-  white-space: normal; /* Allow text to wrap */
-  text-align: center;  /* Center text if it wraps */
-  max-width: 250px;    /* Prevent buttons from becoming excessively wide */
-  line-height: 1.4;    /* Adjust line height for wrapped text */
-  /* height: auto;        /* Allow height to adjust based on content */
-  /* min-height: 2.5rem;  /* Ensure a minimum height (adjust as needed) */
-  /* display: inline-flex; /* Helps with vertical alignment */
-  /* align-items: center;  /* Vertically center text */
-  /* --- END ADD/MODIFY --- */
+
+  /* --- Wrapping & Sizing --- */
+  white-space: normal !important;  /* *** CRITICAL: Allow wrapping, added !important just in case *** */
+  overflow-wrap: break-word; /* Ensure long words break if needed */
+  text-align: center;   /* Center multi-line text */
+  line-height: 1.4;     /* Spacing for wrapped lines */
+  max-width: 300px;     /* Increased max-width slightly */
+  /* Remove any fixed height that might prevent wrapping */
+  height: auto;
+  min-height: 2.75rem; /* ~44px - Ensure a minimum height for consistency */
+  display: inline-flex; /* Use flex to help center content vertically */
+  align-items: center; /* Vertically align text */
+  justify-content: center; /* Horizontally align text */
+  box-sizing: border-box; /* Include padding/border in size calculation */
+
+  /* Prevent flex-shrink issues if container is tight */
+  flex-shrink: 0;
 }
 .follow-up-btn:hover {
   background-color: #334155; /* slate-700 */
   border-color: #475569; /* slate-600 */
 }
+/* --- END UPDATED Follow-up Button Styles --- */
+
+
 .input-form {
   display: flex;
   gap: 0.75rem;
