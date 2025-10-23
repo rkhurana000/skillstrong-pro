@@ -1,7 +1,7 @@
 // /lib/orchestrator.ts
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
-import { findFeaturedMatching, searchJobs, searchPrograms, Job, Program } from '@/lib/marketplace'; // searchJobs/searchPrograms are no longer used by queryInternalDatabase but kept for findFeaturedMatching
+import { findFeaturedMatching, searchJobs, searchPrograms, Job, Program } from '@/lib/marketplace';
 
 export type Role = 'system' | 'user' | 'assistant';
 export interface Message { role: Role; content: string }
@@ -10,9 +10,7 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- MODIFICATION START: Updated System Prompt ---
-// This new prompt instructs the AI on how to blend Web RAG
-// with the new internal *search page links*.
+// System prompt remains the same from our last iteration.
 const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillStrong.
 
 **Your Mission:** Guide users to discover well-paid, hands-on vocational careers in US manufacturing.
@@ -21,9 +19,9 @@ const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillS
 
 **Core Rules:**
 1.  **Synthesize All RAG:** Your system context may contain search results. You MUST use this context to answer the user's query. The context can have two parts:
-    * \`### 🛡️ SkillStrong Search\`: This is a high-priority set of links to our *own* job/program search pages. You MUST include this *entire* markdown block (heading and links) when it is provided.
+    * \`### 🛡️ SkillStrong Search\`: This is a high-priority set of links to our *own* job/program search pages. You MUST include this *entire* markdown block (heading and links) **only when it is provided**.
     * \`**Related Web Results:**\` (or \`**Web Search Results:**\`): These are from the general internet (BLS, .edu sites, etc.) and provide broader context, salary data, or resources.
-2.  **Blend Results:** Your *primary* answer should come from the "Web Results" (if provided). After giving that answer (with citations), you should *then* append the "SkillStrong Search" block.
+2.  **Blend Results:** Your *primary* answer should come from the "Web Results" (if provided). After giving that answer (with citations), you should *then* append the "SkillStrong Search" block **if it was provided in your context**.
     For example:
     "Based on my search, a typical salary is...
     
@@ -37,7 +35,6 @@ const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillS
 6.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response.
 7.  **Stay on Topic:** Strictly US manufacturing careers. No healthcare, retail, etc.
 8.  **No Hallucinations:** NEVER invent URLs, stats, or details. If unsure, say so.`;
-// --- MODIFICATION END ---
 
 
 const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results about US manufacturing vocational careers.
@@ -83,33 +80,36 @@ function getDomain(url: string | null | undefined): string | null {
     } catch { return null; }
 }
 
-// --- MODIFICATION START: `queryInternalDatabase` now generates links, not listings ---
+// --- MODIFICATION START: Stricter triggers for Internal RAG ---
 /**
- * Checks if the query is for jobs or programs and returns markdown
+ * Checks if the query is SPECIFICALLY for jobs or programs and returns markdown
  * links to the internal search pages, pre-filled with search parameters.
  */
 async function queryInternalDatabase(query: string, location?: string): Promise<string> {
   const lowerQuery = query.toLowerCase();
 
-  // --- TRIGGER CONDITIONS ---
-  const needsJobs = /jobs?|openings?|careers?|hiring|apprenticeships?/.test(lowerQuery);
-  const needsPrograms = /programs?|training|certificates?|courses?|schools?|college/.test(lowerQuery);
-  const hasLocationSpecifier = /near me|local|in my area|nearby/.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query);
+  // --- TRIGGER CONDITIONS (Stricter) ---
+  // Use word boundaries (\b) and remove "career"
+  const needsJobs = /\b(jobs?|openings?|hiring|apprenticeships?)\b/i.test(lowerQuery);
+  const needsPrograms = /\b(programs?|training|certificates?|courses?|schools?|college)\b/i.test(lowerQuery);
+  const hasLocationSpecifier = /near me|local|in my area|nearby/i.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query);
 
+  // --- UPDATED LOGIC ---
   // ONLY proceed if user asks for specifics (jobs/programs) AND provides/implies a location
-  if ((!needsJobs && !needsPrograms) || !hasLocationSpecifier) {
-      console.log("queryInternalDatabase: Skipping (query lacks job/program specifics or location).");
+  // This is the core fix: `(needsJobs || needsPrograms)` must be true.
+  if (!((needsJobs || needsPrograms) && hasLocationSpecifier)) {
+      console.log("queryInternalDatabase: Skipping (query lacks SPECIFIC job/program keywords or location).");
       return ''; // Return empty if conditions not met
   }
-  // --- END TRIGGER ---
+  // --- END UPDATED LOGIC ---
 
   console.log("queryInternalDatabase: Generating internal search links.");
   
   // Basic keyword extraction (remove location/intent terms for a cleaner search query)
   const searchTerm = query
     .replace(/near me|local|in my area|nearby|\b\d{5}\b|\b[A-Z]{2}\b/gi, '')
-    .replace(/jobs?|openings?|careers?|hiring|apprenticeships?/gi, '')
-    .replace(/programs?|training|certificates?|courses?|schools?|college/gi, '')
+    .replace(/\b(jobs?|openings?|hiring|apprenticeships?)\b/gi, '')
+    .replace(/\b(programs?|training|certificates?|courses?|schools?|college)\b/gi, '')
     .replace(/in [A-Za-z\s,]+$/gi, '')
     .trim();
 
@@ -121,19 +121,15 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
   if (location) {
         const parts = location.split(',').map(s => s.trim()).filter(Boolean);
         if (parts.length === 2 && parts[1].length === 2 && parts[1] === parts[1].toUpperCase()) {
-            // "City, ST"
             params.set('city', parts[0]);
             params.set('state', parts[1]);
         } else if (parts.length === 1) {
             const part = parts[0];
             if (part.length === 2 && part === part.toUpperCase()) {
-                // "ST"
                 params.set('state', part);
             } else if (part.match(/^\d{5}$/)) {
-                // "ZIP" - Use as city, as our search pages support this
                 params.set('city', part);
             } else {
-                // "City"
                 params.set('city', part);
             }
         }
@@ -152,13 +148,12 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
   }
 
   if (links.length > 0) {
-    // Return the new markdown block for the AI to use
     return `### 🛡️ SkillStrong Search
 You can also search our internal database directly:
 ${links.join('\n')}`;
   }
   
-  return ''; // No links generated
+  return '';
 }
 // --- MODIFICATION END ---
 
@@ -188,16 +183,21 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
         };
   } else { console.log("Domain Guard determined IN DOMAIN for query:", lastUserRaw); }
 
-  // 2. Get Internal RAG results (which are now *links* to search pages)
+  // 2. Get Internal RAG results (links)
+  // This will now *correctly* be an empty string for "what is a good career?"
   const internalRAG = await queryInternalDatabase(lastUserRaw, input.location ?? undefined);
 
   // 3. Decide if Web RAG is needed
-  const wasInternalSearchAttempted = ( /jobs?|openings?|program|training|near me|local/i.test(lastUserRaw) && (!!input.location || /\b\d{5}\b|\b[A-Z]{2}\b/i.test(lastUserRaw)) );
-  // We pass an empty draft answer ("") because we haven't generated one yet.
-  const needWeb = await needsInternetRag(lastUserRaw, "", internalRAG, wasInternalSearchAttempted);
+  // --- MODIFICATION START ---
+  // Pass `overviewSeeded` flag to `needsInternetRag`
+  const needWeb = await needsInternetRag(lastUserRaw, overviewSeeded);
+  // --- MODIFICATION END ---
 
   let webAnswer = null;
-  if (needWeb && !overviewSeeded) {
+  // --- MODIFICATION START ---
+  // Simplified this block, as `needWeb` now handles the `overviewSeeded` logic
+  if (needWeb) {
+  // --- MODIFICATION END ---
         console.log("Orchestrate: Proceeding with Web Search.");
         webAnswer = await internetRagCSE(lastUserRaw, input.location ?? undefined, canonical);
         if (!webAnswer) {
@@ -208,21 +208,24 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   // 4. Combine all context for the AI
   let combinedContext = '';
   if (internalRAG) {
-    // Add the internal search *links*
     combinedContext += internalRAG + "\n\n";
   }
   if (webAnswer) {
-    // Add the web search *results*
     const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**";
     combinedContext += `${webHeading}\n${webAnswer}`;
   }
-  if (!internalRAG && !webAnswer && (wasInternalSearchAttempted || needWeb)) {
-     // Tell the AI that searches were attempted but found nothing
+  
+  // Check if *any* search was attempted.
+  const wasSearchAttempted = internalRAG !== '' || needWeb;
+  // Check if *all* attempted searches failed.
+  const allSearchesFailed = (internalRAG === '' && webAnswer === null);
+
+  if (wasSearchAttempted && allSearchesFailed) {
      combinedContext = `INFO: I performed a search for jobs, programs, or web resources related to the user's query but could not find any specific results.`;
   }
 
   // 5. Build final message list for ONE AI call
-  const messagesForFinalAnswer = [...messages];
+  const messagesForFinalAnswer = [...messages]; // This correctly includes the full conversation history
   if (combinedContext) {
     messagesForFinalAnswer.push({ role: 'system', content: `Use the following search results to answer the user's query. You MUST follow the blending and citation rules from your main prompt.\n\n${combinedContext}` });
   }
@@ -230,7 +233,7 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   // 6. Generate the final answer
   const finalAnswer = await answerLocal(messagesForFinalAnswer, input.location ?? undefined);
 
-  // 7. Add Featured (this still injects 3 *specific* featured listings)
+  // 7. Add Featured (this logic is separate and fine)
   let finalAnswerWithFeatured = finalAnswer;
   try {
         const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined);
@@ -288,66 +291,27 @@ async function answerLocal(messages: Message[], location?: string): Promise<stri
         return res.choices[0]?.message?.content ?? '';
     } catch (error) {
         console.error("Error calling OpenAI for local answer:", error);
-        return "Sorry, I encountered an issue generating a response."; // Fallback error message
+        return "Sorry, I encountered an issue generating a response.";
     }
 }
 
-// --- needsInternetRag (Unchanged from last fix) ---
-async function needsInternetRag(query: string, draftAnswer: string, internalRAGResult: string, internalSearchAttempted: boolean): Promise<boolean> {
-    const lowerQuery = (query || '').toLowerCase();
-    console.log(`needsInternetRag Check: Query='${query}', InternalAttempted=${internalSearchAttempted}, InternalResultIsEmpty=${internalRAGResult === ''}`); // Logging
-
-    // 1. Explicit request for web search?
-    const explicitWebSearch = /web|internet|external|more results|other sites|search again/i;
-    if (explicitWebSearch.test(lowerQuery)) {
-        console.log("needsInternetRag: User explicitly asked for web search. -> TRUE");
-        return true;
-    }
-
-    // 2. Request for online resources, links, etc.?
-    const needsWebSearch = /resources?|links?|websites?|find|search|recommend.*(online|web)/i;
-     if (needsWebSearch.test(lowerQuery)) {
-        console.log("needsInternetRag: User asked for online resources/links. -> TRUE");
-        return true;
-    }
-
-    // 3. Query implies external data?
-    const externalKeywords = /bls|bureau of labor|statistic|latest|trend|news|tuition|cost|salaryexpert|onetonline|onetcenter|osha|nims|specific company|market size/i;
-    const needsExternalSalary = /salary|pay|wage|median/i.test(lowerQuery) && !/typical|range|overview/i.test(lowerQuery);
-    if (externalKeywords.test(lowerQuery) || needsExternalSalary) {
-        console.log("needsInternetRag: Query implies external data needed. -> TRUE");
-        return true;
-    }
-
-    // 4. Internal search was appropriate but found nothing? (Now 'internalRAGResult' is empty if no links were generated)
-    if (internalSearchAttempted && internalRAGResult === '') {
-        console.log("needsInternetRag: Internal search attempted but found no relevant links. -> TRUE");
-        return true;
-    }
-
-    // 5. AI indicates uncertainty (This check is less relevant now but harmless)
-    const indicatesUncertainty = /i don'?t know|not sure|no specific data|couldn'?t find details|recommend searching/i.test(draftAnswer.toLowerCase());
-    if (indicatesUncertainty && !internalRAGResult) {
-        console.log("needsInternetRag: Draft answer indicates uncertainty and no internal results found. -> TRUE");
-        return true;
-    }
-
-    // 6. Avoid web search for general exploration if internal search wasn't relevant
-    const generalExploration = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills|tell me about|how do i become|steps to become|advice|tips)/i;
-    if (generalExploration.test(lowerQuery) && !internalSearchAttempted) {
-        console.log("needsInternetRag: General exploration query, internal search not relevant, skipping web. -> FALSE");
+// --- MODIFICATION START: Internet RAG is now the default ---
+/**
+ * Decides if an Internet RAG search is needed.
+ * Per new rules, this should be TRUE for almost everything,
+ * *except* for the initial seeded overview.
+ */
+async function needsInternetRag(query: string, overviewSeeded: boolean): Promise<boolean> {
+    if (overviewSeeded) {
+        console.log("needsInternetRag: Overview was seeded, skipping web. -> FALSE");
         return false;
     }
-
-    // If it's not a local search and not a general overview, it's probably a request for web info
-    if (!internalSearchAttempted && !generalExploration.test(lowerQuery)) {
-        console.log("needsInternetRag: Query is not for local data and not a general overview, assume web search. -> TRUE");
-        return true;
-    }
-
-    console.log("needsInternetRag: No specific trigger matched, defaulting to false. -> FALSE");
-    return false;
+    
+    // Per user request, *always* run Internet RAG for all other in-domain queries.
+    console.log("needsInternetRag: Defaulting to web search. -> TRUE");
+    return true;
 }
+// --- MODIFICATION END ---
 
 
 // --- Web RAG Function (Unchanged) ---
@@ -427,13 +391,11 @@ JSON object with followups:`;
         }
     } catch (error) { console.error("Error generating follow-ups:", error); }
 
-    const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
-    // The internal RAG *links* are now in the answer, not just the context
+    const userAskedForLocal = /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area)\b/i.test(question.toLowerCase());
     const answerHasInternalLinks = /### 🛡️ SkillStrong Search/i.test(answer);
     const answerHasWeb = /Related Web Results|Web Search Results/i.test(answer);
 
-    // This logic is less relevant now as the links are *in* the answer, but
-    // if web search was needed but failed, this could still be useful.
+    // This logic is mostly redundant now but harmless.
     if (userAskedForLocal && answerHasInternalLinks && !answerHasWeb) {
          const hasExternalSearch = finalFollowups.some(f => /web|internet|external|more|other sites/i.test(f.toLowerCase()));
          if (!hasExternalSearch) { finalFollowups.push('Search external sites for more?'); }
