@@ -58,6 +58,7 @@ function detectCanonicalCategory(query: string): string | null {
     }
     return null;
 }
+// UPDATED: Removed "Next Steps" from this prompt.
 function buildOverviewPrompt(canonical: string): string {
     return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:\n\n🔎 **Overview**...\n🧭 **Day-to-Day**...\n🧰 **Tools & Tech**...\n🧠 **Core Skills**...\n💰 **Typical Pay (US)**...\n⏱️ **Training Time**...\n📜 **Helpful Certs**...\n\nKeep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
 }
@@ -75,11 +76,11 @@ function getDomain(url: string | null | undefined): string | null {
 async function queryInternalDatabase(query: string, location?: string): Promise<string> {
   const lowerQuery = query.toLowerCase();
   let internalContext = '';
-  const locationQuery = location?.split(',')[0].trim();
+  const locationQuery = location?.split(',')[0].trim(); // Use city or ZIP for relevance
 
   // --- STRICTER TRIGGER CONDITIONS ---
   const needsSpecifics = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college/.test(lowerQuery);
-  const hasLocationSpecifier = /near me|local|in my area|nearby/.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query);
+  const hasLocationSpecifier = /near me|local|in my area|nearby/.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query); // Check for ZIP or State Abbr
 
   // ONLY search internal DB if user asks for specifics (jobs/programs) AND provides/implies a location
   if (!needsSpecifics || !hasLocationSpecifier) {
@@ -90,37 +91,57 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
 
   console.log("queryInternalDatabase: Performing DB search.");
   let hasResults = false;
+  // Basic keyword extraction (remove location terms for better matching on job/program titles)
   const searchTerm = query.replace(/near me|local|in my area|nearby|\b\d{5}\b|\b[A-Z]{2}\b|in [A-Za-z\s,]+$/gi, '').trim();
 
   // Search Jobs
-  const jobs = await searchJobs({ q: searchTerm, location: locationQuery, apprenticeship: /apprentice/.test(lowerQuery), limit: 3 });
-  if (jobs.length > 0) {
-    hasResults = true;
-    internalContext += '\n**Job Listings:**\n';
-    internalContext += jobs.map(j => {
-        const url = j.apply_url || j.external_url;
-        const title = `**${j.title}** at ${j.company} (${j.location})`;
-        const tag = j.apprenticeship ? ' *(Apprenticeship)*' : '';
-        return url ? `- [${title}](${url})${tag}` : `- ${title}${tag}`;
-    }).join('\n');
-  }
-
-  // Search Programs
-  const programs = await searchPrograms({ q: searchTerm, location: locationQuery, limit: 3 });
-  if (programs.length > 0) {
-    hasResults = true;
-    internalContext += '\n\n**Program Listings:**\n';
-    internalContext += programs.map(p => {
-        const url = p.url || p.external_url;
-        const domain = getDomain(url);
-        const title = `**${p.title}** at ${p.school} (${p.location})`;
-        if (domain) {
-            const searchLink = `https://www.google.com/search?q=site%3A${domain}+${encodeURIComponent(p.title || 'manufacturing program')}`;
-            return `- [${title}](${searchLink})`;
+  try {
+        console.log(`queryInternalDatabase: Calling searchJobs with q='${searchTerm}', location='${locationQuery}'`);
+        const jobs = await searchJobs({
+            q: searchTerm,
+            location: locationQuery, // Pass detected/provided location part
+            apprenticeship: /apprentice/.test(lowerQuery),
+            limit: 3
+        });
+        console.log(`queryInternalDatabase: searchJobs returned ${jobs.length} results.`);
+        if (jobs.length > 0) {
+            hasResults = true;
+            internalContext += '\n**Job Listings:**\n';
+            internalContext += jobs.map(j => {
+            const url = j.apply_url || j.external_url;
+            const title = `**${j.title}** at ${j.company} (${j.location})`;
+            const tag = j.apprenticeship ? ' *(Apprenticeship)*' : '';
+            return url ? `- [${title}](${url})${tag}` : `- ${title}${tag}`;
+            }).join('\n');
         }
-        return `- ${title}`;
-    }).join('\n');
-  }
+    } catch (e) { console.error("Error during searchJobs call:", e); }
+
+
+    // Search Programs
+    try {
+        console.log(`queryInternalDatabase: Calling searchPrograms with q='${searchTerm}', location='${locationQuery}'`);
+        const programs = await searchPrograms({
+            q: searchTerm,
+            location: locationQuery, // Pass detected/provided location part
+            limit: 3
+        });
+        console.log(`queryInternalDatabase: searchPrograms returned ${programs.length} results.`);
+        if (programs.length > 0) {
+            hasResults = true;
+            internalContext += '\n\n**Program Listings:**\n';
+            internalContext += programs.map(p => {
+            const url = p.url || p.external_url;
+            const domain = getDomain(url);
+            const title = `**${p.title}** at ${p.school} (${p.location})`;
+            if (domain) {
+                const searchLink = `https://www.google.com/search?q=site%3A${domain}+${encodeURIComponent(p.title || 'manufacturing program')}`;
+                return `- [${title}](${searchLink})`;
+            }
+            return `- ${title}`;
+            }).join('\n');
+        }
+    } catch(e) { console.error("Error during searchPrograms call:", e); }
+
 
   if (hasResults) {
     // Only return the heading *with* the results
@@ -151,7 +172,10 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   let inDomain = await domainGuard(messages);
   if (!inDomain) {
         console.log("Domain Guard determined OUT OF DOMAIN for query:", lastUserRaw);
-        return { answer:'I focus on modern manufacturing careers...', followups: defaultFollowups() };
+        return {
+            answer:'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control. What would you like to dive into?',
+            followups: defaultFollowups(),
+        };
   } else { console.log("Domain Guard determined IN DOMAIN for query:", lastUserRaw); }
 
   // Query internal DB only if appropriate
@@ -179,30 +203,47 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   // Construct final answer
   if (webAnswer) {
         const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(localAnswer);
-        if (internalRAG && !alreadyHasInternalHeading) { finalAnswer = `${localAnswer}\n\n${internalRAG}\n\n**Web Search Results:**\n${webAnswer}`; }
-        else { const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**"; finalAnswer = `${localAnswer}\n\n${webHeading}\n${webAnswer}`; }
+        // If internal RAG was provided BUT the AI failed to include it in localAnswer, add it before web results.
+        if (internalRAG && !alreadyHasInternalHeading) {
+             finalAnswer = `${localAnswer}\n\n${internalRAG}\n\n**Web Search Results:**\n${webAnswer}`;
+        }
+        else {
+            // Otherwise, just append web results (use a different heading if no internal results were expected/found)
+            const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**";
+             finalAnswer = `${localAnswer}\n\n${webHeading}\n${webAnswer}`;
+        }
   } else {
-       const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(localAnswer);
-       if (internalRAG && !alreadyHasInternalHeading) { finalAnswer = `${localAnswer}\n\n${internalRAG}`; }
+       // If web search didn't run or failed, ensure internal results (if any) are present if AI missed them
+       // AND ensure the final answer doesn't mistakenly include the heading without results if AI hallucinated it
+      const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(finalAnswer); // Check finalAnswer now
+       if (internalRAG && !alreadyHasInternalHeading) {
+           finalAnswer = `${finalAnswer}\n\n${internalRAG}`; // Append if missing
+       } else if (!internalRAG && alreadyHasInternalHeading) {
+            // If AI added the heading but there were no results, try to remove it (simple text replace)
+            finalAnswer = finalAnswer.replace(/### 🛡️ SkillStrong Database Matches\s*(\n\n|$)/i, '');
+       }
   }
 
 
-  // Featured Matching (Unchanged)
+  // Featured Matching
   try {
         const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined);
         if (Array.isArray(featured) && featured.length > 0) {
             const locTxt = input.location ? ` near ${input.location}` : '';
             const lines = featured.map((f) => `- **${f.title}** — ${f.org} (${f.location})`).join('\n');
-            if (!finalAnswer.includes('**Featured')) { finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`; }
+            // Append featured results, ensuring not to duplicate if already present
+            if (!finalAnswer.includes('**Featured')) {
+                 finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+            }
         }
   } catch (err) { console.error("Error fetching featured items:", err); }
 
-  // Generate Followups (Unchanged)
+  // Generate Followups
   const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
-  return { answer: finalAnswer, followups };
+  return { answer: finalAnswer.trim(), followups }; // Trim final answer
 }
 
-// --- Domain Guard (Unchanged) ---
+// --- Domain Guard ---
 async function domainGuard(messages: Message[]): Promise<boolean> {
     if (!messages.some(m => m.role === 'user')) return true;
     const lastUserMessage = messages[messages.length - 1];
@@ -216,30 +257,36 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
     const contextMessages = messages.slice(-4);
     const contextQuery = contextMessages.map(m => `${m.role}: ${m.content}`).join('\n\n');
 
-    if (messages.filter(m => m.role === 'user').length === 1) { return false; } // Simplified: First message without keywords is out.
+    if (messages.filter(m => m.role === 'user').length === 1) {
+        console.log(`Domain Guard: First user message failed regex, skipping AI check for query: "${lastUserQuery}"`);
+        return false;
+    }
 
-    const systemPrompt = `Analyze the conversation context below... Is the LAST user message relevant? Answer IN or OUT:`; // Shortened for brevity
+    const systemPrompt = `Analyze the conversation context below. The user's goal is to learn about US MANUFACTURING careers/training/jobs (vocational roles like technicians, machinists, welders, etc., NOT 4-year degree engineering roles).\nIs the LAST user message in the conversation a relevant question or statement *within this specific manufacturing context*, considering the preceding messages?\nAnswer only IN or OUT.\n\nConversation Context:\n---\n${contextQuery}\n---\nIs the LAST user message relevant? Answer IN or OUT:`;
 
     try {
         const res = await openai.chat.completions.create({ model: 'gpt-4o-mini', temperature: 0, messages: [{ role: 'system', content: systemPrompt }], max_tokens: 5 });
         const out = res.choices[0]?.message?.content?.trim().toUpperCase();
-        console.log(`Domain Guard AI Check Result -> ${out}...`);
+        console.log(`Domain Guard AI Check Result -> ${out} (Based on last query: "${lastUserQuery}")`);
         return out === 'IN';
     } catch (error) { console.error("Error during domainGuard AI check:", error); return true; }
 }
 
-// --- Base Answer Generation (Unchanged) ---
+// --- Base Answer Generation ---
 async function answerLocal(messages: Message[], location?: string): Promise<string> {
     const msgs: Message[] = [{ role: 'system', content: COACH_SYSTEM }];
     if (location) msgs.push({ role: 'system', content: `User location: ${location}` });
-    msgs.push(...messages);
+    msgs.push(...messages); // Includes history and potentially internal RAG context
     try {
         const res = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.3, messages: msgs });
         return res.choices[0]?.message?.content ?? '';
-    } catch (error) { console.error("Error calling OpenAI for local answer:", error); return "Sorry, I encountered an issue generating a response."; }
+    } catch (error) {
+        console.error("Error calling OpenAI for local answer:", error);
+        return "Sorry, I encountered an issue generating a response."; // Fallback error message
+    }
 }
 
-// --- needsInternetRag (Unchanged) ---
+// --- needsInternetRag ---
 async function needsInternetRag(query: string, draftAnswer: string, internalRAGResult: string, internalSearchAttempted: boolean): Promise<boolean> {
     const lowerQuery = (query || '').toLowerCase();
     if (/web|internet|external|more results|other sites|search again/i.test(lowerQuery)) { return true; }
@@ -255,7 +302,7 @@ async function needsInternetRag(query: string, draftAnswer: string, internalRAGR
 }
 
 
-// --- Web RAG Function (Unchanged) ---
+// --- Web RAG Function ---
 async function internetRagCSE(query: string, location?: string, canonical?: string | null): Promise<string | null> {
     const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query)) ? `${canonical} ${query}` : query;
     let q = location ? `${baseQuery} near ${location}` : baseQuery;
@@ -282,7 +329,7 @@ async function internetRagCSE(query: string, location?: string, canonical?: stri
 
     const context = pages.map((p, i) => `[#${i + 1}] Document Title: ${p.title}\nURL: ${p.url}\nContent:\n${p.text.slice(0, 3000)}\n---`).join('\n\n');
     const sys = `${COACH_SYSTEM_WEB_RAG}`;
-    const prompt = `User question: ${query} ... Based *only* on the RAG context ... Do NOT add a 'Next Steps' section here. Cite sources accurately...`; // Shortened
+    const prompt = `User question: ${query} ${location ? `(Location: ${location})` : ''}\n\nRAG Context From Web Search:\n---\n${context}\n---\n\nBased *only* on the RAG context provided above, write a concise markdown answer (use bullets if appropriate) to the user's question. Remember the vocational filter and discard irrelevant context (like healthcare salaries if asked about manufacturing). Do NOT add a 'Next Steps' section here. Cite sources accurately using the provided URLs like [#1], [#2], etc.`;
 
     try {
         const out = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.25, messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }]});
@@ -294,7 +341,7 @@ async function internetRagCSE(query: string, location?: string, canonical?: stri
     } catch (error) { console.error("Error during internetRagCSE OpenAI call:", error); return null; }
 }
 
-// --- Followup Generation (Unchanged) ---
+// --- Followup Generation ---
 async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
     let finalFollowups: string[] = [];
     try {
@@ -322,7 +369,7 @@ async function generateFollowups(question: string, answer: string, location?: st
     else { console.warn("Falling back to default follow-ups for question:", question); return defaultFollowups(); }
 }
 
-// --- Sanitization and Defaults (Unchanged) ---
+// --- Sanitization and Defaults ---
 function sanitizeFollowups(arr: any[]): string[] {
     const MAX_LEN = 55;
     return arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
