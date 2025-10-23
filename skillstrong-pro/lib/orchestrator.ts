@@ -1,7 +1,9 @@
 // /lib/orchestrator.ts
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
+// UPDATED: Import new functions and types
 import { findFeaturedMatching, searchJobs, searchPrograms, Job, Program } from '@/lib/marketplace';
+
 
 export type Role = 'system' | 'user' | 'assistant';
 export interface Message { role: Role; content: string }
@@ -38,10 +40,17 @@ const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search resu
 6.  **Concise:** Use bullets where appropriate. Do NOT add 'Next Steps'.`;
 
 
-// --- Category Detection & Overview Prompt (Unchanged) ---
-const CATEGORY_SYNONYMS: Record<string, string[]> = {/* ... */};
-function escapeRegExp(s: string) {/* ... */ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');}
-function detectCanonicalCategory(query: string): string | null {/* ... */
+// --- Category Detection & Overview Prompt ---
+const CATEGORY_SYNONYMS: Record<string, string[]> = {
+  'CNC Machinist': ['cnc machinist', 'cnc', 'machinist', 'cnc operator'],
+  'Robotics Technician': ['robotics technician', 'robotics technologist', 'robotics tech', 'robotics'],
+  'Welding Programmer': ['welding programmer', 'robotic welding', 'laser welding'],
+  'Maintenance Tech': ['industrial maintenance', 'maintenance tech', 'maintenance technician'],
+  'Quality Control Specialist': ['quality control', 'quality inspector', 'qc', 'metrology'],
+  'Additive Manufacturing': ['logistics', 'supply chain', 'warehouse automation'], // Note: Additive was miscategorized here previously
+};
+function escapeRegExp(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');}
+function detectCanonicalCategory(query: string): string | null {
     const text = (query || '').toLowerCase();
     for (const [canonical, syns] of Object.entries(CATEGORY_SYNONYMS)) {
         for (const s of syns) {
@@ -51,12 +60,13 @@ function detectCanonicalCategory(query: string): string | null {/* ... */
     }
     return null;
 }
-function buildOverviewPrompt(canonical: string): string {/* ... */
-    return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:\n\n🔎 **Overview**...\n🧭 **Day-to-Day**...\n🧰 **Tools & Tech**...\n🧠 **Core Skills**...\n💰 **Typical Pay (US)**...\n⏱️ **Training Time**...\n📜 **Helpful Certs**...\n\nKeep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
+// UPDATED: Removed "Next Steps" from this prompt.
+function buildOverviewPrompt(canonical: string): string {
+    return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:\n\n🔎 **Overview** — what the role is and where they work.\n🧭 **Day-to-Day** — typical tasks.\n🧰 **Tools & Tech** — machines, software, robotics, safety gear.\n🧠 **Core Skills** — top 5 skills to succeed.\n💰 **Typical Pay (US)** — national ranges; note that local pay can vary.\n⏱️ **Training Time** — common pathways & length (certs, bootcamps, apprenticeships).\n📜 **Helpful Certs** — 2–4 recognized credentials.\n\nKeep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
 }
 
-// --- URL Domain Helper (Unchanged) ---
-function getDomain(url: string | null | undefined): string | null {/* ... */
+// --- URL Domain Helper ---
+function getDomain(url: string | null | undefined): string | null {
     if (!url) return null;
     try {
         const host = new URL(url).hostname;
@@ -64,7 +74,7 @@ function getDomain(url: string | null | undefined): string | null {/* ... */
     } catch { return null; }
 }
 
-// --- UPDATED: Internal Database Query Function (Stricter Trigger) ---
+// --- UPDATED: Internal Database Query Function (Stricter Trigger + Google Links) ---
 async function queryInternalDatabase(query: string, location?: string): Promise<string> {
   const lowerQuery = query.toLowerCase();
   let internalContext = '';
@@ -83,7 +93,8 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
 
   console.log("queryInternalDatabase: Performing DB search.");
   let hasResults = false;
-  const searchTerm = query.replace(/near me|local|in my area|nearby|\b\d{5}\b|\b[A-Z]{2}\b/gi, '').trim(); // Basic keyword extraction
+  // Basic keyword extraction (remove location terms for better matching on job/program titles)
+  const searchTerm = query.replace(/near me|local|in my area|nearby|\b\d{5}\b|\b[A-Z]{2}\b|in [A-Za-z\s,]+$/gi, '').trim();
 
   // Search Jobs
   const jobs = await searchJobs({
@@ -116,15 +127,18 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
       const url = p.url || p.external_url;
       const domain = getDomain(url);
       const title = `**${p.title}** at ${p.school} (${p.location})`;
+      // Generate Google site-search link if domain is found
       if (domain) {
         const searchLink = `https://www.google.com/search?q=site%3A${domain}+${encodeURIComponent(p.title || 'manufacturing program')}`;
         return `- [${title}](${searchLink})`;
       }
+      // Fallback if no valid URL/domain
       return `- ${title}`;
     }).join('\n');
   }
 
   if (hasResults) {
+    // This is the highlighted heading the AI will be instructed to use
     return `### 🛡️ SkillStrong Database Matches\n${internalContext}`;
   } else {
       console.log("queryInternalDatabase: DB search performed, but no results found.");
@@ -133,7 +147,7 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
 }
 
 
-// --- Orchestrate Function (Modified Logic) ---
+// --- Orchestrate Function (Refined Logic) ---
 export async function orchestrate(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const lastUserRaw = [...input.messages].reverse().find(m => m.role === 'user')?.content ?? '';
   const isFirstUserMessage = input.messages.filter(m => m.role === 'user').length === 1;
@@ -152,7 +166,7 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   let inDomain = await domainGuard(messages);
   if (!inDomain) {
     console.log("Domain Guard determined OUT OF DOMAIN for query:", lastUserRaw);
-    return { /* ... out of domain response ... */
+    return {
         answer:'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control. What would you like to dive into?',
         followups: defaultFollowups(),
     };
@@ -173,7 +187,7 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   let finalAnswer = localAnswer; // Start with the base answer
 
   // Decide if a Web Search is needed (stricter logic)
-  const wasInternalSearchAttempted = internalRAG !== '' || (/jobs?|openings?|programs?|training|near me|local/i.test(lastUserRaw) && !!input.location);
+  const wasInternalSearchAttempted = internalRAG !== '' || ( /jobs?|openings?|program|training|near me|local/i.test(lastUserRaw) && (!!input.location || /\b\d{5}\b|\b[A-Z]{2}\b/i.test(lastUserRaw)) );
   const needWeb = await needsInternetRag(lastUserRaw, localAnswer, internalRAG, wasInternalSearchAttempted);
 
   let webAnswer = null;
@@ -188,13 +202,14 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   if (webAnswer) {
       // Check if internal results were already included by the 'localAnswer' generation
       const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(localAnswer);
-      
+
       // If internal RAG was provided BUT the AI failed to include it in localAnswer, add it before web results.
       if (internalRAG && !alreadyHasInternalHeading) {
           finalAnswer = `${localAnswer}\n\n${internalRAG}\n\n**Web Search Results:**\n${webAnswer}`;
       } else {
-          // Otherwise, just append web results.
-          finalAnswer = `${localAnswer}\n\n**Web Search Results:**\n${webAnswer}`;
+          // Otherwise, just append web results (use a different heading if no internal results were expected/found)
+          const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**";
+          finalAnswer = `${localAnswer}\n\n${webHeading}\n${webAnswer}`;
       }
   } else {
        // If web search didn't run or failed, ensure internal results (if any) are present if AI missed them
@@ -209,22 +224,25 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   // Featured Matching (Unchanged)
   try {
     const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined);
-    if (Array.isArray(featured) && featured.length > 0) { /* ... append featured ... */
+    if (Array.isArray(featured) && featured.length > 0) {
         const locTxt = input.location ? ` near ${input.location}` : '';
         const lines = featured
             .map((f) => `- **${f.title}** — ${f.org} (${f.location})`)
             .join('\n');
-        finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+        // Append featured results, ensuring not to duplicate if already present
+        if (!finalAnswer.includes('**Featured')) {
+             finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+        }
     }
-  } catch (err) {}
+  } catch (err) { console.error("Error fetching featured items:", err); }
 
   // Generate Followups (Unchanged)
   const followups = await generateFollowups(lastUserRaw, finalAnswer, input.location ?? undefined);
   return { answer: finalAnswer, followups };
 }
 
-// --- Domain Guard (Uses History - Unchanged from previous version) ---
-async function domainGuard(messages: Message[]): Promise<boolean> { /* ... */
+// --- Domain Guard (Uses History - Unchanged) ---
+async function domainGuard(messages: Message[]): Promise<boolean> {
     if (!messages.some(m => m.role === 'user')) return true;
     const lastUserMessage = messages[messages.length - 1];
     if (lastUserMessage?.role !== 'user') return true;
@@ -253,12 +271,17 @@ async function domainGuard(messages: Message[]): Promise<boolean> { /* ... */
 }
 
 // --- Base Answer Generation (Unchanged) ---
-async function answerLocal(messages: Message[], location?: string): Promise<string> { /* ... */
+async function answerLocal(messages: Message[], location?: string): Promise<string> {
     const msgs: Message[] = [{ role: 'system', content: COACH_SYSTEM }];
     if (location) msgs.push({ role: 'system', content: `User location: ${location}` });
-    msgs.push(...messages);
-    const res = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.3, messages: msgs });
-    return res.choices[0]?.message?.content ?? '';
+    msgs.push(...messages); // Includes history and potentially internal RAG context
+    try {
+        const res = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.3, messages: msgs });
+        return res.choices[0]?.message?.content ?? '';
+    } catch (error) {
+        console.error("Error calling OpenAI for local answer:", error);
+        return "Sorry, I encountered an issue generating a response."; // Fallback error message
+    }
 }
 
 // --- UPDATED: needsInternetRag (Stricter Trigger Logic) ---
@@ -273,8 +296,8 @@ async function needsInternetRag(query: string, draftAnswer: string, internalRAGR
 
   // 2. Query implies external data? (e.g., BLS, specific company, latest stats)
   const externalKeywords = /bls|bureau of labor|statistic|latest|trend|news|tuition|cost|salaryexpert|onetonline|onetcenter|osha|nims|specific company|market size/i;
-  // Combine with check for salary/pay if not already covered by BLS etc.
-  const needsExternalSalary = /salary|pay|wage|median/i.test(lowerQuery) && !/typical|range/i.test(lowerQuery); // Ask for typical might be internal, specific needs external
+  // Check for specific salary requests beyond typical ranges
+  const needsExternalSalary = /salary|pay|wage|median/i.test(lowerQuery) && !/typical|range|overview/i.test(lowerQuery);
 
   if (externalKeywords.test(lowerQuery) || needsExternalSalary) {
       console.log("needsInternetRag: Query implies external data needed.");
@@ -287,14 +310,15 @@ async function needsInternetRag(query: string, draftAnswer: string, internalRAGR
       return true;
   }
 
-  // 4. AI indicates uncertainty in its draft answer?
-  if (!draftAnswer || /i don'?t know|not sure|no specific data|couldn'?t find details|recommend searching/i.test(draftAnswer.toLowerCase())) {
-    console.log("needsInternetRag: Draft answer indicates uncertainty.");
+  // 4. AI indicates uncertainty in its draft answer? (And didn't just give internal results)
+  const indicatesUncertainty = /i don'?t know|not sure|no specific data|couldn'?t find details|recommend searching/i.test(draftAnswer.toLowerCase());
+  if (indicatesUncertainty && !internalRAGResult) {
+    console.log("needsInternetRag: Draft answer indicates uncertainty and no internal results found.");
     return true;
   }
 
   // 5. Avoid web search for general exploration or skill definitions if internal search wasn't relevant
-  const generalExploration = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills|tell me about|how do i become|steps to become)/i;
+  const generalExploration = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills|tell me about|how do i become|steps to become|advice|tips)/i;
   if (generalExploration.test(lowerQuery) && !internalSearchAttempted) {
       console.log("needsInternetRag: General exploration query, internal search not relevant, skipping web.");
       return false;
@@ -306,48 +330,72 @@ async function needsInternetRag(query: string, draftAnswer: string, internalRAGR
 }
 
 
-// --- Web RAG Function (Unchanged from previous version) ---
-async function internetRagCSE(query: string, location?: string, canonical?: string | null): Promise<string | null> { /* ... */
-    const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training/i.test(query)) ? `${canonical} ${query}` : query;
-    let q = location ? `${baseQuery} near ${location}` : baseQuery;
-    q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org';
+// --- Web RAG Function (Refined Query Building) ---
+async function internetRagCSE(query: string, location?: string, canonical?: string | null): Promise<string | null> {
 
-    if (/(salary|pay|wage|median|bls)/i.test(query)) { q += ' (site:bls.gov OR site:onetonline.org)'; }
-    if (/(program|training|certificate|certification|community college)/i.test(query)) { q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org)'; }
-    if (/jobs?|openings?|hiring/i.test(query)) { q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs)'; }
+  // If query is about specific data types AND we have a canonical topic, prepend it for relevance.
+  const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query))
+    ? `${canonical} ${query}`
+    : query;
 
-    console.log("Executing Web Search (CSE) with query:", q);
+  // Steer query away from junk and toward reputable domains
+  let q = location ? `${baseQuery} near ${location}` : baseQuery;
 
-    const res: any = await cseSearch(q);
-    const items: any[] = Array.isArray(res?.items) ? res.items : [];
-    if (!items.length) { console.log("Web Search (CSE): No results found."); return null; }
+  // General Exclusions
+  q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org -site:quora.com -site:pinterest.com';
 
-    const pages = ( await Promise.all( /* ... fetch readable ... */
+  // Add site restrictions based on *original* query intent for better targeting
+  if (/(salary|pay|wage|median|bls)/i.test(query)) { q += ' (site:bls.gov OR site:onetonline.org)'; }
+  if (/(program|training|certificate|certification|community college|course)/i.test(query)) { q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)'; }
+  if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) { q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)'; }
+
+
+  console.log("Executing Web Search (CSE) with query:", q);
+
+  const res: any = await cseSearch(q); // Assuming cseSearch handles potential errors
+  const items: any[] = Array.isArray(res?.items) ? res.items : [];
+  if (!items.length) { console.log("Web Search (CSE): No results found."); return null; }
+
+  const pages = ( await Promise.all(
          items.slice(0, 3).map(async (it: any) => {
             const url: string | undefined = it.url || it.link;
-            if (!url) return null;
-            try { const doc = await fetchReadable(url); if (doc && doc.text) return doc; } catch {}
+            // Basic URL validation
+            if (!url || !url.startsWith('http')) return null;
+            try { const doc = await fetchReadable(url); if (doc && doc.text) return doc; }
+            catch (fetchErr) { console.warn(`Failed to fetch ${url}:`, fetchErr); } // Log fetch errors
             return null;
           })
     )).filter(Boolean) as Array<{ title: string; url: string; text: string }>;
 
-    if (!pages.length) { console.log("Web Search (CSE): Found items but failed to fetch readable content."); return null; }
+    if (!pages.length) { console.log("Web Search (CSE): Found items but failed to fetch/parse readable content."); return null; }
 
-    const context = pages.map((p, i) => `[#${i + 1}] ${p.title}\nURL: ${p.url}\nContent:\n${p.text.slice(0, 3000)}\n---`).join('\n\n');
-    const sys = `${COACH_SYSTEM_WEB_RAG}`;
-    const prompt = `User question: ${query} ${location ? `(Location: ${location})` : ''}\n\nRAG Context From Web Search:\n---\n${context}\n---\n\nBased *only* on the RAG context provided above, write a concise markdown answer (use bullets if appropriate) to the user's question. Remember the vocational filter and discard irrelevant context (like healthcare salaries if asked about manufacturing). Do NOT add a 'Next Steps' section here. Cite sources as [#1], [#2], etc.`;
+    // Prepare context, ensuring URLs are included for citation
+    const context = pages.map((p, i) => `[#${i + 1}] Document Title: ${p.title}\nURL: ${p.url}\nContent:\n${p.text.slice(0, 3000)}\n---`).join('\n\n');
+    const sys = `${COACH_SYSTEM_WEB_RAG}`; // Use the dedicated web RAG prompt
+    const prompt = `User question: ${query} ${location ? `(Location: ${location})` : ''}\n\nRAG Context From Web Search:\n---\n${context}\n---\n\nBased *only* on the RAG context provided above, write a concise markdown answer (use bullets if appropriate) to the user's question. Remember the vocational filter and discard irrelevant context (like healthcare salaries if asked about manufacturing). Do NOT add a 'Next Steps' section here. Cite sources accurately using the provided URLs like [#1], [#2], etc.`;
 
     try {
         const out = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.25, messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }]});
-        const answer = out.choices[0]?.message?.content ?? '';
+        let answer = out.choices[0]?.message?.content ?? '';
+
+        // Simple post-processing: Ensure citations link correctly if AI missed markdown
+        answer = answer.replace(/\[#(\d+)\](?!\()/g, (match, num) => {
+            const page = pages[parseInt(num) - 1];
+            return page ? `[#${num}](${page.url})` : match; // Add link if possible
+        });
+
+
         const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+        // Include source URLs directly in the sources list for clarity
         const sourcesMd = '\n\n**Sources**\n' + pages.map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`).join('\n');
+
         return answer + sourcesMd;
     } catch (error) { console.error("Error during internetRagCSE OpenAI call:", error); return null; }
 }
 
-// --- Followup Generation (Unchanged from previous version) ---
-async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> { /* ... */
+
+// --- Followup Generation (Unchanged) ---
+async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
     let finalFollowups: string[] = [];
     try {
         const res = await openai.chat.completions.create({
@@ -375,12 +423,12 @@ async function generateFollowups(question: string, answer: string, location?: st
 }
 
 // --- Sanitization and Defaults (Unchanged) ---
-function sanitizeFollowups(arr: any[]): string[] { /* ... */
+function sanitizeFollowups(arr: any[]): string[] {
     const MAX_LEN = 55;
     return arr.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
         .map((s) => { let t = s.trim(); if (t.endsWith('.') || (t.endsWith('?') && !t.toLowerCase().startsWith('what') && !t.toLowerCase().startsWith('how'))) { t = t.slice(0, -1); } return t.slice(0, MAX_LEN); })
         .filter((s, index, self) => self.indexOf(s) === index).slice(0, 6);
 }
-function defaultFollowups(): string[] { /* ... */
+function defaultFollowups(): string[] {
     return ['Find paid apprenticeships near me', 'Local training programs', 'Typical salaries (BLS)', 'Explore CNC Machinist', 'Explore Robotics Technician', 'Talk to Coach Mach'];
 }
