@@ -424,14 +424,13 @@ function sanitizeFollowups(arr: any[]): string[] {
         .filter((s, index, self) => self.indexOf(s) === index) // Remove duplicates first
         .slice(0, MAX_PROMPTS); // Limit the final count
 }
-
-// Default followups remain as a safety net (might show fewer than 4 if generation fails)
 function defaultFollowups(): string[] {
     return [
         'Find paid apprenticeships near me',
         'Local training programs',
         'Typical salaries (BLS)',
-        'Explore CNC Machinist', // Can reduce defaults too if needed
-        'Explore Robotics Technician',
+        // 'Explore CNC Machinist', // Can reduce defaults too if needed
+        // 'Explore Robotics Technician',
+        // 'Talk to Coach Mach',
     ].slice(0, 4); // Also limit defaults
-}
+} // <-- *** THIS IS THE MISSING BRACE ***
