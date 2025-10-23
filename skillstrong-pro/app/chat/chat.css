@@ -351,15 +351,16 @@
 .follow-ups {
   display: flex;
   flex-wrap: wrap; /* Allows buttons to wrap onto the next line */
-  justify-content: center; /* Center the buttons horizontally */
-  gap: 0.75rem; /* Space between buttons */
+  /* UPDATED: Align buttons to the start, looks less blocky when wrapped */
+  justify-content: flex-start;
+  gap: 0.5rem; /* Reduced gap slightly */
   margin-bottom: 1rem;
-  padding: 0 0.5rem; /* Add slight padding if buttons touch edges */
+  padding: 0 0.5rem;
 }
 .follow-up-btn {
   /* Basic styling */
-  padding: 0.6rem 1.1rem; /* Adjusted padding */
-  border-radius: 9999px; /* Pill shape */
+  padding: 0.5rem 0.875rem; /* Adjusted padding slightly */
+  border-radius: 1rem; /* Less pronounced rounding */
   border: 1px solid #334155; /* slate-700 */
   background-color: #1e293b; /* slate-800 */
   color: #cbd5e1; /* slate-300 */
@@ -369,21 +370,23 @@
   transition: all 0.2s;
 
   /* --- Wrapping & Sizing --- */
-  white-space: normal !important;  /* *** CRITICAL: Allow wrapping, added !important just in case *** */
-  overflow-wrap: break-word; /* Ensure long words break if needed */
-  text-align: center;   /* Center multi-line text */
-  line-height: 1.4;     /* Spacing for wrapped lines */
-  max-width: 300px;     /* Increased max-width slightly */
-  /* Remove any fixed height that might prevent wrapping */
-  height: auto;
-  min-height: 2.75rem; /* ~44px - Ensure a minimum height for consistency */
-  display: inline-flex; /* Use flex to help center content vertically */
-  align-items: center; /* Vertically align text */
-  justify-content: center; /* Horizontally align text */
-  box-sizing: border-box; /* Include padding/border in size calculation */
+  white-space: normal !important;  /* CRITICAL: Allow wrapping */
+  overflow-wrap: break-word; /* Break long words if necessary */
+  word-break: break-word; /* Alternate word breaking */
+  text-align: left;        /* *** CHANGED: Align text left *** */
+  line-height: 1.4;        /* Spacing for wrapped lines */
+  /* Remove max-width, let flexbox handle sizing within the line */
+  /* max-width: 300px; */
+  height: auto;             /* Let height adjust */
+  /* display: inline-block; */ /* Changed from inline-flex to see if it helps wrapping */
+  box-sizing: border-box;
+  flex-grow: 0; /* Don't allow button to grow unnecessarily */
+  flex-shrink: 1; /* Allow button to shrink if needed */
 
-  /* Prevent flex-shrink issues if container is tight */
-  flex-shrink: 0;
+  /* Ensure text isn't cut off */
+   overflow: visible;
+   text-overflow: clip;
+
 }
 .follow-up-btn:hover {
   background-color: #334155; /* slate-700 */
