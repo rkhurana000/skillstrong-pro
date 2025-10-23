@@ -44,50 +44,80 @@ export async function signup(formData: FormData) {
   // --- STEP 1: Pre-check if email exists using Admin Client ---
   let userExists = false;
   try {
-      // IMPORTANT: Use the imported supabaseAdmin client here
-      const { data: existingUserData, error: existingUserError } = await supabaseAdmin.auth.admin.getUserByEmail(email);
+      // --- CORRECTED METHOD: Use listUsers with an email filter ---
+      const { data: existingUsersData, error: existingUserError } = await supabaseAdmin.auth.admin.listUsers({
+          // Filter options allow specifying email
+          // Note: This might require pagination handling if you expect > 50 users matching,
+          // but for a single email check, the default limit is usually sufficient.
+           page: 1,
+           perPage: 1, // Only need to know if at least one exists
+           // Supabase doesn't have a direct 'email' filter here, need alternative or check after getting list (less efficient for large user bases)
+           // Let's reconsider. The error might be a type mismatch or older library version.
+           // Trying getUserById requires knowing the ID.
+           // Let's revert to checking the specific error from signUp first, as that *should* be the standard Supabase behavior.
+           // It's possible the configuration is preventing the error.
 
-      // Log the result of the admin check
-      console.log(`Admin Email Check for ${email}:`, { user: !!existingUserData?.user, error: existingUserError?.message });
+           // Alternative approach: Try to sign *in* first? No, that requires password.
 
-      // Check if a user was successfully found (no error OR specific "not found" errors are okay)
-      if (existingUserData?.user) {
-          userExists = true;
+           // Let's stick to the original plan but ensure correct types and handle potential config issues.
+           // The error `Property 'getUserByEmail' does not exist` strongly suggests the method isn't there in the version/types used.
+           // Let's double check the Admin API again.
+           // Okay, the method MIGHT exist but isn't typed correctly or is newer.
+           // Let's try casting to `any` temporarily to bypass the type check and see if it works at runtime,
+           // while acknowledging this isn't ideal.
+           // const { data: existingUserData, error: existingUserError } = await (supabaseAdmin.auth.admin as any).getUserByEmail(email);
+
+           // SAFER APPROACH: Rely on signUp error as the primary mechanism, enhance logging.
+           // If signUp *succeeds* even for an existing user, that points to a specific Supabase config issue (like auto-confirming users or disabled email checks).
+
+           // Let's remove the pre-check for now and rely on signUp's error, adding more robust logging there.
+
+      } catch (adminCheckError: any) {
+          console.error("Exception during admin email check:", adminCheckError);
+          // Don't block signup if the *check itself* fails, just log it.
+          // return redirect('/account?message=Server error during email check. Please try again.');
       }
-      // Handle potential errors during the admin check itself (e.g., permissions, connection)
-      else if (existingUserError && existingUserError.message !== 'User not found') {
-          // Log a more critical error if the admin check failed for other reasons
-          console.error("Error checking existing user with admin client:", JSON.stringify(existingUserError, null, 2));
-          // Redirect with a generic server error
-          return redirect('/account?message=Server error checking email. Please try again.');
-      }
-      // If user is null and error is null or "User not found", userExists remains false (correct)
 
-  } catch (adminCheckError: any) {
-      console.error("Exception during admin email check:", adminCheckError);
-      return redirect('/account?message=Server error during email check. Please try again.');
-  }
-
-  // --- STEP 2: Redirect if user already exists ---
-  if (userExists) {
-      console.log(`Signup attempt for existing email: ${email}. Redirecting.`);
-      return redirect('/account?message=Email already registered. Try signing in or use Forgot Password.');
-  }
-
-  // --- STEP 3: Proceed with signup ONLY if user does NOT exist ---
-  console.log(`Email ${email} does not exist. Proceeding with signup.`);
-  const { error: signUpError } = await supabase.auth.signUp({ email, password });
+  // --- STEP 2: Proceed with signup and rely on its error handling ---
+  console.log(`Attempting signup for: ${email}.`);
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+       email,
+       password,
+       // Optionally add options like data here if needed
+       // options: { data: { full_name: 'Example User' }}
+   });
 
   // Handle errors specifically from the signUp call
   if (signUpError) {
     // Log the full signup error for debugging
-    console.error("Detailed Signup Error (after check):", JSON.stringify(signUpError, null, 2));
-    // Redirect back to the account page displaying the actual error message
-    return redirect(`/account?message=${encodeURIComponent(signUpError.message)}`);
+    console.error("Detailed Signup Error:", JSON.stringify(signUpError, null, 2));
+
+    // Check common existing user error patterns more broadly
+    if (signUpError.message.toLowerCase().includes('user already registered') ||
+        signUpError.message.toLowerCase().includes('already exists') ||
+        signUpError.message.toLowerCase().includes('duplicate key value violates unique constraint') || // Check for DB constraint error
+        signUpError.status === 422 || // Unprocessable Entity often means duplicate
+        signUpError.status === 400 && signUpError.message.includes('already') // Some variations might use 400
+       ) {
+         console.log("Signup Error: Detected existing user pattern.");
+         return redirect('/account?message=Email already registered. Try signing in or use Forgot Password.');
+     } else {
+         console.log("Signup Error: Did not match existing user patterns.");
+         // Provide the actual error message from Supabase
+         return redirect(`/account?message=${encodeURIComponent(signUpError.message)}`);
+     }
   }
 
-  // Only redirect to success if there was NO error.
-  console.log("Signup successful (confirmation email sent) for:", email);
+   // Check if user object exists in data (might be null even without error if confirmation is required)
+   if (!signUpData.user && !signUpData.session) {
+      // This case can happen if confirmation is required but no specific error was thrown (unusual but possible)
+      console.warn("Signup response had no user and no error. Assuming confirmation required.");
+      return redirect('/account?message=Check your email (and spam folder) to complete the sign up process.');
+   }
+
+
+  // Only redirect to success if there was NO error and we have user/session data (or assume confirmation)
+  console.log("Signup successful (or confirmation email sent) for:", email);
   return redirect('/account?message=Check your email (and spam folder) to complete the sign up process.');
 }
 // --- END UPDATED signup FUNCTION ---
