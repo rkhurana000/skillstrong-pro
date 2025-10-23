@@ -71,7 +71,7 @@ export async function signup(formData: FormData) {
            // If signUp *succeeds* even for an existing user, that points to a specific Supabase config issue (like auto-confirming users or disabled email checks).
 
            // Let's remove the pre-check for now and rely on signUp's error, adding more robust logging there.
-
+      })
       } catch (adminCheckError: any) {
           console.error("Exception during admin email check:", adminCheckError);
           // Don't block signup if the *check itself* fails, just log it.
