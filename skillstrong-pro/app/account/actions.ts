@@ -72,7 +72,7 @@ export async function signup(formData: FormData) {
 
            // Let's remove the pre-check for now and rely on signUp's error, adding more robust logging there.
 
-      )} catch (adminCheckError: any) {
+      } catch (adminCheckError: any) {
           console.error("Exception during admin email check:", adminCheckError);
           // Don't block signup if the *check itself* fails, just log it.
           // return redirect('/account?message=Server error during email check. Please try again.');
