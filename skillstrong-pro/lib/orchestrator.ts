@@ -10,26 +10,33 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// UPDATED: Added instruction for handling empty internal search
+// UPDATED: Core Rule 1 is even more explicit about *when* to show the section.
 const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillStrong.
-**Your Mission:** Guide users to discover well-paid, hands-on vocational careers in US manufacturing.
-**Your Persona:** Encouraging, clear, practical, action-oriented (use bullets, short paragraphs).
-**Core Rules:**
-1.  **Prioritize Internal Data:** If relevant listings under \`### 🛡️ SkillStrong Database Matches\` are provided in system context, introduce them with that *exact* heading and preserve markdown links. Only include this section if listings *are actually provided*.
-2.  **Handle Empty Internal Search:** If an internal search for jobs/programs was performed but found no results (indicated by the *absence* of the \`### 🛡️ SkillStrong Database Matches\` context), clearly state that no matches were found *in the SkillStrong database* for that specific query/location. Do NOT give generic instructions on how to search job boards UNLESS specifically asked or if a subsequent web search also fails.
-3.  **Vocational Filter:** Answer ONLY about vocational roles (technicians, etc.).
-4.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response.
-5.  **Stay on Topic:** Strictly US manufacturing careers.
-6.  **No Hallucinations:** NEVER invent URLs, stats, or details.`;
 
-const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results...
+**Your Mission:** Guide users to discover well-paid, hands-on vocational careers in US manufacturing.
+
+**Your Persona:** Encouraging, clear, practical, action-oriented (use bullets, short paragraphs).
+
 **Core Rules:**
-1.  **Use Context Only:** Base answer *strictly* on 'RAG Context'.
-2.  **Cite Sources:** Cite [#1], [#2] using provided URLs.
-3.  **Strict Relevance Filter:** Answer *only* the specific user question... Discard irrelevant context...
+1.  **Prioritize Internal Data:** If relevant job/program listings under the markdown heading \`### 🛡️ SkillStrong Database Matches\` are provided in the system context for *this specific turn*, you MUST:
+    a.  Introduce these results using that *exact* markdown heading.
+    b.  Preserve and use any markdown links provided within those listings. Do not rewrite them as plain text.
+    c.  **Only include this section in your final answer if the provided context actually contains specific job or program listings under that heading.** Do *not* show the heading or this section if no listings were found or provided in the context.
+2.  **Vocational Filter:** Answer ONLY about vocational roles (technicians, machinists, operators, skilled trades) not requiring a 4-year degree. Interpret general requests (e.g., "robotics jobs") as technician-level roles.
+3.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response.
+4.  **Stay on Topic:** Strictly US manufacturing careers. No healthcare, retail, etc.
+5.  **No Hallucinations:** NEVER invent URLs, stats, or details. If unsure, say so.`;
+
+// Web RAG prompt remains the same
+const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results about US manufacturing vocational careers.
+**Core Rules:**
+1.  **Use Context Only:** Base your answer *strictly* on the provided 'RAG Context'.
+2.  **Cite Sources:** Cite sources in-line as [#1], [#2]. Use only the provided URLs.
+3.  **Strict Relevance Filter:** Answer *only* the specific user question. Filter the context aggressively - provide ONLY information directly relevant to the user's specific query AND the manufacturing vocational domain (technicians, operators, etc.). Discard anything else (e.g., general non-manufacturing salaries, 4-year degree engineering roles, unrelated topics).
 4.  **Stay on Topic:** US manufacturing vocational careers only.
-5.  **No Hallucinations:** Do not invent info.
-6.  **Concise:** Use bullets. 
+5.  **No Hallucinations:** Do not invent information or URLs.
+6.  **Concise:** Use bullets where appropriate. Do NOT add 'Next Steps'.`;
+
 
 // --- Category Detection & Overview Prompt ---
 const CATEGORY_SYNONYMS: Record<string, string[]> = {
@@ -66,15 +73,20 @@ function getDomain(url: string | null | undefined): string | null {
 }
 
 // --- Internal Database Query Function (Stricter Trigger + Google Links) ---
-/ --- Internal DB Query (Unchanged from previous version with stricter trigger) ---
 async function queryInternalDatabase(query: string, location?: string): Promise<string> {
-    const lowerQuery = query.toLowerCase();
-    const needsSpecifics = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college/.test(lowerQuery);
-    const hasLocationSpecifier = /near me|local|in my area|nearby/.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query);
-    if (!needsSpecifics || !hasLocationSpecifier) {
-        console.log("queryInternalDatabase: Skipping DB search.");
-        return '';
-    }
+  const lowerQuery = query.toLowerCase();
+  let internalContext = '';
+  const locationQuery = location?.split(',')[0].trim(); // Use city or ZIP for relevance
+
+  // --- STRICTER TRIGGER CONDITIONS ---
+  const needsSpecifics = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college/.test(lowerQuery);
+  const hasLocationSpecifier = /near me|local|in my area|nearby/.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query); // Check for ZIP or State Abbr
+
+  // ONLY search internal DB if user asks for specifics (jobs/programs) AND provides/implies a location
+  if (!needsSpecifics || !hasLocationSpecifier) {
+      console.log("queryInternalDatabase: Skipping DB search (query lacks job/program specifics or location).");
+      return ''; // Return empty if conditions not met
+  }
   // --- END STRICTER TRIGGER ---
 
   console.log("queryInternalDatabase: Performing DB search.");
@@ -141,23 +153,36 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
 }
 
 
-// --- Orchestrate Function (Adjusted result combination) ---
+// --- Orchestrate Function (Refined Logic) ---
 export async function orchestrate(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const lastUserRaw = [...input.messages].reverse().find(m => m.role === 'user')?.content ?? '';
   const isFirstUserMessage = input.messages.filter(m => m.role === 'user').length === 1;
   const canonical = detectCanonicalCategory(lastUserRaw);
+
   let messages: Message[] = input.messages;
   let overviewSeeded = false;
+  if (canonical && isFirstUserMessage) {
+        const seed = buildOverviewPrompt(canonical);
+        messages = [...input.messages];
+        messages[messages.length - 1] = { role: 'user', content: seed };
+        overviewSeeded = true;
+  }
 
-  if (canonical && isFirstUserMessage) { /* seed overview */ }
-
+  // Domain guard (uses history)
   let inDomain = await domainGuard(messages);
-  if (!inDomain) { return { /* out of domain response */ }; }
+  if (!inDomain) {
+        console.log("Domain Guard determined OUT OF DOMAIN for query:", lastUserRaw);
+        return {
+            answer:'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control. What would you like to dive into?',
+            followups: defaultFollowups(),
+        };
+  } else { console.log("Domain Guard determined IN DOMAIN for query:", lastUserRaw); }
 
-  // Query internal DB
+  // Query internal DB only if appropriate
   const internalRAG = await queryInternalDatabase(lastUserRaw, input.location ?? undefined);
   const messagesForLocal = [...messages];
-  if (internalRAG) { // Add context ONLY if results were found
+  // *** This condition correctly prevents adding context if internalRAG is empty ***
+  if (internalRAG) {
     messagesForLocal.push({ role: 'system', content: `Internal data found. Prioritize this in your answer, using the provided markdown:\n${internalRAG}` });
   } else {
       // **NEW**: If internal search ran but found nothing, add a system message telling the AI this fact.
@@ -167,7 +192,8 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
        }
   }
 
-  // Generate the base answer (AI should now know if internal search failed)
+
+  // Generate the base answer
   const localAnswer = await answerLocal(messagesForLocal, input.location ?? undefined);
   let finalAnswer = localAnswer;
 
@@ -201,61 +227,6 @@ export async function orchestrate(input: OrchestratorInput): Promise<Orchestrato
   } else {
        // If web search didn't run/failed, ensure internal results (if any) are present if AI missed them
        // And remove empty internal heading if AI added it erroneously
-      const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(finalAnswer);
-       if (internalRAG && !alreadyHasInternalHeading) {
-           finalAnswer = `${finalAnswer}\n\n${internalRAG}`;
-       } else if (!internalRAG && alreadyHasInternalHeading) {
-           finalAnswer = finalAnswer.replace(/### 🛡️ SkillStrong Database Matches\s*(\n\n|$)/i, '');
-       }
-  }
-
-  // Domain guard (uses history)
-  let inDomain = await domainGuard(messages);
-  if (!inDomain) {
-        console.log("Domain Guard determined OUT OF DOMAIN for query:", lastUserRaw);
-        return {
-            answer:'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control. What would you like to dive into?',
-            followups: defaultFollowups(),
-        };
-  } else { console.log("Domain Guard determined IN DOMAIN for query:", lastUserRaw); }
-
-  // Query internal DB only if appropriate
-  const internalRAG = await queryInternalDatabase(lastUserRaw, input.location ?? undefined);
-  const messagesForLocal = [...messages];
-  // *** This condition correctly prevents adding context if internalRAG is empty ***
-  if (internalRAG) {
-    messagesForLocal.push({ role: 'system', content: `Internal data found. Prioritize this in your answer, using the provided markdown:\n${internalRAG}` });
-  }
-
-  // Generate the base answer
-  const localAnswer = await answerLocal(messagesForLocal, input.location ?? undefined);
-  let finalAnswer = localAnswer;
-
-  // Decide if a Web Search is needed
-  const wasInternalSearchAttempted = internalRAG !== '' || ( /jobs?|openings?|program|training|near me|local/i.test(lastUserRaw) && (!!input.location || /\b\d{5}\b|\b[A-Z]{2}\b/i.test(lastUserRaw)) );
-  const needWeb = await needsInternetRag(lastUserRaw, localAnswer, internalRAG, wasInternalSearchAttempted);
-
-  let webAnswer = null;
-  if (needWeb && !overviewSeeded) {
-        console.log("Orchestrate: Proceeding with Web Search.");
-        webAnswer = await internetRagCSE(lastUserRaw, input.location ?? undefined, canonical);
-  } else { console.log("Orchestrate: Skipping Web Search."); }
-
-  // Construct final answer
-  if (webAnswer) {
-        const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(localAnswer);
-        // If internal RAG was provided BUT the AI failed to include it in localAnswer, add it before web results.
-        if (internalRAG && !alreadyHasInternalHeading) {
-             finalAnswer = `${localAnswer}\n\n${internalRAG}\n\n**Web Search Results:**\n${webAnswer}`;
-        }
-        else {
-            // Otherwise, just append web results (use a different heading if no internal results were expected/found)
-            const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**";
-             finalAnswer = `${localAnswer}\n\n${webHeading}\n${webAnswer}`;
-        }
-  } else {
-       // If web search didn't run or failed, ensure internal results (if any) are present if AI missed them
-       // AND ensure the final answer doesn't mistakenly include the heading without results if AI hallucinated it
       const alreadyHasInternalHeading = /### 🛡️ SkillStrong Database Matches/i.test(finalAnswer); // Check finalAnswer now
        if (internalRAG && !alreadyHasInternalHeading) {
            finalAnswer = `${finalAnswer}\n\n${internalRAG}`; // Append if missing
@@ -327,48 +298,48 @@ async function answerLocal(messages: Message[], location?: string): Promise<stri
     }
 }
 
-// --- UPDATED: needsInternetRag (Added Logging) ---
+// --- needsInternetRag ---
 async function needsInternetRag(query: string, draftAnswer: string, internalRAGResult: string, internalSearchAttempted: boolean): Promise<boolean> {
-  const lowerQuery = (query || '').toLowerCase();
-  console.log(`needsInternetRag Check: Query='${query}', InternalAttempted=${internalSearchAttempted}, InternalResultIsEmpty=${internalRAGResult === ''}`); // Logging
+    const lowerQuery = (query || '').toLowerCase();
+    console.log(`needsInternetRag Check: Query='${query}', InternalAttempted=${internalSearchAttempted}, InternalResultIsEmpty=${internalRAGResult === ''}`); // Logging
 
-  // 1. Explicit request?
-  if (/web|internet|external|more results|other sites|search again/i.test(lowerQuery)) {
-    console.log("needsInternetRag: User explicitly asked for web search. -> TRUE");
-    return true;
-  }
+    // 1. Explicit request?
+    if (/web|internet|external|more results|other sites|search again/i.test(lowerQuery)) {
+        console.log("needsInternetRag: User explicitly asked for web search. -> TRUE");
+        return true;
+    }
 
-  // 2. Query implies external data?
-  const externalKeywords = /bls|bureau of labor|statistic|latest|trend|news|tuition|cost|salaryexpert|onetonline|onetcenter|osha|nims|specific company|market size/i;
-  const needsExternalSalary = /salary|pay|wage|median/i.test(lowerQuery) && !/typical|range|overview/i.test(lowerQuery);
-  if (externalKeywords.test(lowerQuery) || needsExternalSalary) {
-      console.log("needsInternetRag: Query implies external data needed. -> TRUE");
-      return true;
-  }
+    // 2. Query implies external data?
+    const externalKeywords = /bls|bureau of labor|statistic|latest|trend|news|tuition|cost|salaryexpert|onetonline|onetcenter|osha|nims|specific company|market size/i;
+    const needsExternalSalary = /salary|pay|wage|median/i.test(lowerQuery) && !/typical|range|overview/i.test(lowerQuery);
+    if (externalKeywords.test(lowerQuery) || needsExternalSalary) {
+        console.log("needsInternetRag: Query implies external data needed. -> TRUE");
+        return true;
+    }
 
-  // 3. Internal search was appropriate but found nothing? *** CRITICAL CHECK ***
-  if (internalSearchAttempted && internalRAGResult === '') {
-      console.log("needsInternetRag: Internal search attempted but found nothing relevant. -> TRUE");
-      return true;
-  }
+    // 3. Internal search was appropriate but found nothing? *** CRITICAL CHECK ***
+    if (internalSearchAttempted && internalRAGResult === '') {
+        console.log("needsInternetRag: Internal search attempted but found nothing relevant. -> TRUE");
+        return true;
+    }
 
-  // 4. AI indicates uncertainty in its draft answer? (And didn't just give internal results)
-  const indicatesUncertainty = /i don'?t know|not sure|no specific data|couldn'?t find details|recommend searching/i.test(draftAnswer.toLowerCase());
-  if (indicatesUncertainty && !internalRAGResult) {
-    console.log("needsInternetRag: Draft answer indicates uncertainty and no internal results found. -> TRUE");
-    return true;
-  }
+    // 4. AI indicates uncertainty in its draft answer? (And didn't just give internal results)
+    const indicatesUncertainty = /i don'?t know|not sure|no specific data|couldn'?t find details|recommend searching/i.test(draftAnswer.toLowerCase());
+    if (indicatesUncertainty && !internalRAGResult) {
+        console.log("needsInternetRag: Draft answer indicates uncertainty and no internal results found. -> TRUE");
+        return true;
+    }
 
-  // 5. Avoid web search for general exploration if internal search wasn't relevant
-  const generalExploration = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills|tell me about|how do i become|steps to become|advice|tips)/i;
-  if (generalExploration.test(lowerQuery) && !internalSearchAttempted) {
-      console.log("needsInternetRag: General exploration query, internal search not relevant, skipping web. -> FALSE");
-      return false;
-  }
+    // 5. Avoid web search for general exploration if internal search wasn't relevant
+    const generalExploration = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills|tell me about|how do i become|steps to become|advice|tips)/i;
+    if (generalExploration.test(lowerQuery) && !internalSearchAttempted) {
+        console.log("needsInternetRag: General exploration query, internal search not relevant, skipping web. -> FALSE");
+        return false;
+    }
 
 
-  console.log("needsInternetRag: No specific trigger matched, defaulting to false. -> FALSE");
-  return false; // Default to false if none of the above trigger
+    console.log("needsInternetRag: No specific trigger matched, defaulting to false. -> FALSE");
+    return false; // Default to false if none of the above trigger
 }
 
 
@@ -465,4 +436,4 @@ function defaultFollowups(): string[] {
         // 'Explore Robotics Technician',
         // 'Talk to Coach Mach',
     ].slice(0, 4); // Also limit defaults
-}
+} // <-- *** THIS BRACE WAS MISSING ***
