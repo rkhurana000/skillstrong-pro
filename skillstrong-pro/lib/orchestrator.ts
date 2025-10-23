@@ -299,17 +299,27 @@ async function answerLocal(messages: Message[], location?: string): Promise<stri
 }
 
 // --- needsInternetRag ---
+// --- MODIFICATION START ---
+// Broadened the triggers for web search to include resource requests.
 async function needsInternetRag(query: string, draftAnswer: string, internalRAGResult: string, internalSearchAttempted: boolean): Promise<boolean> {
     const lowerQuery = (query || '').toLowerCase();
     console.log(`needsInternetRag Check: Query='${query}', InternalAttempted=${internalSearchAttempted}, InternalResultIsEmpty=${internalRAGResult === ''}`); // Logging
 
-    // 1. Explicit request?
-    if (/web|internet|external|more results|other sites|search again/i.test(lowerQuery)) {
+    // 1. Explicit request for web search?
+    const explicitWebSearch = /web|internet|external|more results|other sites|search again/i;
+    if (explicitWebSearch.test(lowerQuery)) {
         console.log("needsInternetRag: User explicitly asked for web search. -> TRUE");
         return true;
     }
 
-    // 2. Query implies external data?
+    // 2. Request for online resources, links, etc.? (This was the missing trigger)
+    const needsWebSearch = /resources?|links?|websites?|find|search|recommend.*(online|web)/i;
+     if (needsWebSearch.test(lowerQuery)) {
+        console.log("needsInternetRag: User asked for online resources/links. -> TRUE");
+        return true;
+    }
+
+    // 3. Query implies external data?
     const externalKeywords = /bls|bureau of labor|statistic|latest|trend|news|tuition|cost|salaryexpert|onetonline|onetcenter|osha|nims|specific company|market size/i;
     const needsExternalSalary = /salary|pay|wage|median/i.test(lowerQuery) && !/typical|range|overview/i.test(lowerQuery);
     if (externalKeywords.test(lowerQuery) || needsExternalSalary) {
@@ -317,30 +327,30 @@ async function needsInternetRag(query: string, draftAnswer: string, internalRAGR
         return true;
     }
 
-    // 3. Internal search was appropriate but found nothing? *** CRITICAL CHECK ***
+    // 4. Internal search was appropriate but found nothing? *** CRITICAL CHECK ***
     if (internalSearchAttempted && internalRAGResult === '') {
         console.log("needsInternetRag: Internal search attempted but found nothing relevant. -> TRUE");
         return true;
     }
 
-    // 4. AI indicates uncertainty in its draft answer? (And didn't just give internal results)
+    // 5. AI indicates uncertainty in its draft answer? (And didn't just give internal results)
     const indicatesUncertainty = /i don'?t know|not sure|no specific data|couldn'?t find details|recommend searching/i.test(draftAnswer.toLowerCase());
     if (indicatesUncertainty && !internalRAGResult) {
         console.log("needsInternetRag: Draft answer indicates uncertainty and no internal results found. -> TRUE");
         return true;
     }
 
-    // 5. Avoid web search for general exploration if internal search wasn't relevant
+    // 6. Avoid web search for general exploration if internal search wasn't relevant
     const generalExploration = /(overview|what is|what does .* do|day[- ]?to[- ]?day|tools & tech|core skills|tell me about|how do i become|steps to become|advice|tips)/i;
     if (generalExploration.test(lowerQuery) && !internalSearchAttempted) {
         console.log("needsInternetRag: General exploration query, internal search not relevant, skipping web. -> FALSE");
         return false;
     }
 
-
     console.log("needsInternetRag: No specific trigger matched, defaulting to false. -> FALSE");
     return false; // Default to false if none of the above trigger
 }
+// --- MODIFICATION END ---
 
 
 // --- Web RAG Function ---
@@ -383,25 +393,45 @@ async function internetRagCSE(query: string, location?: string, canonical?: stri
 }
 
 // --- Followup Generation ---
+// --- MODIFICATION START ---
+// Replaced the entire function with a stricter prompt and new message format.
 async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
     let finalFollowups: string[] = [];
     try {
+        // This is a much stricter system prompt that forbids questions.
+        const systemPrompt = `You are an assistant that generates relevant follow-up topics.
+Generate a JSON object with a key "followups" containing an array of 3-4 concise, engaging, and contextually relevant follow-up topics based on the user's question and the AI's answer.
+        
+**RULES:**
+1.  Each topic MUST be a short phrase or title (e.g., "Explore CNC Machinist").
+2.  Topics MUST NOT be questions (e.g., "What is CNC?").
+3.  Topics MUST encourage exploration (e.g., "Find local programs", "Compare salaries").
+4.  Topics MUST be directly related to the question or answer.
+5.  Return ONLY the JSON object.`;
+
+        // This message format gives clear context to the AI.
+        const userMessage = `User Question: "${question}"
+AI Answer: "${answer}"
+${location ? `User Location: "${location}"` : ''}
+
+JSON object with followups:`;
+
         const res = await openai.chat.completions.create({
-            model: 'gpt-4o-mini', temperature: 0.4,
+            model: 'gpt-4o-mini', 
+            temperature: 0.4,
+            response_format: { type: "json_object" }, // Ensure JSON output
             messages: [
-                {
-                    role: 'system',
-                    content: `You are an assistant that generates relevant follow-up questions based on a user query and the AI's answer.
-Generate 3-4 SHORT follow-up prompts (<= 55 chars).
-**Crucially, these prompts MUST be directly related to the specific topics mentioned in the user's question or the AI's answer provided below.**
-Do NOT generate generic questions about manufacturing if they don't relate to the specific context. Focus on suggesting next logical steps or deeper dives related to the current discussion.
-Return ONLY a JSON array of strings.`,
-                },
-                { role: 'user', content: JSON.stringify({ question, answer, location }) },
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMessage },
         ],});
-        const raw = res.choices[0]?.message?.content ?? '[]';
-        if (raw.startsWith('[') && raw.endsWith(']')) { const arr = JSON.parse(raw); if (Array.isArray(arr) && arr.length) { finalFollowups = arr; }}
-        else { console.warn("Follow-up generation did not return a valid JSON array:", raw); }
+
+        const raw = res.choices[0]?.message?.content ?? '{"followups": []}';
+        const parsed = JSON.parse(raw);
+        if (parsed.followups && Array.isArray(parsed.followups) && parsed.followups.length > 0) {
+            finalFollowups = parsed.followups;
+        } else {
+            console.warn("Follow-up generation did not return valid followups:", raw);
+        }
     } catch (error) { console.error("Error generating follow-ups:", error); }
 
     const userAskedForLocal = /jobs?|openings?|careers?|hiring|apprenticeships?|programs?|training|certificates?|courses?|schools?|college|near me|in my area/i.test(question.toLowerCase());
@@ -416,6 +446,8 @@ Return ONLY a JSON array of strings.`,
     if (finalFollowups.length > 0) { return sanitizeFollowups(finalFollowups); }
     else { console.warn("Falling back to default follow-ups for question:", question); return defaultFollowups(); } // Keep fallback
 }
+// --- MODIFICATION END ---
+
 
 // --- Sanitization and Defaults ---
 function sanitizeFollowups(arr: any[]): string[] {
@@ -436,4 +468,4 @@ function defaultFollowups(): string[] {
         // 'Explore Robotics Technician',
         // 'Talk to Coach Mach',
     ].slice(0, 4); // Also limit defaults
-} // <-- *** THIS BRACE WAS MISSING ***
+}
