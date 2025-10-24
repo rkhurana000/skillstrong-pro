@@ -10,7 +10,7 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- MODIFICATION START: Strengthened COACH_SYSTEM Prompt ---
+// --- MODIFICATION START: Refined COACH_SYSTEM Prompt ---
 const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
 
 **Your Mission:** Provide encouraging, clear, and actionable advice on vocational paths in modern manufacturing (e.g., CNC, robotics, welding, maintenance, quality, additive).
@@ -19,16 +19,16 @@ const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helpi
 
 **Non-Negotiable Rules:**
 1.  **Prioritize RAG Context:** Your system context may contain "Web Results" (with citations [#1], [#2]...) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
-    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text. You MUST include the inline citations (e.g., [#1]) exactly as they appear in the provided context. Do NOT remove or alter them.
-    * **If "Web Results" are NOT provided OR if context says "INFO: ... found no specific results":** Answer based on your general knowledge but clearly state that you couldn't find specific web information for the query.
-2.  **Preserve Sources Section:** If the provided context includes a markdown section starting with "**Sources**", you MUST include that *entire section* (heading and list) verbatim at the end of your main answer body (before "Next Steps"). Do NOT omit or modify it.
-3.  **Append SkillStrong Links:** *After* your main answer (and after the "**Sources**" section, if present), append the *entire* "### 🛡️ SkillStrong Search" markdown block **only if it was provided** in the system context. Use the exact markdown links.
-4.  **Handle No Results Info:** If context explicitly says "INFO: ... searches ... found no specific results", clearly inform the user you couldn't find specific web/local info and provide a general answer or alternative suggestions.
-5.  **Audience Fit (≤2 Years Training):** ONLY recommend roles/programs requiring ≤2 years training (certs, apprenticeships, AAS). Suggest tech/technologist paths instead of 4-year engineering degrees.
-6.  **Truthfulness:** Rely *only* on provided "Web Results" for current facts (salaries, openings, local specifics). Do not invent data. If unsure or lacking RAG, state that.
-7.  **Geography:** Prioritize nearby options if location is known and RAG provides local info. If a local search is needed but location is missing, your ONLY response MUST be: "To find local results, please set your location using the button in the header." (empty followups).
-8.  **Accessibility & Tone:** Avoid jargon (explain if needed). Be supportive and encouraging.
-9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response.
+    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text. Include inline citations (e.g., [#1]).
+    * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. **Only mention the failed search if the user explicitly asked for local/current specifics (like jobs or programs nearby).** Otherwise, provide the general answer seamlessly.
+2.  **Preserve Sources Section:** If context includes "**Sources**", include that *entire section* verbatim at the end of your main answer (before "Next Steps").
+3.  **Append SkillStrong Links:** *After* your main answer (and "**Sources**"), append the *entire* "### 🛡️ SkillStrong Search" block **only if provided** in the context.
+4.  **Handle No Results Info:** If context says "INFO: Could not find specific results for the user's local/current query...", *then* clearly inform the user you couldn't find specifics for their request and suggest alternatives (like broadening the search or checking general resources).
+5.  **Audience Fit (≤2 Years Training):** ONLY recommend roles/programs needing ≤2 years training. Suggest tech paths instead of 4-year engineering.
+6.  **Truthfulness:** Rely *only* on "Web Results" for current facts (salaries, openings, local specifics). Cite sources. If unsure/lacking RAG, state that (unless it's a general overview).
+7.  **Geography:** Prioritize nearby options if location known & RAG provides local info. If local search needed but location missing, ONLY respond: "To find local results, please set your location using the button in the header." (empty followups).
+8.  **Accessibility & Tone:** Avoid jargon (explain if needed). Be supportive.
+9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end.
 10. **No Chain-of-Thought:** Do not reveal internal reasoning.`;
 // --- MODIFICATION END ---
 
@@ -50,7 +50,7 @@ const CATEGORY_SYNONYMS: Record<string, string[]> = { /* ... (unchanged) ... */
 };
 function escapeRegExp(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');}
 function detectCanonicalCategory(query: string): string | null { /* ... (unchanged) ... */
-    const text = (query || '').toLowerCase(); for (const [canonical, syns] of Object.entries(CATEGORY_SYNONYMS)) { for (const s of syns) { const re = new RegExp(`\\b${escapeRegExp(s)}\\b`, 'i'); if (re.test(text)) return canonical; } } return null;
+    const text = (query || '').toLowerCase(); for (const [canonical, syns] of Object.entries(CATEGORY_SYNONYMS)) { for (const s of syns) { const re = new RegExp(`\b${escapeRegExp(s)}\b`, 'i'); if (re.test(text)) return canonical; } } return null;
 }
 function buildOverviewPrompt(canonical: string): string { /* ... (unchanged) ... */
     return `Give a student-friendly overview of the **${canonical}** career... (rest unchanged)`;
@@ -67,19 +67,92 @@ async function queryInternalDatabase(query: string, location?: string): Promise<
 }
 
 
-// --- Orchestrate Function (Unchanged) ---
+// --- Orchestrate Function ---
 export async function orchestrate(input: OrchestratorInput): Promise<OrchestratorOutput> {
-  const originalMessages = input.messages; const lastUserRaw = [...originalMessages].reverse().find(m => m.role === 'user')?.content ?? ''; const isFirstUserMessage = originalMessages.filter(m => m.role === 'user').length === 1; const canonical = detectCanonicalCategory(lastUserRaw); let messagesForLLM = [...originalMessages]; let messageContentForRAGDecision = lastUserRaw; let overviewActuallyUsed = false; if (canonical && isFirstUserMessage) { const seedPrompt = buildOverviewPrompt(canonical); messagesForLLM[messagesForLLM.length - 1] = { role: 'user', content: seedPrompt }; messageContentForRAGDecision = seedPrompt; overviewActuallyUsed = true; console.log("[Orchestrate] Using overview prompt for LLM input. Category:", canonical); }
-  const inDomain = await domainGuard(originalMessages); if (!inDomain) { console.log("[Orchestrate] Domain Guard: OUT OF DOMAIN for query:", lastUserRaw); return { answer:'I focus on modern manufacturing careers...', followups: defaultFollowups(), }; } console.log("[Orchestrate] Domain Guard: IN DOMAIN for query:", lastUserRaw);
-  const isLocalQuery = /near me|local|in my area|nearby|\b\d{5}\b|[A-Z]{2}\b/i.test(lastUserRaw) || /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|tuition|start date|admission|employer|provider|scholarship)\b/i.test(lastUserRaw.toLowerCase()); if (isLocalQuery && !input.location) { console.log("[Orchestrate] Local query detected but location is missing. Asking user."); return { answer: "To find local results, please set your location using the button in the header.", followups: [] }; }
+  const originalMessages = input.messages;
+  const lastUserRaw = [...originalMessages].reverse().find(m => m.role === 'user')?.content ?? '';
+  const isFirstUserMessage = originalMessages.filter(m => m.role === 'user').length === 1;
+  const canonical = detectCanonicalCategory(lastUserRaw);
+
+  let messagesForLLM = [...originalMessages];
+  let messageContentForRAGDecision = lastUserRaw;
+  let overviewActuallyUsed = false;
+  if (canonical && isFirstUserMessage) {
+        const seedPrompt = buildOverviewPrompt(canonical);
+        messagesForLLM[messagesForLLM.length - 1] = { role: 'user', content: seedPrompt };
+        messageContentForRAGDecision = seedPrompt;
+        overviewActuallyUsed = true;
+        console.log("[Orchestrate] Using overview prompt for LLM input. Category:", canonical);
+  }
+
+  // 1. Domain Guard
+  const inDomain = await domainGuard(originalMessages);
+  if (!inDomain) { /* ... (unchanged) ... */
+       console.log("[Orchestrate] Domain Guard: OUT OF DOMAIN for query:", lastUserRaw); return { answer:'I focus on modern manufacturing careers...', followups: defaultFollowups(), };
+  }
+  console.log("[Orchestrate] Domain Guard: IN DOMAIN for query:", lastUserRaw);
+
+  // 2. Check for missing location if needed
+  const isLocalQuery = /near me|local|in my area|nearby|\b\d{5}\b|[A-Z]{2}\b/i.test(lastUserRaw) || /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|tuition|start date|admission|employer|provider|scholarship)\b/i.test(lastUserRaw.toLowerCase());
+  if (isLocalQuery && !input.location) {
+      console.log("[Orchestrate] Local query detected but location is missing. Asking user.");
+      return { answer: "To find local results, please set your location using the button in the header.", followups: [] };
+  }
+
+  // 3. Generate Internal RAG Links (if applicable)
   const internalRAG = await queryInternalDatabase(lastUserRaw, input.location ?? undefined);
-  const needWeb = await needsInternetRag(messageContentForRAGDecision); console.log(`[Orchestrate] Decision: needsInternetRag = ${needWeb}`);
-  let webAnswer = null; if (needWeb) { console.log(`[Orchestrate] Proceeding with Web Search for original query: "${lastUserRaw}"`); try { webAnswer = await internetRagCSE(lastUserRaw, input.location ?? undefined, canonical); if (webAnswer) console.log("[Orchestrate] Web RAG successful."); else console.log("[Orchestrate] Web RAG returned no usable content."); } catch (webRagError: any) { console.error("[Orchestrate] Error during Web RAG call:", webRagError); webAnswer = null; } } else { console.log(`[Orchestrate] Skipping Web Search.`); }
-  let combinedContext = ''; if (webAnswer) { const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**"; combinedContext += `${webHeading}\n${webAnswer}\n\n`; } if (internalRAG) { combinedContext += internalRAG; } const wasSearchAttempted = needWeb || internalRAG !== ''; const noResultsFound = webAnswer === null && internalRAG === ''; if (wasSearchAttempted && noResultsFound && !overviewActuallyUsed) { combinedContext = `INFO: I performed a search based on the user's query ("${lastUserRaw}") but could not find specific results. Provide a general answer or suggest alternatives.`; console.log("[Orchestrate] Notifying LLM: All relevant searches failed or returned empty."); } else if (!combinedContext && overviewActuallyUsed) { console.log("[Orchestrate] No RAG context generated (Overview prompt used)."); } else if (!combinedContext) { console.log("[Orchestrate] No RAG context generated (Web search skipped/failed, no internal links triggered)."); }
-  const messagesForFinalAnswer = [...messagesForLLM]; if (combinedContext) { messagesForFinalAnswer.push({ role: 'system', content: `Use the following search results to answer the user's query...\n\n${combinedContext}` }); console.log("[Orchestrate] Added combined RAG context to final LLM call."); } else { console.log("[Orchestrate] No RAG context added to final LLM call."); }
-  const finalAnswer = await answerLocal(messagesForFinalAnswer, input.location ?? undefined); console.log("[Orchestrate] Generated final answer from LLM.");
-  let finalAnswerWithFeatured = finalAnswer; try { const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined); if (Array.isArray(featured) && featured.length > 0) { const locTxt = input.location ? ` near ${input.location}` : ''; const lines = featured.map((f) => `- **${f.title}** — ${f.org} (${f.location})`).join('\n'); if (!finalAnswerWithFeatured.includes('**Featured')) { finalAnswerWithFeatured += `\n\n**Featured${locTxt}:**\n${lines}`; console.log("[Orchestrate] Appended featured listings."); } } } catch (err) { console.error("[Orchestrate] Error fetching/appending featured items:", err); }
-  const followups = await generateFollowups(lastUserRaw, finalAnswerWithFeatured, input.location ?? undefined); console.log("[Orchestrate] Generated followups."); return { answer: finalAnswerWithFeatured.trim(), followups };
+
+  // 4. Decide if Web RAG is needed
+  const needWeb = await needsInternetRag(messageContentForRAGDecision);
+  console.log(`[Orchestrate] Decision: needsInternetRag = ${needWeb}`);
+
+  // 5. Perform Web RAG if needed
+  let webAnswer = null;
+  if (needWeb) { /* ... (unchanged error handling/logging) ... */
+      console.log(`[Orchestrate] Proceeding with Web Search for original query: "${lastUserRaw}"`); try { webAnswer = await internetRagCSE(lastUserRaw, input.location ?? undefined, canonical); if (webAnswer) console.log("[Orchestrate] Web RAG successful."); else console.log("[Orchestrate] Web RAG returned no usable content."); } catch (webRagError: any) { console.error("[Orchestrate] Error during Web RAG call:", webRagError); webAnswer = null; }
+  } else { console.log(`[Orchestrate] Skipping Web Search.`); }
+
+  // 6. Combine Context for Final LLM Call
+  let combinedContext = '';
+  if (webAnswer) { const webHeading = internalRAG ? "**Related Web Results:**" : "**Web Search Results:**"; combinedContext += `${webHeading}\n${webAnswer}\n\n`; }
+  if (internalRAG) { combinedContext += internalRAG; }
+
+  // --- MODIFICATION START: Refined "No Results" Logic ---
+  const wasSearchAttempted = needWeb || internalRAG !== ''; // Was *any* RAG attempted/generated?
+  const noResultsFound = webAnswer === null && internalRAG === ''; // Did *all* attempted RAG yield nothing?
+  const userAskedForSpecifics = /\b(jobs?|openings?|program|training|salary|pay|near me|local|in my area)\b/i.test(lastUserRaw.toLowerCase()); // Did user ask for something specific?
+
+  if (wasSearchAttempted && noResultsFound && userAskedForSpecifics && !overviewActuallyUsed) {
+     // ONLY add the explicit "couldn't find" message IF a specific search was attempted and failed.
+     combinedContext = `INFO: Could not find specific results for the user's local/current query ("${lastUserRaw}"). Provide a general answer or suggest alternatives.`;
+     console.log("[Orchestrate] Notifying LLM: Specific search attempted but failed.");
+  } else if (!combinedContext && overviewActuallyUsed) {
+     console.log("[Orchestrate] No RAG context generated (Overview prompt used).");
+  } else if (!combinedContext) {
+     console.log("[Orchestrate] No RAG context generated (Web search skipped/failed, no internal links triggered).");
+  }
+  // --- MODIFICATION END ---
+
+  // 7. Build Message List for Final LLM Call
+  const messagesForFinalAnswer = [...messagesForLLM];
+  if (combinedContext) { messagesForFinalAnswer.push({ role: 'system', content: `Use the following search results to answer the user's query...\n\n${combinedContext}` }); console.log("[Orchestrate] Added combined RAG context to final LLM call."); }
+  else { console.log("[Orchestrate] No RAG context added to final LLM call."); }
+
+  // 8. Generate Final Answer
+  const finalAnswer = await answerLocal(messagesForFinalAnswer, input.location ?? undefined);
+  console.log("[Orchestrate] Generated final answer from LLM.");
+
+  // 9. Add Featured Listings
+  let finalAnswerWithFeatured = finalAnswer;
+  try { /* ... (unchanged) ... */
+      const featured = await findFeaturedMatching(lastUserRaw, input.location ?? undefined); if (Array.isArray(featured) && featured.length > 0) { const locTxt = input.location ? ` near ${input.location}` : ''; const lines = featured.map((f) => `- **${f.title}** — ${f.org} (${f.location})`).join('\n'); if (!finalAnswerWithFeatured.includes('**Featured')) { finalAnswerWithFeatured += `\n\n**Featured${locTxt}:**\n${lines}`; console.log("[Orchestrate] Appended featured listings."); } }
+  } catch (err) { console.error("[Orchestrate] Error fetching/appending featured items:", err); }
+
+  // 10. Generate Followups
+  const followups = await generateFollowups(lastUserRaw, finalAnswerWithFeatured, input.location ?? undefined);
+  console.log("[Orchestrate] Generated followups.");
+
+  return { answer: finalAnswerWithFeatured.trim(), followups };
 }
 
 // --- Domain Guard (Unchanged) ---
@@ -104,10 +177,47 @@ async function internetRagCSE(query: string, location?: string, canonical?: stri
 }
 
 
-// --- Followup Generation (Unchanged - uses gpt-4o and scoring prompt) ---
-async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> { /* ... (unchanged) ... */
-    let finalFollowups: string[] = []; try { const systemPrompt = `You are an assistant that generates relevant follow-up suggestions for a career coach chatbot... (rest unchanged)`; const userMessage = `User Question: "${question}"\nAI Answer: "${answer}"\n${location ? `User Location: "${location}"` : ''}\n\nGenerate JSON object with 3 high-quality followups:`; console.log("[Followups] Calling gpt-4o for followups with scoring criteria."); const res = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.5, response_format: { type: "json_object" }, messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage },],}); const raw = res.choices[0]?.message?.content ?? '{"followups": []}'; const parsed = JSON.parse(raw); if (parsed.followups && Array.isArray(parsed.followups) && parsed.followups.length > 0) { finalFollowups = parsed.followups; console.log("[Followups] Generated:", finalFollowups); } else { console.warn("[Followups] Failed to parse valid followups:", raw); } } catch (error) { console.error("[Followups] Error generating follow-ups:", error); } if (finalFollowups.length > 0) { return sanitizeFollowups(finalFollowups); } else { console.warn("[Followups] Falling back to defaults for question:", question); return defaultFollowups(); }
+// --- MODIFICATION START: Added Logging to Followup Generation ---
+async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
+    let finalFollowups: string[] = [];
+    let rawResponse = '{"followups": []}'; // Initialize rawResponse
+    try {
+        const systemPrompt = `You are an assistant that generates relevant follow-up suggestions for a career coach chatbot... (rest unchanged - includes scoring criteria)`;
+        const userMessage = `User Question: "${question}"\nAI Answer: "${answer}"\n${location ? `User Location: "${location}"` : ''}\n\nGenerate JSON object with 3 high-quality followups:`;
+
+        console.log("[Followups] Calling gpt-4o for followups with scoring criteria.");
+        const res = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            temperature: 0.5,
+            response_format: { type: "json_object" },
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userMessage },
+        ],});
+        rawResponse = res.choices[0]?.message?.content ?? '{"followups": []}'; // Assign raw response here
+        console.log("[Followups] Raw LLM Response:", rawResponse); // Log the raw response
+
+        const parsed = JSON.parse(rawResponse); // Attempt to parse
+        if (parsed.followups && Array.isArray(parsed.followups) && parsed.followups.length > 0) {
+            finalFollowups = parsed.followups;
+            console.log("[Followups] Successfully Parsed:", finalFollowups);
+        } else {
+            console.warn("[Followups] Failed to parse valid followups array from raw response.");
+        }
+    } catch (error: any) { // Catch JSON parse errors too
+        console.error("[Followups] Error generating or parsing follow-ups:", error);
+        console.error("[Followups] Raw response that caused error:", rawResponse); // Log raw response on error
+    }
+
+    // Fallback logic
+    if (finalFollowups.length > 0) {
+        return sanitizeFollowups(finalFollowups);
+    } else {
+        console.warn("[Followups] Falling back to defaults for question:", question);
+        return defaultFollowups();
+    }
 }
+// --- MODIFICATION END ---
 
 
 // --- Sanitization and Defaults (Unchanged) ---
