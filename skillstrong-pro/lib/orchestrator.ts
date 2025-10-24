@@ -10,7 +10,7 @@ export interface OrchestratorOutput { answer: string; followups: string[] }
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- MODIFICATION START: Refined COACH_SYSTEM Prompt ---
+// --- MODIFICATION START: Strengthened COACH_SYSTEM Prompt (Rule 1) ---
 const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
 
 **Your Mission:** Provide encouraging, clear, and actionable advice on vocational paths in modern manufacturing (e.g., CNC, robotics, welding, maintenance, quality, additive).
@@ -18,14 +18,14 @@ const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helpi
 **Output Format:** Respond with Markdown, using short paragraphs and bullet points.
 
 **Non-Negotiable Rules:**
-1.  **Prioritize RAG Context:** Your system context may contain "Web Results" (with citations [#1], [#2]...) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
-    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text. Include inline citations (e.g., [#1]). **Crucially, if the user asked a general question (like "Tell me about [Role]"), structure your answer as a general overview (responsibilities, skills, training, typical pay range if available in RAG), using facts from the "Web Results" but do NOT just summarize a single job posting unless that was the specific request.**
-    * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. Only mention the failed search if the user explicitly asked for local/current specifics (like jobs or programs nearby). Otherwise, provide the general answer seamlessly.
+1.  **Prioritize RAG Context & Synthesize Overviews:** Your system context may contain "Web Results" (with citations [#1], [#2]...) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
+    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text. Include inline citations (e.g., [#1]). **IMPORTANT: If the user asked a general "Tell me about [Role]" or similar overview question, synthesize a GENERAL OVERVIEW. Use facts from the "Web Results" (like typical skills, pay ranges, training) but structure your answer as a comprehensive overview, NOT a summary of a single job posting or specific program unless that was explicitly requested.**
+    * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. Only mention the failed search if the user explicitly asked for local/current specifics. Otherwise, provide the general answer seamlessly.
 2.  **Preserve Sources Section:** If context includes "**Sources**", include that *entire section* verbatim at the end of your main answer (before "Next Steps").
 3.  **Append SkillStrong Links:** *After* your main answer (and "**Sources**"), append the *entire* "### 🛡️ SkillStrong Search" block **only if provided** in the context.
 4.  **Handle No Results Info:** If context says "INFO: Could not find specific results for the user's local/current query...", *then* clearly inform the user you couldn't find specifics for their request and suggest alternatives.
 5.  **Audience Fit (≤2 Years Training):** ONLY recommend roles/programs needing ≤2 years training. Suggest tech paths instead of 4-year engineering.
-6.  **Truthfulness:** Rely *only* on "Web Results" for current facts (salaries, openings, local specifics). Cite sources. If unsure/lacking RAG, state that (unless it's a general overview).
+6.  **Truthfulness:** Rely *only* on "Web Results" for current facts. Cite sources. If unsure/lacking RAG, state that (unless it's a general overview).
 7.  **Geography:** Prioritize nearby options if location known & RAG provides local info. If local search needed but location missing, ONLY respond: "To find local results, please set your location using the button in the header." (empty followups).
 8.  **Accessibility & Tone:** Avoid jargon (explain if needed). Be supportive.
 9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end.
@@ -47,7 +47,7 @@ function buildOverviewPrompt(canonical: string): string { /* ... */  return `Giv
 function getDomain(url: string | null | undefined): string | null { /* ... */ if (!url) return null; try { const host = new URL(url).hostname; return host.replace(/^www\./, ''); } catch { return null; }}
 
 // --- Internal Database Link Generation (Unchanged) ---
-async function queryInternalDatabase(query: string, location?: string): Promise<string> { /* ... (unchanged - strict keyword+location trigger, clean link text) ... */  const lowerQuery = query.toLowerCase(); const needsJobs = /\b(jobs?|openings?|hiring|apprenticeships?)\b/i.test(lowerQuery); const needsPrograms = /\b(programs?|training|certificates?|courses?|schools?|college)\b/i.test(lowerQuery); const hasLocationSpecifier = /near me|local|in my area|nearby/i.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query); if (!((needsJobs || needsPrograms) && hasLocationSpecifier)) { console.log("[Internal RAG] Skipping: Query lacks specific job/program keywords or location."); return ''; } console.log("[Internal RAG] Generating internal search links."); let searchTerm = query .replace(/near me|local|in my area|nearby/gi, '') .replace(/\b(jobs?|openings?|hiring|apprenticeships?)\b/gi, '') .replace(/\b(programs?|training|certificates?|courses?|schools?|college)\b/gi, '') .replace(/in\s+([A-Za-z\s]+,\s*[A-Z]{2}|\d{5}|[A-Z]{2})\b/gi, '') .replace(/\s+/g, ' ') .trim(); if (searchTerm.length < 3 || searchTerm.toLowerCase() === 'find' || searchTerm.toLowerCase() === 'search') { const detectedCategory = detectCanonicalCategory(query); searchTerm = detectedCategory || "relevant"; console.log(`[Internal RAG] Using term "${searchTerm}" for link text.`); } else { console.log(`[Internal RAG] Using cleaned term "${searchTerm}" for link text.`); } const params = new URLSearchParams(); if (searchTerm !== "relevant") params.set('q', searchTerm); if (location) { const parts = location.split(',').map(s => s.trim()).filter(Boolean); if (parts.length === 2 && parts[1].length === 2 && parts[1] === parts[1].toUpperCase()) { params.set('city', parts[0]); params.set('state', parts[1]); } else if (parts.length === 1) { const part = parts[0]; if (part.length === 2 && part === part.toUpperCase()) params.set('state', part); else if (part.match(/^\d{5}$/)) params.set('city', part); else params.set('city', part); } } const queryString = params.toString(); let links: string[] = []; const linkQueryText = searchTerm !== "relevant" ? ` for "${searchTerm}"` : ""; if (needsJobs) links.push(`* [Search all **jobs**${linkQueryText} on SkillStrong](/jobs/all?${queryString})`); if (needsPrograms) links.push(`* [Search all **programs**${linkQueryText} on SkillStrong](/programs/all?${queryString})`); if (links.length > 0) { return `### 🛡️ SkillStrong Search\nYou can also search our internal database directly:\n${links.join('\n')}`; } console.log("[Internal RAG] No relevant links generated despite matching criteria."); return '';}
+async function queryInternalDatabase(query: string, location?: string): Promise<string> { /* ... (unchanged - strict keyword+location trigger, clean link text) ... */  const lowerQuery = query.toLowerCase(); const needsJobs = /\b(jobs?|openings?|hiring|apprenticeships?)\b/i.test(lowerQuery); const needsPrograms = /\b(programs?|training|certificates?|courses?|schools?|college)\b/i.test(lowerQuery); const hasLocationSpecifier = /near me|local|in my area|nearby/i.test(lowerQuery) || !!location || /\b\d{5}\b/.test(query) || /\b[A-Z]{2}\b/.test(query); if (!((needsJobs || needsPrograms) && hasLocationSpecifier)) { console.log("[Internal RAG] Skipping: Query lacks specific job/program keywords or location."); return ''; } console.log("[Internal RAG] Generating internal search links."); let searchTerm = query .replace(/near me|local|in my area|nearby/gi, '') .replace(/\b(jobs?|openings?|hiring|apprenticeships?)\b/gi, '') .replace(/\b(programs?|training|certificates?|courses?|schools?|college)\b/gi, '') .replace(/in\s+([A-Za-z\s]+,\s*[A-Z]{2}|\d{5}|[A-Z]{2})\b/gi, '') .replace(/\s+/g, ' ') .trim(); if (searchTerm.length < 3 || searchTerm.toLowerCase() === 'find' || searchTerm.toLowerCase() === 'search') { const detectedCategory = detectCanonicalCategory(query); searchTerm = detectedCategory || "relevant"; console.log(`[Internal RAG] Using term "${searchTerm}" for link text.`); } else { console.log(`[Internal RAG] Using cleaned term "${searchTerm}" for link text.`); } const params = new URLSearchParams(); if (searchTerm !== "relevant") params.set('q', searchTerm); if (location) { const parts = location.split(',').map(s => s.trim()).filter(Boolean); if (parts.length === 2 && parts[1].length === 2 && parts[1] === parts[1].toUpperCase()) { params.set('city', parts[0]); params.set('state', parts[1]); } else if (parts.length === 1) { const part = parts[0]; if (part.length === 2 && part === part.toUpperCase()) params.set('state', part); else if (part.match(/^\d{5}$/)) params.set('city', part); else params.set('city', part); } } const queryString = params.toString(); let links: string[] = []; const linkQueryText = searchTerm !== "relevant" ? ` for "${searchTerm}"` : ""; if (needsJobs) links.push(`* [Search all **jobs**${linkQueryText} on SkillStrong](/jobs/all?${queryString})`); if (needsPrograms) links.push(`* [Search all **programs**on SkillStrong](/programs/all?${queryString})`); if (links.length > 0) { return `### 🛡️ SkillStrong Search\nYou can also search our internal database directly:\n${links.join('\n')}`; } console.log("[Internal RAG] No relevant links generated despite matching criteria."); return '';}
 
 
 // --- Orchestrate Function (Unchanged) ---
@@ -63,105 +63,80 @@ async function answerLocal(messages: Message[], location?: string): Promise<stri
 async function needsInternetRag(messageContent: string): Promise<boolean> { /* ... (unchanged - skips overview & definitions) ... */ const contentLower = messageContent.toLowerCase().trim(); let skipReason = ""; const isOverviewPrompt = /Give a student-friendly overview.*Use these sections.*🔎\s*Overview/i.test(contentLower); if (isOverviewPrompt) { skipReason = "Message is overview prompt structure"; } if (!skipReason) { const isDefinitionalQuery = /^(what is|what's|define|explain)\b/i.test(contentLower); if (isDefinitionalQuery) { skipReason = "Detected definitional query"; } } if (skipReason) { console.log(`[needsInternetRag] Skipping web because: ${skipReason}. -> FALSE`); return false; } else { console.log("[needsInternetRag] Query is not overview or definition, proceeding with web search. -> TRUE"); return true; }}
 
 
-// --- Web RAG Function (internetRagCSE) ---
-// --- MODIFICATION START: Bias query for general info requests ---
-async function internetRagCSE(query: string, location?: string, canonical?: string | null): Promise<string | null> {
-    console.log("--- [Web RAG] Entered ---");
-    let res: any;
-    try {
-        const lowerQuery = query.toLowerCase();
-        // Check if it's a general info request like "Tell me about X"
-        const isGeneralInfoQuery = /^(tell me about|what is|what's|define|explain)\b/i.test(lowerQuery);
-
-        // Construct base query
-        let q = '';
-        if (isGeneralInfoQuery && canonical) {
-            // For general queries about a known category, bias towards official overview sites
-            q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-            console.log("[Web RAG] Biasing search for general overview (canonical detected).");
-        } else if (isGeneralInfoQuery) {
-            // For general queries *not* about a known category, broader search but still prefer official sites
-             q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-             console.log("[Web RAG] Biasing search for general overview (no canonical).");
-        } else {
-            // For specific searches (jobs, programs, salaries etc.), use original logic
-             const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query)) ? `${canonical} ${query}` : query;
-             q = location ? `${baseQuery} near ${location}` : baseQuery;
-             console.log("[Web RAG] Using standard search logic for specific query.");
-
-             // Apply specific site biases only for non-general queries
-             if (/(salary|pay|wage|median|bls)/i.test(query)) { q += ' (site:bls.gov OR site:onetonline.org)'; }
-             if (/(program|training|certificate|certification|community college|course)/i.test(query)) { q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)'; }
-             if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) { q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)'; }
-        }
-
-        // Add standard filters
-        q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org -site:quora.com -site:pinterest.com';
-
-        // Add location back if it was removed by general query override but originally needed
-        if (isGeneralInfoQuery && location) {
-            q += ` near ${location}`;
-        }
-
-        console.log("[Web RAG] Executing CSE query:", q);
-        // --- Rest of the function remains unchanged ---
-        try { res = await cseSearch(q); } catch (cseError: any) { console.error("[Web RAG] Error DURING cseSearch call:", cseError); console.log("--- [Web RAG] Exiting: cseSearch error ---"); return null; } const items: any[] = Array.isArray(res?.items) ? res.items : []; if (!items.length) { console.log("[Web RAG] CSE Search returned no items."); console.log("--- [Web RAG] Exiting: No search items ---"); return null; } const pages = ( await Promise.all( items.slice(0, 3).map(async (it: any, index: number) => { const url: string | undefined = it.url || it.link; if (!url || !url.startsWith('http')) { console.log(`[Web RAG] Skipping item ${index+1}: Invalid URL: ${url}`); return null; } try { const doc = await fetchReadable(url); if (doc && doc.text) { console.log(`[Web RAG] Fetched/Parsed item ${index+1}: ${url}`); return doc; } else { console.log(`[Web RAG] Failed get readable text item ${index+1}: ${url}`); return null; } } catch (fetchErr) { console.warn(`[Web RAG] Error fetching item ${index+1} (${url}):`, fetchErr); return null; } }) )).filter(Boolean) as Array<{ title: string; url: string; text: string }>; if (!pages.length) { console.log("[Web RAG] No pages fetchable/parsable."); console.log("--- [Web RAG] Exiting: No fetchable pages ---"); return null; } const context = pages.map((p, i) => `[#${i + 1}] Title: ${p.title}\nURL: ${p.url}\nContent:\n${p.text.slice(0, 3000)}\n---`).join('\n\n'); const sys = `${COACH_SYSTEM_WEB_RAG}`; const prompt = `User question: ${query} ${location ? `(Location: ${location})` : ''}\n\nRAG Context:\n---\n${context}\n---\n\nAnswer user question based *only* on context. Cite sources like [#1], [#2].`; try { console.log("[Web RAG] Synthesizing results with LLM."); const out = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.25, messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }]}); let answer = out.choices[0]?.message?.content ?? ''; if (!answer.trim()) { console.log("[Web RAG] LLM synthesis empty."); console.log("--- [Web RAG] Exiting: Empty synthesis ---"); return null; } answer = answer.replace(/\[#(\d+)\](?!\()/g, (match, num) => { const p = pages[parseInt(num)-1]; return p ? `[#${num}](${p.url})` : match; }); const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s); const sourcesMd = '\n\n**Sources**\n' + pages.map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`).join('\n'); console.log("[Web RAG] Synthesis successful."); console.log("--- [Web RAG] Exiting successfully ---"); return answer + sourcesMd; } catch (error) { console.error("[Web RAG] Error during synthesis LLM call:", error); console.log("--- [Web RAG] Exiting: Synthesis error ---"); return null; }
-    } catch (outerError: any) {
-        console.error("[Web RAG] Unexpected error:", outerError);
-        console.log("--- [Web RAG] Exiting: Unexpected error ---");
-        return null;
-    }
-}
-// --- MODIFICATION END ---
+// --- Web RAG Function (internetRagCSE - Includes query biasing) ---
+async function internetRagCSE(query: string, location?: string, canonical?: string | null): Promise<string | null> { /* ... (unchanged - includes general query biasing) ... */ console.log("--- [Web RAG] Entered ---"); let res: any; try { const lowerQuery = query.toLowerCase(); const isGeneralInfoQuery = /^(tell me about|what is|what's|define|explain)\b/i.test(lowerQuery); let q = ''; if (isGeneralInfoQuery && canonical) { q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`; console.log("[Web RAG] Biasing search for general overview (canonical detected)."); } else if (isGeneralInfoQuery) { q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`; console.log("[Web RAG] Biasing search for general overview (no canonical)."); } else { const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query)) ? `${canonical} ${query}` : query; q = location ? `${baseQuery} near ${location}` : baseQuery; console.log("[Web RAG] Using standard search logic for specific query."); if (/(salary|pay|wage|median|bls)/i.test(query)) { q += ' (site:bls.gov OR site:onetonline.org)'; } if (/(program|training|certificate|certification|community college|course)/i.test(query)) { q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)'; } if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) { q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)'; } } q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org -site:quora.com -site:pinterest.com'; if (isGeneralInfoQuery && location) { q += ` near ${location}`; } console.log("[Web RAG] Executing CSE query:", q); try { res = await cseSearch(q); } catch (cseError: any) { console.error("[Web RAG] Error DURING cseSearch call:", cseError); console.log("--- [Web RAG] Exiting: cseSearch error ---"); return null; } const items: any[] = Array.isArray(res?.items) ? res.items : []; if (!items.length) { console.log("[Web RAG] CSE Search returned no items."); console.log("--- [Web RAG] Exiting: No search items ---"); return null; } const pages = ( await Promise.all( items.slice(0, 3).map(async (it: any, index: number) => { const url: string | undefined = it.url || it.link; if (!url || !url.startsWith('http')) { console.log(`[Web RAG] Skipping item ${index+1}: Invalid URL: ${url}`); return null; } try { const doc = await fetchReadable(url); if (doc && doc.text) { console.log(`[Web RAG] Fetched/Parsed item ${index+1}: ${url}`); return doc; } else { console.log(`[Web RAG] Failed get readable text item ${index+1}: ${url}`); return null; } } catch (fetchErr) { console.warn(`[Web RAG] Error fetching item ${index+1} (${url}):`, fetchErr); return null; } }) )).filter(Boolean) as Array<{ title: string; url: string; text: string }>; if (!pages.length) { console.log("[Web RAG] No pages fetchable/parsable."); console.log("--- [Web RAG] Exiting: No fetchable pages ---"); return null; } const context = pages.map((p, i) => `[#${i + 1}] Title: ${p.title}\nURL: ${p.url}\nContent:\n${p.text.slice(0, 3000)}\n---`).join('\n\n'); const sys = `${COACH_SYSTEM_WEB_RAG}`; const prompt = `User question: ${query} ${location ? `(Location: ${location})` : ''}\n\nRAG Context:\n---\n${context}\n---\n\nAnswer user question based *only* on context. Cite sources like [#1], [#2].`; try { console.log("[Web RAG] Synthesizing results with LLM."); const out = await openai.chat.completions.create({ model: 'gpt-4o', temperature: 0.25, messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }]}); let answer = out.choices[0]?.message?.content ?? ''; if (!answer.trim()) { console.log("[Web RAG] LLM synthesis empty."); console.log("--- [Web RAG] Exiting: Empty synthesis ---"); return null; } answer = answer.replace(/\[#(\d+)\](?!\()/g, (match, num) => { const p = pages[parseInt(num)-1]; return p ? `[#${num}](${p.url})` : match; }); const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s); const sourcesMd = '\n\n**Sources**\n' + pages.map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`).join('\n'); console.log("[Web RAG] Synthesis successful."); console.log("--- [Web RAG] Exiting successfully ---"); return answer + sourcesMd; } catch (error) { console.error("[Web RAG] Error during synthesis LLM call:", error); console.log("--- [Web RAG] Exiting: Synthesis error ---"); return null; } } catch (outerError: any) { console.error("[Web RAG] Unexpected error:", outerError); console.log("--- [Web RAG] Exiting: Unexpected error ---"); return null; }}
 
 
-// --- Followup Generation (Added Logging) ---
+// --- MODIFICATION START: Simplified Followup Prompt & Added More Logging ---
 async function generateFollowups(question: string, answer: string, location?: string): Promise<string[]> {
     let finalFollowups: string[] = [];
     let rawResponse = '{"followups": []}'; // Initialize rawResponse
-    try {
-        const systemPrompt = `You are an assistant that generates relevant follow-up suggestions for a career coach chatbot... (rest unchanged - includes scoring criteria)`;
-        const userMessage = `User Question: "${question}"\nAI Answer: "${answer}"\n${location ? `User Location: "${location}"` : ''}\n\nGenerate JSON object with 3 high-quality followups:`;
 
-        console.log("[Followups] Calling gpt-4o for followups with scoring criteria.");
+    try {
+        // Simplified prompt focusing on relevance and format
+        const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
+Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 3 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+
+**RULES:**
+1.  Prompts MUST be directly related to the specific topics in the question or answer.
+2.  Prompts SHOULD encourage exploration (e.g., "Find local programs," "Compare salaries").
+3.  AVOID generic prompts ("Anything else?", "More info?").
+4.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
+
+        const userMessage = `User Question: "${question}"
+AI Answer: "${answer}"
+${location ? `User Location: "${location}"` : ''}
+
+Generate JSON object with 3 relevant followups:`;
+
+        console.log("[Followups] Calling gpt-4o for followups.");
         const res = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            temperature: 0.5,
+            model: 'gpt-4o', // Sticking with 4o
+            temperature: 0.6, // Slightly increased temperature for variety
             response_format: { type: "json_object" },
             messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userMessage },
-        ],});
-        rawResponse = res.choices[0]?.message?.content ?? '{"followups": []}'; // Assign raw response here
-        console.log("[Followups] Raw LLM Response:", rawResponse); // Log the raw response
+            ],
+            // max_tokens: 100 // Optional: Limit token output if needed
+        });
+        rawResponse = res.choices[0]?.message?.content ?? '{"followups": []}';
+        console.log("[Followups] Raw LLM Response:", rawResponse);
 
-        const parsed = JSON.parse(rawResponse); // Attempt to parse
-        if (parsed.followups && Array.isArray(parsed.followups) && parsed.followups.length > 0) {
-            finalFollowups = parsed.followups;
-            console.log("[Followups] Successfully Parsed:", finalFollowups);
-        } else {
-            // Even if the key exists but the array is empty, log a warning
-            if (parsed.hasOwnProperty('followups')) {
-                 console.warn("[Followups] Parsed 'followups' key, but the array is empty or invalid.");
+        // More robust parsing check
+        try {
+            const parsed = JSON.parse(rawResponse);
+            if (parsed && parsed.followups && Array.isArray(parsed.followups)) {
+                 // Further check: ensure array elements are strings
+                 const stringFollowups = parsed.followups.filter((item: any): item is string => typeof item === 'string' && item.trim().length > 0);
+                 if (stringFollowups.length > 0) {
+                     finalFollowups = stringFollowups;
+                     console.log("[Followups] Successfully Parsed:", finalFollowups);
+                 } else {
+                     console.warn("[Followups] Parsed 'followups' array, but it contained no valid non-empty strings.");
+                 }
             } else {
-                 console.warn("[Followups] Failed to parse 'followups' key from raw response.");
+                 console.warn("[Followups] Failed to parse a valid 'followups' array from raw response.");
             }
+        } catch (parseError) {
+             console.error("[Followups] JSON Parsing Error:", parseError);
+             console.error("[Followups] Raw response that caused parsing error:", rawResponse);
         }
-    } catch (error: any) { // Catch JSON parse errors too
-        console.error("[Followups] Error generating or parsing follow-ups:", error);
-        console.error("[Followups] Raw response that may have caused error:", rawResponse); // Log raw response on error
+
+    } catch (error: any) {
+        console.error("[Followups] Error calling OpenAI for follow-ups:", error);
     }
 
-    // Fallback logic - check if finalFollowups actually has items after sanitization
-    const sanitizedFollowups = sanitizeFollowups(finalFollowups); // Sanitize *before* deciding on fallback
+    // Fallback logic
+    const sanitizedFollowups = sanitizeFollowups(finalFollowups); // Sanitize whatever we got
     if (sanitizedFollowups.length > 0) {
         return sanitizedFollowups;
     } else {
-        // If sanitization resulted in an empty array OR generation failed completely
-        console.warn("[Followups] Falling back to defaults for question:", question);
+        console.warn("[Followups] No valid followups generated or parsed, falling back to defaults for question:", question);
         return defaultFollowups();
     }
 }
+// --- MODIFICATION END ---
 
 
 // --- Sanitization and Defaults (Unchanged) ---
