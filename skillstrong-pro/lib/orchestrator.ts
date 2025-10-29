@@ -108,24 +108,28 @@ function getDomain(url: string | null | undefined): string | null {
   }
 }
 
-// --- Internal Database Link Generation (Unchanged) ---
+// --- MODIFICATION START: Internal Database Link Generation (Simplified) ---
 async function queryInternalDatabase(
   query: string,
   location?: string
 ): Promise<string> {
   const lowerQuery = query.toLowerCase();
+  // Check for trigger keywords
   const needsJobs = /\b(jobs?|openings?|hiring|apprenticeships?)\b/i.test(
     lowerQuery
   );
   const needsPrograms = /\b(programs?|training|certificates?|courses?|schools?|college)\b/i.test(
     lowerQuery
   );
+  // Check for location mention (required to trigger)
   const hasLocationSpecifier =
     /near me|local|in my area|nearby/i.test(lowerQuery) ||
     !!location ||
     /\b\d{5}\b/.test(query) ||
     /\b[A-Z]{2}\b/.test(query);
 
+  // --- TRIGGER GUARD ---
+  // Must ask for jobs/programs AND mention a location to proceed
   if (!((needsJobs || needsPrograms) && hasLocationSpecifier)) {
     console.log(
       '[Internal RAG] Skipping: Query lacks specific job/program keywords or location.'
@@ -133,57 +137,18 @@ async function queryInternalDatabase(
     return '';
   }
 
-  console.log('[Internal RAG] Generating internal search links (keyword-only).');
+  console.log('[Internal RAG] Generating internal search links (no query).');
 
-  let searchTerm = detectCanonicalCategory(query);
-  let linkQueryText = '';
-
-  if (searchTerm) {
-    if (searchTerm === 'Robotics Technician') searchTerm = 'Robotics';
-    if (searchTerm === 'CNC Machinist') searchTerm = 'CNC';
-    if (searchTerm === 'Maintenance Tech') searchTerm = 'Maintenance';
-    if (searchTerm === 'Quality Control Specialist') searchTerm = 'Quality Control';
-    
-    console.log(`[Internal RAG] Using detected category "${searchTerm}" for search term.`);
-    linkQueryText = ` for "${searchTerm}"`;
-  } else {
-    searchTerm = query
-      .replace(/near me|local|in my area|nearby/gi, '')
-      .replace(/\b(jobs?|openings?|hiring|apprenticeships?)\b/gi, '')
-      .replace(/\b(programs?|training|certificates?|courses?|schools?|college)\b/gi, '')
-      .replace(/in\s+([A-Za-z\s]+,\s*[A-Z]{2}|\d{5}|[A-Z]{2})\b/gi, '')
-      .replace(/find|search for|search|about|tell me about/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (searchTerm.length < 3) {
-      console.log(
-        '[Internal RAG] No category detected and cleaned term is too short. No link will be generated.'
-      );
-      return '';
-    }
-
-    console.log(
-      `[Internal RAG] Using cleaned search term "${searchTerm}" for search term.`
-    );
-    linkQueryText = ` for "${searchTerm}"`;
-  }
-
-  const params = new URLSearchParams();
-  if (searchTerm) {
-    params.set('q', searchTerm);
-  }
-
-  const queryString = params.toString();
   let links: string[] = [];
-
+  
+  // Per your request, links are now hardcoded to the main search pages
   if (needsJobs)
     links.push(
-      `* [Search all **jobs**${linkQueryText} on SkillStrong](/jobs/all?${queryString})`
+      `* [Search all **jobs** on SkillStrong](/jobs/all)`
     );
   if (needsPrograms)
     links.push(
-      `* [Search all **programs**${linkQueryText} on SkillStrong](/programs/all?${queryString})`
+      `* [Search all **programs** on SkillStrong](/programs/all)`
     );
 
   if (links.length > 0) {
@@ -191,10 +156,11 @@ async function queryInternalDatabase(
 You can also search our internal database directly:
 ${links.join('\n')}`;
   }
-
-  console.log('[Internal RAG] No relevant links generated.');
+  
   return '';
 }
+// --- MODIFICATION END ---
+
 
 // --- Orchestrate Function (Unchanged) ---
 export async function orchestrate(
@@ -353,7 +319,7 @@ export async function orchestrate(
   return { answer: finalAnswerWithFeatured.trim(), followups };
 }
 
-// --- MODIFICATION START: Updated Domain Guard (Added 'qc') ---
+// --- Domain Guard (Unchanged) ---
 async function domainGuard(messages: Message[]): Promise<boolean> {
   if (!messages.some((m) => m.role === 'user')) return true;
   const lastUserMessage = messages[messages.length - 1];
@@ -361,7 +327,6 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   const lastUserQuery = lastUserMessage.content || '';
   if (!lastUserQuery.trim()) return true;
 
-  // Added 'qc' to the regex
   const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam)\b/i;
 
   if (allowHints.test(lastUserQuery)) {
@@ -402,7 +367,6 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
     return true;
   }
 }
-// --- MODIFICATION END ---
 
 // --- Base Answer Generation (Unchanged) ---
 async function answerLocal(
@@ -455,7 +419,7 @@ async function needsInternetRag(messageContent: string): Promise<boolean> {
   }
 }
 
-// --- MODIFICATION START: Web RAG Function (internetRagCSE) ---
+// --- MODIFICATION START: Web RAG Function (internetRagCSE - Updated Query Logic) ---
 async function internetRagCSE(
   query: string,
   location?: string,
@@ -469,67 +433,54 @@ async function internetRagCSE(
       lowerQuery
     );
     
-    // --- New Platform Detection ---
+    // --- Platform Detection ---
     let platformSite = "";
-    if (/\bcoursera\b/i.test(lowerQuery)) {
-        platformSite = "site:coursera.org";
-    } else if (/\budemy\b/i.test(lowerQuery)) {
-        platformSite = "site:udemy.com";
-    } else if (/\bedx\b/i.test(lowerQuery)) {
-         platformSite = "site:edx.org";
-    }
+    if (/\bcoursera\b/i.test(lowerQuery)) platformSite = "site:coursera.org";
+    else if (/\budemy\b/i.test(lowerQuery)) platformSite = "site:udemy.com";
+    else if (/\bedx\b/i.test(lowerQuery)) platformSite = "site:edx.org";
     // --- End Platform Detection ---
 
     let q = '';
+    
+    // Extract location string (e.g., "San Ramon" or "San Ramon, CA")
+    const locationSearchTerm = location ? `"${location.split(',')[0]}"` : ""; // Use city name
+
     if (isGeneralInfoQuery && canonical) {
       q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-      console.log(
-        '[Web RAG] Biasing search for general overview (canonical detected).'
-      );
+      console.log('[Web RAG] Biasing search for general overview (canonical detected).');
     } else if (isGeneralInfoQuery) {
       q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-      console.log(
-        '[Web RAG] Biasing search for general overview (no canonical).'
-      );
+      console.log('[Web RAG] Biasing search for general overview (no canonical).');
     } else {
-      const baseQuery =
-        canonical &&
-        /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(
-          query
-        )
-          ? `${canonical} ${query}`
-          : query;
-      q = location ? `${baseQuery} near ${location}` : baseQuery;
-      console.log('[Web RAG] Using standard search logic for specific query.');
+      // This is a specific query (jobs, programs, salary, etc.)
+      const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query))
+          ? `"${canonical}" ${query}` // Use canonical + query
+          : `"${query}"`; // Use full query
+      
+      q = baseQuery;
+      
+      // --- New Location Logic ---
+      if (locationSearchTerm) {
+          q += ` ${locationSearchTerm}`; // Add "San Ramon" to the query
+          console.log(`[Web RAG] Added location term to query: ${locationSearchTerm}`);
+      } else {
+           console.log('[Web RAG] Using standard search logic for specific query (no location).');
+      }
+      // --- End New Location Logic ---
       
       // Add platform bias if detected
       if (platformSite) {
           console.log(`[Web RAG] Adding platform bias: ${platformSite}`);
-          q += ` (${platformSite})`; // Add platform site as a preferred option
+          q += ` (${platformSite})`;
       } else {
-          // Only add default biases if a specific platform wasn't mentioned
-          if (/(salary|pay|wage|median|bls)/i.test(query)) {
-            q += ' (site:bls.gov OR site:onetonline.org)';
-          }
-          if (
-            /(program|training|certificate|certification|community college|course)/i.test(
-              query
-            )
-          ) {
-            q +=
-              ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)';
-          }
-          if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) {
-            q +=
-              ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)';
-          }
+          // Add default biases *only if* a specific platform wasn't mentioned
+          if (/(salary|pay|wage|median|bls)/i.test(query)) q += ' (site:bls.gov OR site:onetonline.org)';
+          if (/(program|training|certificate|certification|community college|course)/i.test(query)) q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)';
+          if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)';
       }
     }
-    q +=
-      ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org -site:quora.com -site:pinterest.com';
-    if (isGeneralInfoQuery && location) {
-      q += ` near ${location}`;
-    }
+    
+    q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org -site:quora.com -site:pinterest.com';
     
     console.log('[Web RAG] Executing CSE query:', q);
     
@@ -548,7 +499,7 @@ async function internetRagCSE(
       return null;
     }
     
-    // ... rest of the function (fetchReadable, synthesize) is unchanged ...
+    // --- Rest of function is unchanged ---
     const pages = (
       await Promise.all(
         items.slice(0, 3).map(async (it: any, index: number) => {
@@ -651,7 +602,7 @@ async function generateFollowups(
   let rawResponse = '{"followups": []}';
   try {
     const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
-Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 3 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of upto 5 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
 
 **RULES:**
 1.  Prompts MUST be directly related to the specific topics in the question or answer.
@@ -663,7 +614,7 @@ Based on the User Question and AI Answer, generate a JSON object with a key "fol
 AI Answer: "${answer}"
 ${location ? `User Location: "${location}"` : ''}
 
-Generate JSON object with 3 relevant followups:`;
+Generate JSON object with 5 relevant followups:`;
 
     console.log('[Followups] Calling gpt-4o for followups.');
     const res = await openai.chat.completions.create({
@@ -724,7 +675,7 @@ Generate JSON object with 3 relevant followups:`;
 // --- Sanitization and Defaults (Unchanged) ---
 function sanitizeFollowups(arr: any[]): string[] {
   const MAX_LEN = 65;
-  const MAX_PROMPTS = 3;
+  const MAX_PROMPTS = 5;
   return arr
     .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
     .map((s) => {
