@@ -108,7 +108,7 @@ function getDomain(url: string | null | undefined): string | null {
   }
 }
 
-// --- MODIFICATION START: Internal Database Link Generation (Simplified) ---
+// --- MODIFICATION START: Internal Database Link Generation (Fixed) ---
 async function queryInternalDatabase(
   query: string,
   location?: string
@@ -141,7 +141,7 @@ async function queryInternalDatabase(
 
   let links: string[] = [];
   
-  // Per your request, links are now hardcoded to the main search pages
+  // --- FIXED: Hardcode links to the main pages as requested ---
   if (needsJobs)
     links.push(
       `* [Search all **jobs** on SkillStrong](/jobs/all)`
@@ -150,6 +150,7 @@ async function queryInternalDatabase(
     links.push(
       `* [Search all **programs** on SkillStrong](/programs/all)`
     );
+  // --- END FIX ---
 
   if (links.length > 0) {
     return `### 🛡️ SkillStrong Search
@@ -162,13 +163,35 @@ ${links.join('\n')}`;
 // --- MODIFICATION END ---
 
 
-// --- Orchestrate Function (Unchanged) ---
+// --- MODIFICATION START: Orchestrate Function (Added Location Extraction) ---
 export async function orchestrate(
   input: OrchestratorInput
 ): Promise<OrchestratorOutput> {
   const originalMessages = input.messages;
   const lastUserRaw =
     [...originalMessages].reverse().find((m) => m.role === 'user')?.content ?? '';
+
+  // --- NEW LOCATION EXTRACTION LOGIC ---
+  let effectiveLocation = input.location; // Start with the context location
+  if (!effectiveLocation) {
+    // If context location is not set, try to extract from the query
+    // This regex looks for "in/near/around [City]" or "[City, ST]" or "[ZIP]"
+    const locationMatch = lastUserRaw.match(
+      /\b(in|near|around)\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i
+    );
+    if (locationMatch) {
+      // Prioritize the captures: 
+      // 1. (City, ST)
+      // 2. (near/in City)
+      // 3. (ZIP)
+      effectiveLocation = (locationMatch[4] || locationMatch[2] || locationMatch[3] || "").trim().replace(/,$/, '');
+      if (effectiveLocation) {
+        console.log(`[Orchestrate] Extracted location from query: "${effectiveLocation}"`);
+      }
+    }
+  }
+  // --- END NEW LOCATION EXTRACTION LOGIC ---
+
   const isFirstUserMessage =
     originalMessages.filter((m) => m.role === 'user').length === 1;
   const canonical = detectCanonicalCategory(lastUserRaw);
@@ -189,6 +212,8 @@ export async function orchestrate(
       canonical
     );
   }
+  
+  // 1. Domain Guard
   const inDomain = await domainGuard(originalMessages);
   if (!inDomain) {
     console.log(
@@ -201,14 +226,18 @@ export async function orchestrate(
     };
   }
   console.log('[Orchestrate] Domain Guard: IN DOMAIN for query:', lastUserRaw);
+
+  // 2. Check for missing location (using effectiveLocation)
   const isLocalQuery =
-    /near me|local|in my area|nearby|\b\d{5}\b|[A-Z]{2}\b/i.test(lastUserRaw) ||
+    /near me|local|in my area|nearby|\b\d{5}\b|[A-Z]{2}\b/i.test(lastUserRaw.toLowerCase()) ||
     /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|tuition|start date|admission|employer|provider|scholarship)\b/i.test(
       lastUserRaw.toLowerCase()
     );
-  if (isLocalQuery && !input.location) {
+
+  // This check is now correct: if the query *is* local AND our *effectiveLocation* is still null, ask user.
+  if (isLocalQuery && !effectiveLocation) {
     console.log(
-      '[Orchestrate] Local query detected but location is missing. Asking user.'
+      '[Orchestrate] Local query detected but location is missing and not in query. Asking user.'
     );
     return {
       answer:
@@ -216,12 +245,18 @@ export async function orchestrate(
       followups: [],
     };
   }
+
+  // 3. Generate Internal RAG Links (passing effectiveLocation)
   const internalRAG = await queryInternalDatabase(
     lastUserRaw,
-    input.location ?? undefined
+    effectiveLocation ?? undefined
   );
+  
+  // 4. Decide if Web RAG is needed
   const needWeb = await needsInternetRag(messageContentForRAGDecision);
   console.log(`[Orchestrate] Decision: needsInternetRag = ${needWeb}`);
+
+  // 5. Perform Web RAG if needed (passing effectiveLocation)
   let webAnswer = null;
   if (needWeb) {
     console.log(
@@ -230,7 +265,7 @@ export async function orchestrate(
     try {
       webAnswer = await internetRagCSE(
         lastUserRaw,
-        input.location ?? undefined,
+        effectiveLocation ?? undefined, // Use the (potentially extracted) location
         canonical
       );
       if (webAnswer) console.log('[Orchestrate] Web RAG successful.');
@@ -242,6 +277,8 @@ export async function orchestrate(
   } else {
     console.log(`[Orchestrate] Skipping Web Search.`);
   }
+
+  // 6. Combine Context for Final LLM Call (unchanged)
   let combinedContext = '';
   if (webAnswer) {
     const webHeading = internalRAG
@@ -276,6 +313,8 @@ export async function orchestrate(
       '[Orchestrate] No RAG context generated (Web search skipped/failed, no internal links triggered).'
     );
   }
+  
+  // 7. Build Message List for Final LLM Call (unchanged)
   const messagesForFinalAnswer = [...messagesForLLM];
   if (combinedContext) {
     messagesForFinalAnswer.push({
@@ -286,19 +325,23 @@ export async function orchestrate(
   } else {
     console.log('[Orchestrate] No RAG context added to final LLM call.');
   }
+
+  // 8. Generate Final Answer (passing effectiveLocation)
   const finalAnswer = await answerLocal(
     messagesForFinalAnswer,
-    input.location ?? undefined
+    effectiveLocation ?? undefined
   );
   console.log('[Orchestrate] Generated final answer from LLM.');
+
+  // 9. Add Featured Listings (passing effectiveLocation)
   let finalAnswerWithFeatured = finalAnswer;
   try {
     const featured = await findFeaturedMatching(
       lastUserRaw,
-      input.location ?? undefined
+      effectiveLocation ?? undefined
     );
     if (Array.isArray(featured) && featured.length > 0) {
-      const locTxt = input.location ? ` near ${input.location}` : '';
+      const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
       const lines = featured
         .map((f) => `- **${f.title}** — ${f.org} (${f.location})`)
         .join('\n');
@@ -310,16 +353,21 @@ export async function orchestrate(
   } catch (err) {
     console.error('[Orchestrate] Error fetching/appending featured items:', err);
   }
+  
+  // 10. Generate Followups (passing effectiveLocation)
   const followups = await generateFollowups(
     lastUserRaw,
     finalAnswerWithFeatured,
-    input.location ?? undefined
+    effectiveLocation ?? undefined
   );
   console.log('[Orchestrate] Generated followups.');
+  
   return { answer: finalAnswerWithFeatured.trim(), followups };
 }
+// --- MODIFICATION END ---
 
-// --- Domain Guard (Unchanged) ---
+
+// --- MODIFICATION START: Updated Domain Guard (More Permissive Regex) ---
 async function domainGuard(messages: Message[]): Promise<boolean> {
   if (!messages.some((m) => m.role === 'user')) return true;
   const lastUserMessage = messages[messages.length - 1];
@@ -327,7 +375,8 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   const lastUserQuery = lastUserMessage.content || '';
   if (!lastUserQuery.trim()) return true;
 
-  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam)\b/i;
+  // Added 'qc', 'diablo valley', 'chabot', 'college', 'visit', 'contact'
+  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact)\b/i;
 
   if (allowHints.test(lastUserQuery)) {
     console.log(
@@ -367,6 +416,7 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
     return true;
   }
 }
+// --- MODIFICATION END ---
 
 // --- Base Answer Generation (Unchanged) ---
 async function answerLocal(
@@ -443,25 +493,30 @@ async function internetRagCSE(
     let q = '';
     
     // Extract location string (e.g., "San Ramon" or "San Ramon, CA")
-    const locationSearchTerm = location ? `"${location.split(',')[0]}"` : ""; // Use city name
+    // Use the full location string if available, otherwise just the city
+    const locationSearchTerm = location ? `"${location}"` : ""; 
 
     if (isGeneralInfoQuery && canonical) {
       q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-      console.log('[Web RAG] Biasing search for general overview (canonical detected).');
+      console.log(
+        '[Web RAG] Biasing search for general overview (canonical detected).'
+      );
     } else if (isGeneralInfoQuery) {
       q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-      console.log('[Web RAG] Biasing search for general overview (no canonical).');
+      console.log(
+        '[Web RAG] Biasing search for general overview (no canonical).'
+      );
     } else {
       // This is a specific query (jobs, programs, salary, etc.)
       const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query))
-          ? `"${canonical}" ${query}` // Use canonical + query
-          : `"${query}"`; // Use full query
+          ? `"${canonical}" ${query.replace(canonical, '')}` // Use canonical + rest of query
+          : `"${query}"`; // Use full query in quotes
       
       q = baseQuery;
       
       // --- New Location Logic ---
       if (locationSearchTerm) {
-          q += ` ${locationSearchTerm}`; // Add "San Ramon" to the query
+          q += ` ${locationSearchTerm}`; // Add "San Ramon, CA" to the query
           console.log(`[Web RAG] Added location term to query: ${locationSearchTerm}`);
       } else {
            console.log('[Web RAG] Using standard search logic for specific query (no location).');
@@ -602,7 +657,7 @@ async function generateFollowups(
   let rawResponse = '{"followups": []}';
   try {
     const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
-Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of upto 5 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
 
 **RULES:**
 1.  Prompts MUST be directly related to the specific topics in the question or answer.
@@ -614,7 +669,7 @@ Based on the User Question and AI Answer, generate a JSON object with a key "fol
 AI Answer: "${answer}"
 ${location ? `User Location: "${location}"` : ''}
 
-Generate JSON object with 5 relevant followups:`;
+Generate JSON object with 4 relevant followups:`;
 
     console.log('[Followups] Calling gpt-4o for followups.');
     const res = await openai.chat.completions.create({
@@ -675,7 +730,7 @@ Generate JSON object with 5 relevant followups:`;
 // --- Sanitization and Defaults (Unchanged) ---
 function sanitizeFollowups(arr: any[]): string[] {
   const MAX_LEN = 65;
-  const MAX_PROMPTS = 5;
+  const MAX_PROMPTS = 4;
   return arr
     .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
     .map((s) => {
