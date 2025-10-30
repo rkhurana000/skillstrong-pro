@@ -657,7 +657,7 @@ async function generateFollowups(
   let rawResponse = '{"followups": []}';
   try {
     const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
-Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 3 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
 
 **RULES:**
 1.  Prompts MUST be directly related to the specific topics in the question or answer.
@@ -669,7 +669,7 @@ Based on the User Question and AI Answer, generate a JSON object with a key "fol
 AI Answer: "${answer}"
 ${location ? `User Location: "${location}"` : ''}
 
-Generate JSON object with 4 relevant followups:`;
+Generate JSON object with 3 relevant followups:`;
 
     console.log('[Followups] Calling gpt-4o for followups.');
     const res = await openai.chat.completions.create({
@@ -730,7 +730,7 @@ Generate JSON object with 4 relevant followups:`;
 // --- Sanitization and Defaults (Unchanged) ---
 function sanitizeFollowups(arr: any[]): string[] {
   const MAX_LEN = 65;
-  const MAX_PROMPTS = 4;
+  const MAX_PROMPTS = 3;
   return arr
     .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
     .map((s) => {
