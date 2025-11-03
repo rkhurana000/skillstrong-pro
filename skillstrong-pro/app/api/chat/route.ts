@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     const responseStream = await openai.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.3,
-      messages: [...systemMessages, ...messagesForLLM] as any, // <-- Fix 1
+      messages: [...systemMessages, ...messagesForLLM] as any, // Fix 1
       stream: true,
     });
 
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     const data = new experimental_StreamData();
 
     // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v3 style)
-    const stream = OpenAIStream(responseStream as any, { // <-- THE NEW FIX
+    const stream = OpenAIStream(responseStream as any, { // Fix 2
       onFinal: async (completion) => {
         // This logic runs *after* the stream is done
         
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         try {
           const featured = await findFeaturedMatching(
             lastUserRaw,
-            effectiveLocation
+            effectiveLocation ?? undefined // <-- THE FINAL FIX
           );
           if (Array.isArray(featured) && featured.length > 0) {
             const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
