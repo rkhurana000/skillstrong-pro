@@ -98,11 +98,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       );
 
       // 3. Save the conversation
-      
-      // --- THIS IS THE FIX ---
       // const convoId = activeConvoId || searchParams.get('id'); // <-- THIS WAS THE BUG
       const convoId = activeConvoId; // <-- THIS IS THE FIX. Trust the state.
-      // --- END FIX ---
 
       try {
         const savedConvo = await saveConversation({
@@ -122,12 +119,16 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
 
+        // --- FIX #2: Simplified state and URL update ---
         if (!convoId || convoId.startsWith('temp-')) {
           setActiveConvoId(finalId);
-          router.push(`${pathname}?id=${finalId}`);
+          // Use router.replace to update URL without adding to history
+          router.replace(`${pathname}?id=${finalId}`);
         } else {
           setActiveConvoId(convoId);
         }
+        // --- END FIX #2 ---
+
       } catch (saveError) {
         console.error("Failed to save conversation:", saveError);
       }
@@ -164,7 +165,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      
-     // --- THIS FIX IS FOR THE LOCATION BUG ---
+     // --- THIS IS FOR THE LOCATION BUG ---
      // Pass the *current* location and provider on every submit
      chatHandleSubmit(e, {
         options: {
@@ -178,7 +179,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     
-    // --- THIS FIX IS FOR THE LOCATION BUG ---
+    // --- THIS IS FOR THE LOCATION BUG ---
     // Pass the *current* location and provider on every append
     chatAppend({ role: 'user', content: prompt }, {
         options: {
@@ -193,10 +194,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     setActiveConvoId(null);
     setCurrentFollowUps([]);
     initialUrlHandled.current = true;
-    router.push(pathname);
+    
+    // --- FIX #1: This now clears the URL query string ---
+    router.push('/chat'); 
+    // --- END FIX #1 ---
   };
   
-  // --- saveConversation (with debug logs) ---
+  // --- saveConversation (This logic is now correct) ---
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
     // Generate title ONLY if it's a new conversation (no ID) and has at least 2 messages
     if (!convo.id && convo.messages && convo.messages.length >= 2) {
@@ -221,8 +225,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          console.error("[ChatClient] Error fetching title:", e); // DEBUG
          convo.title = 'New Conversation'; // Fallback
        }
-    } else {
-       console.log("[ChatClient] Existing conversation, skipping title generation."); // DEBUG
+    } else if (convo.id) {
+       console.log(`[ChatClient] Existing conversation (${convo.id}), skipping title generation.`); // DEBUG
     }
     
     // Save to DB
