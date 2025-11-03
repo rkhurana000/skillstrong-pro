@@ -22,7 +22,6 @@ export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guid
 
 **Non-Negotiable Rules:**
 1.  **Prioritize RAG Context & Synthesize Overviews:** Your system context may contain "Web Results" (with citations) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
-    * **--- FIX: Updated Citation Rule ---**
     * **Preserve Inline Citations:** Your "Web Results" context may contain clickable inline citations like \`[#1](...url...)\`. You **MUST preserve these markdown links** exactly as they appear in the context.
     * **If "Web Results" are provided:** Synthesize your answer *directly* from this text.
     * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. Only mention the failed search if the user explicitly asked for local/current specifics. Otherwise, provide the general answer seamlessly.
@@ -343,27 +342,34 @@ export async function generateFollowups(
   let finalFollowups: string[] = [];
   let rawResponse = '{"followups": []}';
   try {
+    // --- FIX #2: New, more specific prompt ---
     const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
-Based on the conversation context, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+Based on the **final assistant answer** in the conversation, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars) and highly specific follow-up prompts.
 
-**RULES:**
-1.  Prompts MUST be contextually relevant to the *last* exchange in the conversation.
-2.  Prompts SHOULD encourage exploration (e.g., "Find local programs," "Compare salaries").
-3.  **Prompts MUST NOT include specific locations** (e.g., "Find jobs in San Ramon"). Use generic terms like "nearby" or "in my area" if location is relevant.
-4.  AVOID generic prompts ("Anything else?", "More info?").
-5.  AVOID repeating prompts that are similar to the last user question.
-6.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
+**CRITICAL INSTRUCTIONS:**
+1.  **Analyze the Answer:** Read the *last assistant answer* and extract key terms, skills, certifications, or tool names (e.g., "Core Skills," "Helpful Certs," "PLC Programming," "AWS Certified Welder").
+2.  **Be Specific:** Your follow-ups MUST be based on these extracted terms.
+    -   **Bad (Generic):** "Find local programs"
+    -   **Good (Specific):** "Find 'Robotics Technician' programs near me"
+    -   **Bad (Generic):** "Tell me about certifications"
+    -   **Good (Specific):** "Compare 'Certified Robotics Technician' certs"
+3.  **Action-Oriented:** Use verbs like "Compare," "Find," "Explore," "What is..."
+4.  **Format:** Return ONLY the JSON object. Example: {"followups": ["Explore 'Core Skills' for this role", "What is 'PLC Programming'?", "Find 'Certified Robotics Technician (CRT)' courses"]}
+5.  **Location:** If the user's location is known, you can use generic phrases like "near me" or "in my area". Do not hardcode the location.`;
+    // --- END FIX ---
 
     // Create a formatted context string of the last 4 messages
     const contextMessages = messages.slice(-4);
-    const contextString = contextMessages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
-    // Add the final answer to the context
-    const fullContext = `${contextString}\n\nAssistant: ${finalAnswer}`;
+    // Get the last user message
+    const lastUserMessage = contextMessages.findLast(m => m.role === 'user')?.content || '';
+
+    // The context for the AI is now *just* the last user question and the final answer
+    const fullContext = `User: ${lastUserMessage}\n\nAssistant: ${finalAnswer}`;
 
 
     const userMessage = `Conversation Context:\n---\n${fullContext}\n---\n${location ? `User Location: "${location}"` : ''}
 
-Generate JSON object with 4 relevant followups:`;
+Generate JSON object with 4 relevant followups based on the *assistant's* answer:`;
 
     const res = await openai.chat.completions.create({
       model: 'gpt-4o',
