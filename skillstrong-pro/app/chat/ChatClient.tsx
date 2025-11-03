@@ -68,6 +68,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
     onFinish: async (message) => {
+      // `message` is the final assistant message (unenriched)
+      // `chatData` holds the enriched data from the stream
+      
       let finalAnswer = message.content;
       let finalData = null;
 
@@ -89,6 +92,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       }
       
       // 2. Create the final message list for saving
+      // `chatMessages` at this point already contains the final (unenriched) assistant message
       const finalMessagesForSave = chatMessages.map(m => 
         m.id === message.id ? { ...m, content: finalAnswer } : m
       );
