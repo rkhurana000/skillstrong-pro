@@ -1,10 +1,10 @@
 // /app/api/chat/route.ts
 import {
+  OpenAIStream,
   StreamingTextResponse,
   experimental_StreamData,
-  streamText,
-} from 'ai';
-import { OpenAI } from '@ai-sdk/openai';
+} from 'ai'; // <--- Vercel AI SDK v2 imports
+import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Import our refactored orchestrator functions
@@ -16,15 +16,12 @@ import {
 } from '@/lib/orchestrator';
 
 // Import findFeaturedMatching from its correct source file
-import { findFeaturedMatching }from '@/lib/marketplace';
+import { findFeaturedMatching } from '@/lib/marketplace';
 
 export const runtime = 'nodejs'; // Must be nodejs for supabaseAdmin
 export const dynamic = 'force-dynamic';
 
-// Initialize the SDK's OpenAI client
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY 
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Helper to provide default followups on error
 function defaultFollowups(): string[] {
@@ -59,24 +56,32 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Prepare the final LLM call
-    const systemPrompt = [
-      COACH_SYSTEM,
-      effectiveLocation ? `User location: ${effectiveLocation}` : ''
-    ].join('\n');
+    const systemMessages: Message[] = [
+      { role: 'system', content: COACH_SYSTEM },
+    ];
+    if (effectiveLocation) {
+      systemMessages.push({
+        role: 'system',
+        content: `User location: ${effectiveLocation}`,
+      });
+    }
 
+    // 4. Create the OpenAI stream
+    const responseStream = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      temperature: 0.3,
+      messages: [...systemMessages, ...messagesForLLM],
+      stream: true,
+    });
 
-    // 4. Initialize Vercel AI SDK StreamData
+    // 5. Initialize Vercel AI SDK StreamData
     const data = new experimental_StreamData();
 
-    // 5. Call streamText
-    const result = await streamText({
-      model: openai.chat('gpt-4o'), // Use .chat() to get the model
-      system: systemPrompt,
-      messages: messagesForLLM,
-      onFinish: async (result) => {
+    // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v2 style)
+    const stream = OpenAIStream(responseStream, {
+      onFinal: async (completion) => {
         // This logic runs *after* the stream is done
-        const completion = result.text; // Get the full text
-
+        
         // a. Find Featured Listings
         let answerWithFeatured = completion;
         try {
@@ -98,6 +103,7 @@ export async function POST(req: NextRequest) {
         // b. Add "Next Steps"
         let finalAnswerWithSteps = answerWithFeatured;
         if (internalRAG) {
+          // Check if we triggered the internal search
           finalAnswerWithSteps = finalAnswerWithSteps.replace(
             /(\n\n\*\*Next Steps:\*\*.*)/is,
             ''
@@ -118,19 +124,20 @@ You can also search for more opportunities on your own:
         );
 
         // d. Append final data to the StreamData
-        data.append({
+        data.append(JSON.stringify({ // v2 expects a string
           finalAnswer: finalAnswerWithSteps,
           followups: followups,
-        });
+        }));
 
         // e. Close the StreamData
         data.close();
+
       },
       experimental_streamData: true, // Tell it to use the data stream
     });
 
     // 7. Return the streaming response
-    return result.toDataStreamResponse(data);
+    return new StreamingTextResponse(stream, {}, data);
     
   } catch (e: any) {
     if (e.message === 'LOCATION_REQUIRED') {
