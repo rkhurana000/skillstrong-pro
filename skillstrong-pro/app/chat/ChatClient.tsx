@@ -304,6 +304,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
    useEffect(() => {
     console.log("[ChatClient] URL Effect running..."); // DEBUG
     // --- THIS IS THE CRITICAL FIX ---
+    // This check now prevents the race condition
     if (initialUrlHandled.current || chatMessages.length > 0) {
       console.log("[ChatClient] URL Effect: Skipping, already handled or has messages."); // DEBUG
       return;
