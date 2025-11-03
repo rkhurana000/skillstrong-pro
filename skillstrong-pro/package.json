@@ -8,7 +8,7 @@
     "start": "next start",
     "postinstall": "next telemetry disable || true"
   },
-  "dependencies": {
+ "dependencies": {
     "next": "14.2.5",
     "openai": "^4.58.1",
     "@google/generative-ai": "^0.21.0",
@@ -23,9 +23,9 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remark-gfm": "4.0.0",
-    "ai": "3.2.16",
+    "ai": "^3.2.16",
     "typescript": "5.4.5",
-    "@ai-sdk/react": "3.2.16",
+    "@ai-sdk/react": "^3.2.16",
     "@ai-sdk/openai": "^0.0.36",
     "lucide-react": "^0.400.0",
     "swr": "^2.2.5"
