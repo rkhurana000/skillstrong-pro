@@ -239,7 +239,7 @@ function ExploreClient({ user, initialHistory }: { user: User | null; initialHis
                 <div key={idx} className={`message-wrapper ${msg.role}`}>
                   <div className={`message-bubble ${msg.role}`}>
                     <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
-                       <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
+                       <ReactMarkdown remarkPlugins={[remarkGfm as any]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
                          {msg.content}
                        </ReactMarkdown>
                     </article>
