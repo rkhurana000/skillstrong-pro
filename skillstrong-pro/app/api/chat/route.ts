@@ -2,10 +2,10 @@
 import {
   StreamingTextResponse,
   experimental_StreamData,
-} from '@ai-sdk/node'; // <--- THIS IS THE FIX
+} from 'ai'; // <--- Imports from new 'ai' core
 import OpenAI from 'openai';
-// We also need the OpenAI chunk type
-import type { ChatCompletionChunk } from 'openai/resources/chat/completions'; 
+import { OpenAIStream } from '@ai-sdk/openai'; // <--- Imports from new '@ai-sdk/openai'
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Import our refactored orchestrator functions
@@ -78,25 +78,14 @@ export async function POST(req: NextRequest) {
     // 5. Initialize Vercel AI SDK StreamData
     const data = new experimental_StreamData();
 
-    // 6. Manually create the stream and handle post-processing
-    const stream = new ReadableStream({
-      async start(controller) {
-        const encoder = new TextEncoder();
-        let fullResponse = '';
-
-        // 1. Stream the AI response chunks
-        for await (const chunk of responseStream) {
-          const delta = chunk.choices[0]?.delta?.content;
-          if (delta) {
-            fullResponse += delta;
-            controller.enqueue(encoder.encode(delta));
-          }
-        }
-
-        // 2. Now that streaming is done, run post-processing
+    // 6. Convert the OpenAI stream to the Vercel AI SDK stream
+    const stream = OpenAIStream(responseStream, {
+      onFinal: async (completion) => {
+        // This logic runs *after* the stream is done
+        
+        // a. Find Featured Listings
+        let answerWithFeatured = completion;
         try {
-          // a. Find Featured Listings
-          let answerWithFeatured = fullResponse;
           const featured = await findFeaturedMatching(
             lastUserRaw,
             effectiveLocation
@@ -108,48 +97,44 @@ export async function POST(req: NextRequest) {
               .join('\n');
             answerWithFeatured += `\n\n**Featured${locTxt}:**\n${lines}`;
           }
+        } catch (err) {
+          console.error('Error finding featured items:', err);
+        }
 
-          // b. Add "Next Steps"
-          let finalAnswerWithSteps = answerWithFeatured;
-          if (internalRAG) {
-            // Check if we triggered the internal search
-            finalAnswerWithSteps = finalAnswerWithSteps.replace(
-              /(\n\n\*\*Next Steps:\*\*.*)/is,
-              ''
-            );
-            finalAnswerWithSteps += `\n\n**Next Steps**
+        // b. Add "Next Steps"
+        let finalAnswerWithSteps = answerWithFeatured;
+        if (internalRAG) {
+          // Check if we triggered the internal search
+          finalAnswerWithSteps = finalAnswerWithSteps.replace(
+            /(\n\n\*\*Next Steps:\*\*.*)/is,
+            ''
+          );
+          finalAnswerWithSteps += `\n\n**Next Steps**
 You can also search for more opportunities on your own:
 * [Search SkillStrong Programs](/programs/all)
 * [Search SkillStrong Jobs](/jobs/all)
 * [Search US Department of Education for programs](https://collegescorecard.ed.gov/)
 * [Search for jobs on Indeed.com](https://www.indeed.com/)`;
-          }
-
-          // c. Generate Followups
-          const followups = await generateFollowups(
-            lastUserRaw,
-            finalAnswerWithSteps,
-            effectiveLocation
-          );
-
-          // d. Append final data to the StreamData
-          data.append({
-            finalAnswer: finalAnswerWithSteps,
-            followups: followups,
-          });
-        } catch (postError) {
-          console.error("Error during stream post-processing:", postError);
-          // Still append *something* so the client knows we're done
-          data.append({
-            finalAnswer: fullResponse, // Send whatever we had
-            followups: defaultFollowups(), // Use defaults
-          });
-        } finally {
-          // 3. Close both the StreamData and the ReadableStream controller
-          data.close();
-          controller.close();
         }
+
+        // c. Generate Followups
+        const followups = await generateFollowups(
+          lastUserRaw,
+          finalAnswerWithSteps,
+          effectiveLocation
+        );
+
+        // d. Append final data to the StreamData
+        data.append({
+          finalAnswer: finalAnswerWithSteps,
+          followups: followups,
+        });
+
+        // e. Close the StreamData
+        data.close();
+
       },
+      experimental_streamData: true, // Tell it to use the data stream
     });
 
     // 7. Return the streaming response
