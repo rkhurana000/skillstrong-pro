@@ -66,7 +66,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     data: chatData, // v3 uses `data` for the appended JSON
   } = useChat({
     api: '/api/chat',
-    // THIS BODY IS STATIC AND CAN BECOME STALE
     body: { location: location, provider: currentProvider },
     onFinish: async (message) => {
       // `message` is the final assistant message (unenriched)
@@ -160,7 +159,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      
-     // --- THIS IS THE FIX ---
+     // --- THIS FIX IS FOR THE LOCATION BUG ---
      // Pass the *current* location and provider on every submit
      chatHandleSubmit(e, {
         options: {
@@ -174,7 +173,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     
-    // --- THIS IS THE FIX ---
+    // --- THIS FIX IS FOR THE LOCATION BUG ---
     // Pass the *current* location and provider on every append
     chatAppend({ role: 'user', content: prompt }, {
         options: {
