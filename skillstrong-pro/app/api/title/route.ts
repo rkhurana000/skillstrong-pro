@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
     // Truncate assistant content just in case it's massive
     const assistantContent = messages[1].content.substring(0, 500); 
 
-    // --- FIX: Simple, direct prompt as you requested ---
+    // --- FIX: Simple, direct prompt as requested ---
+    // No more checks. Just ask for a title.
     const titlePrompt = `Summarize this chat into a title under 32 characters. Do not use quotes.\n\nUser: "${userContent}"\nAssistant: "${assistantContent}..."\n\nTitle:`;
     
     // --- DEBUG: Log the prompt being sent to OpenAI ---
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ title });
 
   } catch (error) {
-    console.error("[/api/title] Error generating title:", error);
+    console.error("[/api/title] Error in /api/title route:", error);
     return NextResponse.json({ error: 'Failed to generate title.' }, { status: 500 });
   }
 }
