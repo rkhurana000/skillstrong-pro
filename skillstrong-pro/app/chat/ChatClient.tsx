@@ -40,6 +40,7 @@ const TypingIndicator = () => (
 
 
 export default function ChatClient({ user, initialHistory }: { user: User | null; initialHistory: HistoryItem[] }) {
+  console.log("[ChatClient] Component rendered or re-rendered.");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -68,8 +69,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
     onFinish: async (message) => {
-      // `message` is the final assistant message (unenriched)
-      // `chatData` holds the enriched data from the stream
+      console.log("[ChatClient] onFinish triggered."); // DEBUG
       
       let finalAnswer = message.content;
       let finalData = null;
@@ -92,14 +92,20 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       }
       
       // 2. Create the final message list for saving
-      // `chatMessages` at this point already contains the final (unenriched) assistant message
       const finalMessagesForSave = chatMessages.map(m => 
         m.id === message.id ? { ...m, content: finalAnswer } : m
       );
 
       // 3. Save the conversation
+      
+      // --- THIS IS THE FIX ---
       // const convoId = activeConvoId || searchParams.get('id'); // <-- THIS WAS THE BUG
       const convoId = activeConvoId; // <-- THIS IS THE FIX. Trust the state.
+      // --- END FIX ---
+      
+      console.log(`[ChatClient] onFinish: activeConvoId is: ${activeConvoId}`); // DEBUG
+      console.log(`[ChatClient] onFinish: searchParams.get('id') is: ${searchParams.get('id')}`); // DEBUG
+      console.log(`[ChatClient] onFinish: Final convoId to be used: ${convoId}`); // DEBUG
 
       try {
         const savedConvo = await saveConversation({
@@ -110,6 +116,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         
         // 4. Update UI state
         const finalId = savedConvo.id;
+        console.log(`[ChatClient] onFinish: Conversation saved/updated. New ID: ${finalId}`); // DEBUG
         setHistory(prev => {
           const newHistoryItem = { ...savedConvo };
           const existing = prev.find(h => h.id === finalId);
@@ -119,16 +126,15 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
 
-        // --- FIX #2: Simplified state and URL update ---
         if (!convoId || convoId.startsWith('temp-')) {
+          console.log(`[ChatClient] onFinish: This was a new chat. Setting active ID to ${finalId} and updating URL.`); // DEBUG
           setActiveConvoId(finalId);
-          // Use router.replace to update URL without adding to history
+          // --- FIX #2: Use router.replace to prevent adding to browser history ---
           router.replace(`${pathname}?id=${finalId}`);
         } else {
+          console.log(`[ChatClient] onFinish: This was an existing chat. Setting active ID to ${convoId}`); // DEBUG
           setActiveConvoId(convoId);
         }
-        // --- END FIX #2 ---
-
       } catch (saveError) {
         console.error("Failed to save conversation:", saveError);
       }
@@ -162,11 +168,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   
   // --- Event Handlers ---
   const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+     console.log("[ChatClient] handleMainSubmit triggered."); // DEBUG
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      
      // --- THIS IS FOR THE LOCATION BUG ---
      // Pass the *current* location and provider on every submit
+     console.log(`[ChatClient] Submitting with location: ${location}`); // DEBUG
      chatHandleSubmit(e, {
         options: {
             body: { location: location, provider: currentProvider }
@@ -176,11 +184,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   };
   
   const handlePromptClickSubmit = (prompt: string) => {
+    console.log("[ChatClient] handlePromptClickSubmit triggered."); // DEBUG
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     
     // --- THIS IS FOR THE LOCATION BUG ---
     // Pass the *current* location and provider on every append
+    console.log(`[ChatClient] Appending with location: ${location}`); // DEBUG
     chatAppend({ role: 'user', content: prompt }, {
         options: {
             body: { location: location, provider: currentProvider }
@@ -190,21 +200,23 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   };
   
   const createNewChat = () => {
+    console.log("[ChatClient] createNewChat triggered."); // DEBUG
     setChatMessages([]); 
     setActiveConvoId(null);
     setCurrentFollowUps([]);
     initialUrlHandled.current = true;
     
     // --- FIX #1: This now clears the URL query string ---
+    console.log("[ChatClient] Pushing to /chat to clear URL params."); // DEBUG
     router.push('/chat'); 
     // --- END FIX #1 ---
   };
   
-  // --- saveConversation (This logic is now correct) ---
+  // --- saveConversation (with debug logs) ---
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
     // Generate title ONLY if it's a new conversation (no ID) and has at least 2 messages
     if (!convo.id && convo.messages && convo.messages.length >= 2) {
-       console.log("[ChatClient] New conversation detected, attempting to generate title..."); // DEBUG
+       console.log("[ChatClient] saveConversation: New conversation detected, attempting to generate title..."); // DEBUG
        try {
          const titleRes = await fetch('/api/title', {
              method: 'POST',
@@ -215,22 +227,24 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          
          if (titleRes.ok) {
            const { title: generatedTitle } = await titleRes.json();
-           console.log("[ChatClient] Title generated successfully:", generatedTitle); // DEBUG
+           console.log("[ChatClient] saveConversation: Title generated successfully:", generatedTitle); // DEBUG
            convo.title = generatedTitle || 'New Conversation'; // Set the title
          } else {
-           console.error("[ChatClient] /api/title call failed, using fallback."); // DEBUG
+           console.error("[ChatClient] saveConversation: /api/title call failed, using fallback."); // DEBUG
            convo.title = 'New Conversation'; // Fallback
          }
        } catch (e) {
-         console.error("[ChatClient] Error fetching title:", e); // DEBUG
+         console.error("[ChatClient] saveConversation: Error fetching title:", e); // DEBUG
          convo.title = 'New Conversation'; // Fallback
        }
     } else if (convo.id) {
-       console.log(`[ChatClient] Existing conversation (${convo.id}), skipping title generation.`); // DEBUG
+       console.log(`[ChatClient] saveConversation: Existing conversation (${convo.id}), skipping title generation.`); // DEBUG
+    } else {
+       console.log("[ChatClient] saveConversation: Not a new convo or not enough messages, skipping title gen."); // DEBUG
     }
     
     // Save to DB
-    console.log("[ChatClient] Saving to /api/chat/history with title:", convo.title); // DEBUG
+    console.log("[ChatClient] saveConversation: Saving to /api/chat/history with title:", convo.title); // DEBUG
     const res = await fetch('/api/chat/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -245,6 +259,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   };
   
   const handleHistoryClick = async (id: string, navigate = true) => {
+    console.log(`[ChatClient] handleHistoryClick: Loading convo ${id}`); // DEBUG
     if (activeConvoId === id && chatMessages.length > 0) return; 
     
     initialUrlHandled.current = true;
@@ -287,19 +302,27 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   };
 
    useEffect(() => {
-    if (initialUrlHandled.current || chatMessages.length > 0) return;
+    console.log("[ChatClient] URL Effect running..."); // DEBUG
+    if (initialUrlHandled.current || chatMessages.length > 0) {
+      console.log("[ChatClient] URL Effect: Skipping, already handled."); // DEBUG
+      return;
+    }
 
     const convoId = searchParams.get('id');
     const category = searchParams.get('category');
     const newChat = searchParams.get('newChat'); 
+    console.log(`[ChatClient] URL Effect: convoId=${convoId}, category=${category}, newChat=${newChat}`); // DEBUG
 
     if (convoId) {
+      console.log("[ChatClient] URL Effect: Handling convoId."); // DEBUG
       initialUrlHandled.current = true;
       handleHistoryClick(convoId, false);
     } else if (category) {
+      console.log("[ChatClient] URL Effect: Handling category."); // DEBUG
       initialUrlHandled.current = true;
       handlePromptClickSubmit(`Tell me about ${category}`);
     } else if (newChat) { 
+        console.log("[ChatClient] URL Effect: Handling newChat."); // DEBUG
         initialUrlHandled.current = true;
         createNewChat(); 
     }
