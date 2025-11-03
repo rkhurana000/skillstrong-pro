@@ -41,13 +41,15 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Run all "pre-work" (RAG, context building, checks)
+    // --- THIS IS THE FIX: Removed extra '}' ---
     const {
       messagesForLLM,
       lastUserRaw,
       effectiveLocation,
       internalRAG,
       domainGuarded,
-    } } = await orchestratePreamble({ messages, location });
+    } = await orchestratePreamble({ messages, location });
+    // --- END OF FIX ---
 
     // 2. Handle guard conditions
     if (domainGuarded) {
