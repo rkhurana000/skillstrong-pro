@@ -41,7 +41,6 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Run all "pre-work" (RAG, context building, checks)
-    // --- THIS IS THE FIX: Removed extra '}' ---
     const {
       messagesForLLM,
       lastUserRaw,
@@ -49,7 +48,6 @@ export async function POST(req: NextRequest) {
       internalRAG,
       domainGuarded,
     } = await orchestratePreamble({ messages, location });
-    // --- END OF FIX ---
 
     // 2. Handle guard conditions
     if (domainGuarded) {
@@ -73,7 +71,9 @@ export async function POST(req: NextRequest) {
 
     // 5. Call streamText
     const result = await streamText({
-      model: openai('gpt-4o'), // Use the SDK's client
+      // --- THIS IS THE FIX ---
+      model: openai.chat('gpt-4o'), // Use .chat() to get the model
+      // --- END OF FIX ---
       system: systemPrompt,
       messages: messagesForLLM,
       onFinish: async (result) => {
