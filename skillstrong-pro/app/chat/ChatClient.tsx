@@ -14,7 +14,6 @@ import { useLocation } from '@/app/contexts/LocationContext';
 import './chat.css'; // Ensure chat.css is imported
 
 // Import Vercel AI SDK hook
-// --- THIS IS THE FIX ---
 import { useChat, type Message } from '@ai-sdk/react'; // v3 path
 
 // Type Definitions
@@ -68,36 +67,35 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
-    onData: (data) => {
+    onData: async (data) => {
       // v3: `data` is the *raw* appended data object
       try {
         if ((data as any).finalAnswer) {
           const payload = data as any;
           
           // 1. Update the UI
+          let finalMessages: Message[] = [];
           setChatMessages(prevMessages => {
             const newMessages = [...prevMessages];
             const lastMessage = newMessages[newMessages.length - 1];
             if (lastMessage.role === 'assistant') {
               lastMessage.content = payload.finalAnswer; // Update with full answer
             }
+            finalMessages = newMessages; // Capture the final message list
             return newMessages;
           });
           setCurrentFollowUps(payload.followups);
 
           // 2. Save the conversation
           const convoId = activeConvoId || searchParams.get('id');
-          const finalMessages = [...chatMessages]; // get current messages
-          const lastMsg = finalMessages[finalMessages.length - 1];
-          if (lastMsg.role === 'assistant') {
-             lastMsg.content = payload.finalAnswer; // ensure it's updated
-          }
           
-          saveConversation({
-            id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
-            messages: finalMessages,
-            provider: currentProvider,
-          }).then(savedConvo => {
+          try {
+            const savedConvo = await saveConversation({
+              id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
+              messages: finalMessages,
+              provider: currentProvider,
+            });
+            
             // 3. Update history list and URL
             const finalId = savedConvo.id;
             setHistory(prev => {
@@ -115,7 +113,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
             } else {
               setActiveConvoId(convoId);
             }
-          }).catch(e => console.error("Failed to save conversation:", e));
+          } catch (e) {
+            console.error("Failed to save conversation:", e);
+          }
         }
       } catch (e) { 
         // This is expected: it's just a streaming text chunk
