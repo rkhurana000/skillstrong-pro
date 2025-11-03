@@ -14,7 +14,8 @@ import { useLocation } from '@/app/contexts/LocationContext';
 import './chat.css'; // Ensure chat.css is imported
 
 // Import Vercel AI SDK hook
-import { useChat, type Message } from 'ai/react';
+// --- THIS IS THE FIX ---
+import { useChat, type Message } from '@ai-sdk/react';
 
 // Type Definitions
 // (Conversation, HistoryItem, etc. are now handled by useChat)
@@ -54,200 +55,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   const initialUrlHandled = useRef(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-
-  // --- Vercel AI SDK useChat Hook ---
-  const { 
-    messages, 
-    input, 
-    handleInputChange, 
-    handleSubmit: handleVercelSubmit, 
-    isLoading, 
-    setMessages, 
-    reload, 
-    stop 
-  } = useChat({
-    api: '/api/chat', // Point to our new API route
-    // Send location and provider with every request
-    body: {
-      location: location,
-      provider: currentProvider, // Note: Your new API doesn't use this, but ChatClient.tsx did
-    },
-    // Handle the custom data we append
-    onData: (data) => {
-      const payload = JSON.parse(data as string);
-      if (payload.finalAnswer && payload.followups) {
-        // The stream is finished. Update the *last* message
-        // with the full content (with featured listings / steps)
-        setMessages(prevMessages => {
-          const newMessages = [...prevMessages];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage.role === 'assistant') {
-            lastMessage.content = payload.finalAnswer;
-          }
-          return newMessages;
-        });
-        
-        // Set the follow-ups
-        setCurrentFollowUps(payload.followups);
-      }
-    },
-    onFinish: async (message) => {
-      // This runs after the stream is *closed*, but before onData may be fully processed
-      // We also need to save the conversation
-      if (!user) return;
-      
-      const convoId = activeConvoId || searchParams.get('id');
-      const allMessages = [...messages, message]; // `messages` might be stale, add the new one
-      
-      try {
-        const savedConvo = await saveConversation({
-          id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
-          messages: allMessages,
-          provider: currentProvider,
-        });
-
-        const finalId = savedConvo.id;
-        const finalTitle = savedConvo.title;
-
-        // Update history list
-        setHistory(prev => {
-          const newHistoryItem = { ...savedConvo };
-          const existingIndex = prev.findIndex(h => h.id === finalId);
-          if (existingIndex > -1) {
-            const updatedHistory = [...prev];
-            updatedHistory[existingIndex] = newHistoryItem;
-            return updatedHistory.sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
-          }
-          return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)]; // remove temp
-        });
-
-        // Set the active ID and update URL if it was a new chat
-        if (!convoId) {
-          setActiveConvoId(finalId);
-          router.push(`${pathname}?id=${finalId}`);
-        } else {
-          setActiveConvoId(convoId);
-        }
-
-      } catch (error) {
-        console.error("Error saving conversation:", error);
-      }
-    },
-    onError: (error) => {
-      // Handle API errors
-      console.error("Chat error:", error);
-      // You could add an error message to the chat here
-      // setMessages([...messages, { id: 'error', role: 'assistant', content: "Sorry, an error occurred." }]);
-    }
-  });
-  // --- End useChat Hook ---
-
-  // Effect for auto-scrolling
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [messages, isLoading]); // Trigger on messages change
-
-  // Effect to load a conversation from URL or category
-  useEffect(() => {
-    if (initialUrlHandled.current || messages.length > 0) return;
-
-    const convoId = searchParams.get('id');
-    const category = searchParams.get('category');
-
-    if (convoId) {
-      initialUrlHandled.current = true;
-      handleHistoryClick(convoId, false);
-    } else if (category) {
-      initialUrlHandled.current = true;
-      // Use the SDK's submit handler
-      const mockEvent = new Event('submit') as any;
-      // We can't easily append a message and submit, so we'll just set the input
-      // This is a limitation. We'll use a custom submit function.
-      customSubmit(`Tell me about ${category}`);
-    }
-  }, [searchParams, messages.length]);
-
-  // Custom submit handler to wrap Vercel SDK's
-  const customSubmit = (content: string) => {
-    if (!user) {
-      router.push('/account');
-      return;
-    }
-    
-    // Clear follow-ups
-    setCurrentFollowUps([]);
-    
-    // Manually call the Vercel submit handler
-    handleVercelSubmit(new Event('submit') as any, {
-      data: {
-        // This is how we pass a specific message content
-        // This is not standard, let's just set the input
-      }
-    });
-    
-    // The useChat hook is designed to use its *own* input state.
-    // The "right" way is to just call `append`
-    // Let's redefine the main form submit
-  };
-  
-  // This is the *real* submit handler now
-  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-     e.preventDefault();
-     if (!input.trim() || !user) {
-        if (!user) router.push('/account');
-        return;
-     }
-     setCurrentFollowUps([]);
-     handleVercelSubmit(e); // Call the SDK's handler
-  };
-
-  // Handler for follow-ups and welcome prompts
-  const handlePromptClick = (prompt: string) => {
-    if (!user) {
-      router.push('/account');
-      return;
-    }
-    setCurrentFollowUps([]);
-    // This is the correct way to send a message without the input field
-    setMessages([...messages, { id: `user-${Date.now()}`, role: 'user', content: prompt }]);
-    // `useChat` will see the new message and trigger a reload/submit
-    // ... or not. The `append` function is the correct way.
-    // `append({ role: 'user', content: prompt })` is part of `useChat`
-    // Let's just use the `handleSubmit` logic, it's safer.
-    
-    // This is complex. The `useChat` hook is opinionated.
-    // Let's stick to the simplest path: `handleSubmit` uses the `input` state.
-    // So, we set the input state and call submit.
-    
-    // This is *not* ideal, as `handleInputChange` is not exported.
-    // `useChat` is surprisingly difficult to use this way.
-    
-    // Let's go back to the `ChatClient`'s *own* input state
-    // and just use the Vercel hook for its streaming `fetch`.
-    
-    // This is too much refactoring.
-    // Let's just use the hook as intended.
-    // We will use `input` and `handleInputChange` from `useChat`.
-    
-    // The `handlePromptClick` will now set the `input` and submit.
-    // But `useChat` doesn't export `setInput`.
-    
-    // OK, final attempt: We use `useChat` fully.
-    // `handlePromptClick` will *append* a message, which triggers a call.
-    // This seems to be the one missing piece from `useChat`
-    // Ah, `useChat` *does* export `append`.
-    const { append } = useChat(); // This is the fix.
-    // But I can't redefine `useChat` here.
-    
-    // I will assume `useChat` is called *once* at the top.
-    // `handlePromptClick` will be:
-    // 1. setCurrentFollowUps([])
-    // 2. `append({ role: 'user', content: prompt })`
-    // This is the correct Vercel AI SDK pattern.
-  };
-
   
   // --- Re-declare useChat to get all exports ---
   const { 
@@ -263,47 +70,114 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     body: { location: location, provider: currentProvider },
     onData: (data) => {
       try {
+        // Try parsing JSON for the appended data
         const payload = JSON.parse(data as string);
         if (payload.finalAnswer && payload.followups) {
+          // It's the final data packet
           setChatMessages(prevMessages => {
             const newMessages = [...prevMessages];
             const lastMessage = newMessages[newMessages.length - 1];
             if (lastMessage.role === 'assistant') {
-              lastMessage.content = payload.finalAnswer;
+              lastMessage.content = payload.finalAnswer; // Update with full answer
             }
             return newMessages;
           });
           setCurrentFollowUps(payload.followups);
         }
-      } catch (e) { /* streaming text, not json */ }
+      } catch (e) { 
+        // This is expected: it's just a streaming text chunk, not the final JSON data
+      }
     },
     onFinish: async (message) => {
-      // ... (save conversation logic as above) ...
-      const convoId = activeConvoId || searchParams.get('id');
-      const allMessages = [...chatMessages, message];
+      // The `message` object here is the *final* assistant message from the stream.
+      // Note: `onData` might still be processing the *appended* data.
+      // We need to wait a moment to ensure the `finalAnswer` has been set.
       
-      const savedConvo = await saveConversation({
-        id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
-        messages: allMessages,
-        provider: currentProvider,
-      });
+      // Let's rely on the state being updated by onData
+      // We need to get the *final* set of messages
+      // This is tricky. Let's trigger the save from *inside* onData.
       
-      const finalId = savedConvo.id;
-      setHistory(prev => {
-        const newHistoryItem = { ...savedConvo };
-        const existing = prev.find(h => h.id === finalId);
-        if (existing) {
-          return prev.map(h => h.id === finalId ? newHistoryItem : h).sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
-        }
-        return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
-      });
+      // ... No, onFinish is correct. But `message` is just the *streamed* part.
+      // The *true* final message is the one we set in `onData`
+      
+      // Let's refetch the messages from state inside a timeout
+      // to give `onData` a chance to run.
+      setTimeout(async () => {
+         const convoId = activeConvoId || searchParams.get('id');
+         
+         // `chatMessages` might be stale.
+         // `useChat` doesn't give a simple way to get the *latest* state.
+         // This is a known complexity of the hook.
+         
+         // Let's modify the `onData` handler to set a flag.
+         // This is getting too complex.
+         
+         // --- Simpler Plan ---
+         // `onFinish` receives the final message *from the stream*.
+         // The *appended* data isn't part of this.
+         // We'll just save the `message` we get. The `onData` hook
+         // will *separately* update the UI.
+         // This means the saved history might not have the "Featured" section
+         // if it was appended.
+         
+         // --- Better Plan ---
+         // Let `onData` be the *only* source of truth.
+         // We will move the save logic *into* the `onData` block.
+         
+      }, 100); // Small delay
+    },
+    // Let's move the save logic to `onData`
+    onData: async (data) => {
+      try {
+        const payload = JSON.parse(data as string);
+        if (payload.finalAnswer && payload.followups) {
+          // It's the final data packet
+          
+          // 1. Update the UI
+          let finalMessages: Message[] = [];
+          setChatMessages(prevMessages => {
+            const newMessages = [...prevMessages];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage.role === 'assistant') {
+              lastMessage.content = payload.finalAnswer; // Update with full answer
+            }
+            finalMessages = newMessages; // Capture the final message list
+            return newMessages;
+          });
+          setCurrentFollowUps(payload.followups);
 
-      if (!convoId || convoId.startsWith('temp-')) {
-        setActiveConvoId(finalId);
-        router.push(`${pathname}?id=${finalId}`);
-      } else {
-        setActiveConvoId(convoId);
+          // 2. Save the conversation
+          const convoId = activeConvoId || searchParams.get('id');
+          const savedConvo = await saveConversation({
+            id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
+            messages: finalMessages, // Use the final message list
+            provider: currentProvider,
+          });
+          
+          const finalId = savedConvo.id;
+          setHistory(prev => {
+            const newHistoryItem = { ...savedConvo };
+            const existing = prev.find(h => h.id === finalId);
+            if (existing) {
+              return prev.map(h => h.id === finalId ? newHistoryItem : h).sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+            }
+            return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+          });
+
+          if (!convoId || convoId.startsWith('temp-')) {
+            setActiveConvoId(finalId);
+            router.push(`${pathname}?id=${finalId}`);
+          } else {
+            setActiveConvoId(convoId);
+          }
+        }
+      } catch (e) { 
+        // This is expected: it's just a streaming text chunk
       }
+    },
+    onFinish: (message) => {
+      // onData now handles saving, so this can be empty
+      // unless onData *fails*
     },
     onError: (error) => {
       console.error("Chat error:", error);
@@ -312,9 +186,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   
   // --- Event Handlers ---
   const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    if (!user) { router.push('/account'); return; }
-    setCurrentFollowUps([]);
-    chatHandleSubmit(e);
+     if (!user) { router.push('/account'); return; }
+     setCurrentFollowUps([]);
+     chatHandleSubmit(e);
   };
   
   const handlePromptClickSubmit = (prompt: string) => {
@@ -332,6 +206,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   };
   
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
+    // Generate title
     if (convo.messages?.length === 2 && (!convo.id || convo.id.startsWith('temp-'))) {
        const titleRes = await fetch('/api/title', {
            method: 'POST',
@@ -342,20 +217,22 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       convo.title = generatedTitle || 'New Conversation';
     }
     
+    // Save to DB
     const res = await fetch('/api/chat/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(convo),
     });
-    if (!res.ok) throw new Error('Failed to save conversation');
+    if (!res.ok) {
+       const err = await res.json();
+       console.error("Failed to save convo:", err);
+       throw new Error(err.error || 'Failed to save conversation');
+    }
     return await res.json();
   };
   
   const handleHistoryClick = async (id: string, navigate = true) => {
-    if (activeConvoId === id) return;
-    
-    // Set loading state *locally*
-    // `chatIsLoading` is only for API calls
+    if (activeConvoId === id && chatMessages.length > 0) return; // Already on it
     
     initialUrlHandled.current = true;
     try {
@@ -392,10 +269,34 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
   const handleProviderChange = (provider: 'openai' | 'gemini') => {
     setCurrentProvider(provider);
-    if (activeConvoId) {
+    if (activeConvoId && !activeConvoId.startsWith('temp-')) {
       saveConversation({ id: activeConvoId, provider: provider });
     }
   };
+
+  // Effect to load convo from URL (needs to run *after* SDK is initialized)
+   useEffect(() => {
+    if (initialUrlHandled.current || chatMessages.length > 0) return;
+
+    const convoId = searchParams.get('id');
+    const category = searchParams.get('category');
+
+    if (convoId) {
+      initialUrlHandled.current = true;
+      handleHistoryClick(convoId, false);
+    } else if (category) {
+      initialUrlHandled.current = true;
+      handlePromptClickSubmit(`Tell me about ${category}`);
+    }
+  }, [searchParams, chatMessages.length]); // Re-run if searchParams change
+
+  // Effect for auto-scrolling
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatIsLoading]); // Trigger on messages change OR loading state
+  
   
   // --- Render ---
   return (
@@ -478,8 +379,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           
           {/* Message List */}
           <div className="message-list">
-            {chatMessages.map((msg, idx) => (
-              <div key={msg.id || idx} className={`message-wrapper ${msg.role}`}>
+            {chatMessages.map((msg) => (
+              <div key={msg.id} className={`message-wrapper ${msg.role}`}>
                 <div className={`message-bubble ${msg.role}`}>
                   <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
                      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
@@ -489,6 +390,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
                 </div>
               </div>
             ))}
+            
+            {/* Typing indicator logic: show if loading AND last message is user */}
             {chatIsLoading && chatMessages[chatMessages.length - 1]?.role === 'user' && (
                <div className="message-wrapper assistant">
                  <div className="message-bubble assistant">
