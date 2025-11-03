@@ -2,7 +2,7 @@
 import {
   StreamingTextResponse,
   experimental_StreamData,
-} from 'ai';
+} from '@ai-sdk/node'; // <--- THIS IS THE FIX
 import OpenAI from 'openai';
 // We also need the OpenAI chunk type
 import type { ChatCompletionChunk } from 'openai/resources/chat/completions'; 
