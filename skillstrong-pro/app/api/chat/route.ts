@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         try {
           const featured = await findFeaturedMatching(
             lastUserRaw,
-            effectiveLocation ?? undefined // <-- THE FINAL FIX
+            effectiveLocation ?? undefined // Fix 3
           );
           if (Array.isArray(featured) && featured.length > 0) {
             const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
@@ -121,7 +121,7 @@ You can also search for more opportunities on your own:
         const followups = await generateFollowups(
           lastUserRaw,
           finalAnswerWithSteps,
-          effectiveLocation
+          effectiveLocation ?? undefined // <-- THE FINAL FIX
         );
 
         // d. Append final data to the StreamData
