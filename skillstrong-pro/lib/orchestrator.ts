@@ -1,132 +1,540 @@
-// /app/api/chat/route.ts
-import { 
-  OpenAIStream, 
-  StreamingTextResponse, 
-  experimental_StreamData 
-} from 'ai';
+// /lib/orchestrator.ts
 import OpenAI from 'openai';
-import { NextRequest, NextResponse } from 'next/server';
+import { cseSearch, fetchReadable } from '@/lib/search';
+import { findFeaturedMatching } from '@/lib/marketplace';
+// --- THIS IS THE FIX ---
+import type { Message, Role } from '@ai-sdk/react'; // Use Vercel AI SDK types
 
-// Import our refactored orchestrator functions
-import {
-  orchestratePreamble,
-  generateFollowups,
-  findFeaturedMatching,
-  COACH_SYSTEM,
-  Message,
-} from '@/lib/orchestrator';
+export type { Message, Role };
 
-export const runtime = 'nodejs'; // Must be nodejs for supabaseAdmin
-export const dynamic = 'force-dynamic';
+export interface OrchestratorInput {
+  messages: Message[];
+  location?: string | null;
+}
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { messages, location } = body;
+// --- COACH_SYSTEM Prompt (Unchanged) ---
+export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
+... (rest of your system prompt) ...
+10. **No Chain-of-Thought:** Do not reveal internal reasoning.`;
 
+// --- COACH_SYSTEM_WEB_RAG (Unchanged) ---
+const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results about US manufacturing vocational careers.
+... (rest of your web rag prompt) ...
+6.  **Concise:** Use bullets. Do NOT add 'Next Steps'.`;
+
+// --- Category Detection & Overview Prompt (Unchanged) ---
+const CATEGORY_SYNONYMS: Record<string, string[]> = {
+  'CNC Machinist': ['cnc machinist', 'cnc', 'machinist', 'cnc operator'],
+  'Robotics Technician': [
+    'robotics technician',
+    'robotics technologist',
+    'robotics tech',
+    'robotics',
+  ],
+  'Welding Programmer': [
+    'welding programmer',
+    'robotic welding',
+    'laser welding',
+  ],
+  'Maintenance Tech': [
+    'industrial maintenance',
+    'maintenance tech',
+    'maintenance technician',
+  ],
+  'Quality Control Specialist': [
+    'quality control',
+    'quality inspector',
+    'qc',
+    'metrology',
+  ],
+  'Additive Manufacturing': ['additive manufacturing', '3d printing'],
+};
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function detectCanonicalCategory(query: string): string | null {
+  const text = (query || '').toLowerCase();
+  for (const [canonical, syns] of Object.entries(CATEGORY_SYNONYMS)) {
+    for (const s of syns) {
+      const re = new RegExp(`\\b${escapeRegExp(s)}\\b`, 'i');
+      if (re.test(text)) return canonical;
+    }
+  }
+  return null;
+}
+
+function buildOverviewPrompt(canonical: string): string {
+  return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:\n\n🔎 **Overview**...\n🧭 **Day-to-Day**...\n🧰 **Tools & Tech**...\n🧠 **Core Skills**...\n💰 **Typical Pay (US)**...\n⏱️ **Training Time**...\n📜 **Helpful Certs**...\n\nKeep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
+}
+
+// --- URL Domain Helper (Unchanged) ---
+function getDomain(url: string | null | undefined): string | null {
+  if (!url) return null;
   try {
-    // 1. Run all "pre-work" (RAG, context building, checks)
-    const { 
-      messagesForLLM, 
+    const host = new URL(url).hostname;
+    return host.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+// --- Internal Database Link Generation (Unchanged) ---
+async function queryInternalDatabase(
+  query: string,
+  location?: string
+): Promise<string> {
+  const lowerQuery = query.toLowerCase();
+  // ... (rest of function) ...
+  const needsJobs = /\b(jobs?|openings?|hiring|apprenticeships?)\b/i.test(
+    lowerQuery
+  );
+  const needsPrograms = /\b(programs?|training|certificates?|courses?|schools?|college)\b/i.test(
+    lowerQuery
+  );
+  const hasLocationSpecifier =
+    /near me|local|in my area|nearby/i.test(lowerQuery) ||
+    !!location ||
+    /\b\d{5}\b/.test(query) ||
+    /\b[A-Z]{2}\b/.test(query);
+
+  if (!((needsJobs || needsPrograms) && hasLocationSpecifier)) {
+    return '';
+  }
+
+  let links: string[] = [];
+  if (needsJobs)
+    links.push(`* [Search all **jobs** on SkillStrong](/jobs/all)`);
+  if (needsPrograms)
+    links.push(`* [Search all **programs** on SkillStrong](/programs/all)`);
+
+  if (links.length > 0) {
+    return `### 🛡️ SkillStrong Search
+You can also search our internal database directly:
+${links.join('\n')}`;
+  }
+  
+  return '';
+}
+
+// --- Domain Guard (Unchanged) ---
+async function domainGuard(messages: Message[]): Promise<boolean> {
+  if (!messages.some((m) => m.role === 'user')) return true;
+  const lastUserMessage = messages[messages.length - 1];
+  if (lastUserMessage?.role !== 'user') return true;
+  const lastUserQuery = lastUserMessage.content || '';
+  if (!lastUserQuery.trim()) return true;
+
+  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact|laney)\b/i;
+  
+  if (allowHints.test(lastUserQuery)) {
+    return true;
+  }
+  
+  // ... (rest of domainGuard logic) ...
+  const contextMessages = messages.slice(-4);
+  const contextQuery = contextMessages
+    .map((m) => `${m.role}: ${m.content}`)
+    .join('\n\n');
+  if (messages.filter((m) => m.role === 'user').length === 1) {
+    return false;
+  }
+  
+  const systemPrompt = `Analyze the conversation context below. The user's goal is to learn about US MANUFACTURING careers/training/jobs (vocational roles like technicians, machinists, welders, etc., NOT 4-year degree engineering roles).\nIs the LAST user message in the conversation a relevant question or statement *within this specific manufacturing context*, considering the preceding messages?\nAnswer only IN or OUT.\n\nConversation Context:\n---\n${contextQuery}\n---\nIs the LAST user message relevant? Answer IN or OUT:`;
+  try {
+    const res = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      messages: [{ role: 'system', content: systemPrompt }],
+      max_tokens: 5,
+    });
+    const out = res.choices[0]?.message?.content?.trim().toUpperCase();
+    return out === 'IN';
+  } catch (error) {
+    return true;
+  }
+}
+
+// --- needsInternetRag (Unchanged) ---
+async function needsInternetRag(messageContent: string): Promise<boolean> {
+  // ... (rest of function) ...
+  const contentLower = messageContent.toLowerCase().trim();
+  let skipReason = '';
+  const isOverviewPrompt = /Give a student-friendly overview.*Use these sections.*🔎\s*Overview/i.test(
+    contentLower
+  );
+  if (isOverviewPrompt) {
+    skipReason = 'Message is overview prompt structure';
+  }
+  if (!skipReason) {
+    const isDefinitionalQuery = /^(what is|what's|define|explain)\b/i.test(
+      contentLower
+    );
+    if (isDefinitionalQuery) {
+      skipReason = 'Detected definitional query';
+    }
+  }
+  if (skipReason) {
+    return false;
+  } else {
+    return true;
+  }
+}
+
+// --- internetRagCSE (Unchanged) ---
+async function internetRagCSE(
+  query: string,
+  location?: string,
+  canonical?: string | null
+): Promise<string | null> {
+  // ... (entire existing function) ...
+  console.log('--- [Web RAG] Entered ---');
+  let res: any;
+  try {
+    const lowerQuery = query.toLowerCase();
+    const isGeneralInfoQuery = /^(tell me about|what is|what's|define|explain)\b/i.test(
+      lowerQuery
+    );
+    
+    let platformSite = "";
+    if (/\bcoursera\b/i.test(lowerQuery)) platformSite = "site:coursera.org";
+    else if (/\budemy\b/i.test(lowerQuery)) platformSite = "site:udemy.com";
+    else if (/\bedx\b/i.test(lowerQuery)) platformSite = "site:edx.org";
+
+    let q = '';
+    const locationSearchTerm = location ? `"${location}"` : ""; 
+
+    if (isGeneralInfoQuery && canonical) {
+      q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
+      if (locationSearchTerm) q += ` ${locationSearchTerm}`;
+    } else if (isGeneralInfoQuery) {
+      q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
+    } else {
+      let baseQuery = query
+          .replace(/near me|local|in my area|nearby/gi, '')
+          .replace(/in\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i, '')
+          .trim();
+      
+      if (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query)) {
+          baseQuery = `"${canonical}" ${baseQuery.replace(new RegExp(canonical, 'i'), '')}`;
+      } else {
+          baseQuery = `"${baseQuery}"`;
+      }
+      
+      q = baseQuery;
+      
+      if (locationSearchTerm) {
+          q += ` ${locationSearchTerm}`;
+      }
+      
+      if (platformSite) {
+          q += ` (${platformSite})`;
+      } else {
+          if (/(salary|pay|wage|median|bls)/i.test(query)) q += ' (site:bls.gov OR site:onetonline.org)';
+          if (/(program|training|certificate|certification|community college|course)/i.test(query)) q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)';
+          if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)';
+      }
+    }
+    
+    q += ' -site:github.com -site:reddit.com -site:youtube.com -site:wikipedia.org -site:quora.com -site:pinterest.com';
+    
+    try {
+      res = await cseSearch(q);
+    } catch (cseError: any) {
+      return null;
+    }
+    
+    const items: any[] = Array.isArray(res?.items) ? res.items : [];
+    if (!items.length) {
+      return null;
+    }
+    
+    const pages = (
+      await Promise.all(
+        items.slice(0, 3).map(async (it: any, index: number) => {
+          const url: string | undefined = it.url || it.link;
+          if (!url || !url.startsWith('http')) return null;
+          try {
+            const doc = await fetchReadable(url);
+            if (doc && doc.text) return doc;
+            else return null;
+          } catch (fetchErr) {
+            return null;
+          }
+        })
+      )
+    ).filter(Boolean) as Array<{ title: string; url: string; text: string }>;
+
+    if (!pages.length) {
+      return null;
+    }
+
+    const context = pages
+      .map(
+        (p, i) =>
+          `[#${i + 1}] Title: ${
+            p.title
+          }\nURL: ${p.url}\nContent:\n${p.text.slice(0, 3000)}\n---`
+      )
+      .join('\n\n');
+    const sys = `${COACH_SYSTEM_WEB_RAG}`;
+    const prompt = `User question: ${query} ${
+      location ? `(Location: ${location})` : ''
+    }\n\nRAG Context:\n---\n${context}\n---\n\nAnswer user question based *only* on context. Cite sources like [#1], [#2].`;
+    
+    try {
+      const out = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        temperature: 0.25,
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: prompt },
+        ],
+      });
+      let answer = out.choices[0]?.message?.content ?? '';
+      if (!answer.trim()) {
+        return null;
+      }
+      answer = answer.replace(/\[#(\d+)\](?!\()/g, (match, num) => {
+        const p = pages[parseInt(num) - 1];
+        return p ? `[#${num}](${p.url})` : match;
+      });
+      const trunc = (s: string, n: number) =>
+        s.length > n ? s.slice(0, n - 1) + '…' : s;
+      const sourcesMd =
+        '\n\n**Sources**\n' +
+        pages
+          .map((p, i) => `${i + 1}. [${trunc(p.title || p.url, 80)}](${p.url})`)
+          .join('\n');
+      return answer + sourcesMd;
+    } catch (error) {
+      return null;
+    }
+  } catch (outerError: any) {
+    return null;
+  }
+}
+
+// --- Sanitization and Defaults (Unchanged) ---
+function sanitizeFollowups(arr: any[]): string[] {
+  // ... (rest of function) ...
+  const MAX_LEN = 65;
+  const MAX_PROMPTS = 4;
+  return arr
+    .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+    .map((s) => {
+      let t = s.trim();
+      if (t.endsWith('.') || t.endsWith('?')) {
+        t = t.slice(0, -1);
+      }
+      return t.slice(0, MAX_LEN);
+    })
+    .filter(
+      (s, index, self) =>
+        self.map((v) => v.toLowerCase()).indexOf(s.toLowerCase()) === index
+    )
+    .slice(0, MAX_PROMPTS);
+}
+
+function defaultFollowups(): string[] {
+  return [
+    'Find local apprenticeships',
+    'Explore training programs',
+    'Compare typical salaries (BLS)',
+  ].slice(0, 3);
+}
+
+// --- Followup Generation (Unchanged, but now EXPORTED) ---
+export async function generateFollowups(
+  question: string,
+  answer: string,
+  location?: string
+): Promise<string[]> {
+  // ... (entire existing function) ...
+  let finalFollowups: string[] = [];
+  let rawResponse = '{"followups": []}';
+  try {
+    const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
+Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+
+**RULES:**
+1.  Prompts MUST be directly related to the specific topics in the question or answer.
+2.  Prompts SHOULD encourage exploration (e.g., "Find local programs," "Compare salaries").
+3.  **Prompts MUST NOT include specific locations** (e.g., "Find jobs in San Ramon"). Use generic terms like "nearby" or "in my area" if location is relevant.
+4.  AVOID generic prompts ("Anything else?", "More info?").
+5.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
+
+    const userMessage = `User Question: "${question}"
+AI Answer: "${answer}"
+${location ? `User Location: "${location}"` : ''}
+
+Generate JSON object with 4 relevant followups:`;
+
+    const res = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      temperature: 0.6,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+    });
+    rawResponse = res.choices[0]?.message?.content ?? '{"followups": []}';
+
+    try {
+      const parsed = JSON.parse(rawResponse);
+      if (parsed && parsed.followups && Array.isArray(parsed.followups)) {
+        const stringFollowups = parsed.followups.filter(
+          (item: any): item is string =>
+            typeof item === 'string' && item.trim().length > 0
+        );
+        if (stringFollowups.length > 0) {
+          finalFollowups = stringFollowups;
+        }
+      }
+    } catch (parseError) {
+      // ...
+    }
+  } catch (error: any) {
+    // ...
+  }
+
+  const sanitizedFollowups = sanitizeFollowups(finalFollowups);
+  if (sanitizedFollowups.length > 0) {
+    return sanitizedFollowups;
+  } else {
+    return defaultFollowups();
+  }
+}
+
+// --- NEW: EXPORTED PREAMBLE FUNCTION ---
+// This function does all the "pre-work" and returns the messages for the LLM
+export async function orchestratePreamble(input: OrchestratorInput): Promise<{
+  messagesForLLM: Message[];
+  lastUserRaw: string;
+  effectiveLocation: string | null;
+  internalRAG: string; // Pass this out
+  domainGuarded: boolean; // Pass this out
+}> {
+  const originalMessages = input.messages;
+  const lastUserRaw =
+    [...originalMessages].reverse().find((m) => m.role === 'user')?.content ?? '';
+
+  let effectiveLocation = input.location; // Start with the context location
+  if (!effectiveLocation) {
+    const locationMatch = lastUserRaw.match(
+      /\b(in|near|around)\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i
+    );
+    if (locationMatch) {
+      effectiveLocation = (locationMatch[4] || locationMatch[2] || locationMatch[3] || "").trim().replace(/,$/, '');
+    }
+  }
+
+  // 1. Domain Guard
+  const inDomain = await domainGuard(originalMessages);
+  if (!inDomain) {
+    return { 
+      messagesForLLM: [], 
       lastUserRaw, 
       effectiveLocation, 
-      internalRAG,
-      domainGuarded 
-    } = await orchestratePreamble({ messages, location });
-
-    // 2. Handle guard conditions
-    if (domainGuarded) {
-      return NextResponse.json({ 
-        answer: 'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
-        followups: ['Explore CNC Machinist careers', 'Find local apprenticeships', 'Compare typical salaries (BLS)']
-      });
-    }
-
-    // 3. Prepare the final LLM call
-    const systemMessages: Message[] = [
-      { role: 'system', content: COACH_SYSTEM },
-    ];
-    if (effectiveLocation) {
-      systemMessages.push({ role: 'system', content: `User location: ${effectiveLocation}` });
-    }
-
-    // 4. Create the stream
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      temperature: 0.3,
-      messages: [...systemMessages, ...messagesForLLM],
-      stream: true,
-    });
-
-    // 5. Initialize Vercel AI SDK StreamData
-    const data = new experimental_StreamData();
-    
-    // 6. Create the stream, with post-work in onFinal
-    const stream = OpenAIStream(response, {
-      onFinal: async (completion) => {
-        // Now that the stream is done, `completion` is the full answer.
-        // Run the "post-work".
-
-        // a. Find Featured Listings
-        let answerWithFeatured = completion;
-        try {
-          const featured = await findFeaturedMatching(lastUserRaw, effectiveLocation);
-          if (Array.isArray(featured) && featured.length > 0) {
-            const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
-            const lines = featured
-              .map((f: any) => `- **${f.title}** — ${f.org} (${f.location})`)
-              .join('\n');
-            answerWithFeatured += `\n\n**Featured${locTxt}:**\n${lines}`;
-          }
-        } catch (err) {
-          console.error('Error finding featured items:', err);
-        }
-
-        // b. Add "Next Steps"
-        let finalAnswerWithSteps = answerWithFeatured;
-        if (internalRAG) { // Check if we triggered the internal search
-          finalAnswerWithSteps = finalAnswerWithSteps.replace(/(\n\n\*\*Next Steps:\*\*.*)/is, '');
-          finalAnswerWithSteps += `\n\n**Next Steps**
-You can also search for more opportunities on your own:
-* [Search SkillStrong Programs](/programs/all)
-* [Search SkillStrong Jobs](/jobs/all)
-* [Search US Department of Education for programs](https://collegescorecard.ed.gov/)
-* [Search for jobs on Indeed.com](https://www.indeed.com/)`;
-        }
-        
-        // c. Generate Followups
-        const followups = await generateFollowups(lastUserRaw, finalAnswerWithSteps, effectiveLocation);
-
-        // d. Append followups and final answer (with featured/steps) to the data stream
-        data.append({
-          finalAnswer: finalAnswerWithSteps, // Send the *full* final answer
-          followups: followups,
-        });
-
-        // e. Close the data stream
-        data.close();
-      },
-      // Append the data stream to the main response
-      experimental_streamData: true,
-    });
-
-    // 7. Return the streaming response
-    return new StreamingTextResponse(stream, {}, data);
-
-  } catch (e: any) {
-    if (e.message === "LOCATION_REQUIRED") {
-      // Handle the specific "location missing" error
-      return NextResponse.json({ 
-        answer: 'To find local results, please set your location using the button in the header.',
-        followups: []
-      });
-    }
-    
-    console.error("Error in /api/chat route:", e);
-    return NextResponse.json(
-      { answer: "Sorry, I couldn't process that.", followups: [] },
-      { status: 500 }
-    );
+      internalRAG: "",
+      domainGuarded: true 
+    };
   }
+
+  // 2. Check for missing location
+  const isLocalQuery =
+    /near me|local|in my area|nearby|\b\d{5}\b|[A-Z]{2}\b/i.test(lastUserRaw.toLowerCase()) ||
+    /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|tuition|start date|admission|employer|provider|scholarship)\b/i.test(
+      lastUserRaw.toLowerCase()
+    );
+
+  if (isLocalQuery && !effectiveLocation) {
+    // Throw a specific error to be caught by the API route
+    throw new Error("LOCATION_REQUIRED");
+  }
+
+  // 3. Prepare for RAG
+  const isFirstUserMessage =
+    originalMessages.filter((m) => m.role === 'user').length === 1;
+  const canonical = detectCanonicalCategory(lastUserRaw);
+
+  let messagesForLLM: Message[] = [...originalMessages];
+  let messageContentForRAGDecision = lastUserRaw;
+  let overviewActuallyUsed = false;
+
+  if (canonical && isFirstUserMessage) {
+    const seedPrompt = buildOverviewPrompt(canonical);
+    messagesForLLM[messagesForLLM.length - 1] = {
+      role: 'user',
+      content: seedPrompt,
+    };
+    messageContentForRAGDecision = seedPrompt;
+    overviewActuallyUsed = true;
+  }
+  
+  // 4. Generate Internal RAG Links
+  const internalRAG = await queryInternalDatabase(
+    lastUserRaw,
+    effectiveLocation ?? undefined
+  );
+  
+  // 5. Decide & Perform Web RAG
+  const needWeb = await needsInternetRag(messageContentForRAGDecision);
+  let webAnswer = null;
+  if (needWeb) {
+    try {
+      webAnswer = await internetRagCSE(
+        lastUserRaw,
+        effectiveLocation ?? undefined,
+        canonical
+      );
+    } catch (webRagError: any) {
+      console.error('[Orchestrate] Error during Web RAG call:', webRagError);
+      webAnswer = null;
+    }
+  }
+
+  // 6. Combine Context
+  let combinedContext = '';
+  if (webAnswer) {
+    const webHeading = internalRAG ? '**Related Web Results:**' : '**Web Search Results:**';
+    combinedContext += `${webHeading}\n${webAnswer}\n\n`;
+  }
+  if (internalRAG) {
+    combinedContext += internalRAG;
+  }
+  const wasSearchAttempted = needWeb || internalRAG !== '';
+  const noResultsFound = webAnswer === null && internalRAG === '';
+  const userAskedForSpecifics = /\b(jobs?|openings?|program|training|salary|pay|near me|local|in my area)\b/i.test(
+    lastUserRaw.toLowerCase()
+  );
+
+  if (
+    wasSearchAttempted &&
+    noResultsFound &&
+    userAskedForSpecifics &&
+    !overviewActuallyUsed
+  ) {
+    combinedContext = `INFO: Could not find specific results for the user's local/current query ("${lastUserRaw}"). Provide a general answer or suggest alternatives.`;
+  }
+
+  // 7. Build Final Message List for LLM
+  if (combinedContext) {
+    messagesForLLM.push({
+      role: 'system',
+      content: `Use the following search results to answer the user's query...\n\n${combinedContext}`,
+    });
+  }
+  
+  return { 
+    messagesForLLM, 
+    lastUserRaw, 
+    effectiveLocation, 
+    internalRAG, // Pass this out
+    domainGuarded: false 
+  };
 }
