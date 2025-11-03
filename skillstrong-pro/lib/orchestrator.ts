@@ -137,27 +137,77 @@ async function queryInternalDatabase(
     return '';
   }
 
-  console.log('[Internal RAG] Generating internal search links (no query).');
+  console.log('[Internal RAG] Generating internal search links (keyword-only).');
 
+  // --- New Search Term Logic ---
+  // 1. Prioritize detecting a canonical category from the *original* query.
+  let searchTerm = detectCanonicalCategory(query);
+  let linkQueryText = ''; // This is the text that goes inside the link
+
+  if (searchTerm) {
+    // We found a clean category like "Robotics Technician"
+    // Shorten it for the link text if it's long
+    if (searchTerm === 'Robotics Technician') searchTerm = 'Robotics';
+    if (searchTerm === 'CNC Machinist') searchTerm = 'CNC';
+    if (searchTerm === 'Maintenance Tech') searchTerm = 'Maintenance';
+    if (searchTerm === 'Quality Control Specialist') searchTerm = 'Quality Control';
+    
+    console.log(`[Internal RAG] Using detected category "${searchTerm}" for search term.`);
+    linkQueryText = ` for "${searchTerm}"`;
+  } else {
+    // 2. If no category, fall back to cleaning the query
+    searchTerm = query
+      .replace(/near me|local|in my area|nearby/gi, '')
+      .replace(/\b(jobs?|openings?|hiring|apprenticeships?)\b/gi, '')
+      .replace(/\b(programs?|training|certificates?|courses?|schools?|college)\b/gi, '')
+      .replace(/in\s+([A-Za-z\s]+,\s*[A-Z]{2}|\d{5}|[A-Z]{2})\b/gi, '')
+      .replace(/find|search for|search|about|tell me about/gi, '') // Remove action words
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (searchTerm.length < 3) {
+      console.log(
+        '[Internal RAG] No category detected and cleaned term is too short. No link will be generated.'
+      );
+      // --- FIX: Return empty string, not broken link ---
+      return ''; 
+    }
+
+    console.log(
+      `[Internal RAG] Using cleaned search term "${searchTerm}" for search term.`
+    );
+    linkQueryText = ` for "${searchTerm}"`;
+  }
+  // --- End New Search Term Logic ---
+
+  const params = new URLSearchParams();
+  if (searchTerm) {
+    // --- FIX: Add the cleaned/detected keyword to the query params ---
+    params.set('q', searchTerm); 
+  }
+
+  // --- Location block is REMOVED ---
+  // We no longer add city or state to the query parameters, per your request.
+
+  const queryString = params.toString(); // This will now be "q=CNC" or "q=Robotics"
   let links: string[] = [];
-  
-  // --- FIXED: Hardcode links to the main pages as requested ---
+
   if (needsJobs)
     links.push(
-      `* [Search all **jobs** on SkillStrong](/jobs/all)`
+      `* [Search all **jobs**${linkQueryText} on SkillStrong](/jobs/all?${queryString})`
     );
   if (needsPrograms)
     links.push(
-      `* [Search all **programs** on SkillStrong](/programs/all)`
+      `* [Search all **programs**${linkQueryText} on SkillStrong](/programs/all?${queryString})`
     );
-  // --- END FIX ---
 
   if (links.length > 0) {
     return `### 🛡️ SkillStrong Search
 You can also search our internal database directly:
 ${links.join('\n')}`;
   }
-  
+
+  console.log('[Internal RAG] No relevant links generated.');
   return '';
 }
 // --- MODIFICATION END ---
@@ -221,7 +271,7 @@ export async function orchestrate(
       lastUserRaw
     );
     return {
-      answer: 'I focus on modern manufacturing careers...',
+      answer: 'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
       followups: defaultFollowups(),
     };
   }
@@ -375,8 +425,8 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   const lastUserQuery = lastUserMessage.content || '';
   if (!lastUserQuery.trim()) return true;
 
-  // Added 'qc', 'diablo valley', 'chabot', 'college', 'visit', 'contact'
-  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact)\b/i;
+  // Added 'qc', 'diablo valley', 'chabot', 'college', 'visit', 'contact', 'laney', 'local'
+  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact|laney)\b/i;
 
   if (allowHints.test(lastUserQuery)) {
     console.log(
@@ -398,7 +448,7 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   console.log(
     `[Domain Guard] Query failed allowHints regex, proceeding to LLM check: "${lastUserQuery}"`
   );
-  const systemPrompt = `Analyze the conversation context below... (rest is unchanged)`;
+  const systemPrompt = `Analyze the conversation context below. The user's goal is to learn about US MANUFACTURING careers/training/jobs (vocational roles like technicians, machinists, welders, etc., NOT 4-year degree engineering roles).\nIs the LAST user message in the conversation a relevant question or statement *within this specific manufacturing context*, considering the preceding messages?\nAnswer only IN or OUT.\n\nConversation Context:\n---\n${contextQuery}\n---\nIs the LAST user message relevant? Answer IN or OUT:`;
   try {
     const res = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -493,8 +543,7 @@ async function internetRagCSE(
     let q = '';
     
     // Extract location string (e.g., "San Ramon" or "San Ramon, CA")
-    // Use the full location string if available, otherwise just the city
-    const locationSearchTerm = location ? `"${location}"` : ""; 
+    const locationSearchTerm = location ? `"${location}"` : ""; // Use the full location string in quotes
 
     if (isGeneralInfoQuery && canonical) {
       q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
@@ -516,7 +565,7 @@ async function internetRagCSE(
       
       // --- New Location Logic ---
       if (locationSearchTerm) {
-          q += ` ${locationSearchTerm}`; // Add "San Ramon, CA" to the query
+          q += ` ${locationSearchTerm}`; // Add "San Ramon" (or "San Ramon, CA") to the query
           console.log(`[Web RAG] Added location term to query: ${locationSearchTerm}`);
       } else {
            console.log('[Web RAG] Using standard search logic for specific query (no location).');
