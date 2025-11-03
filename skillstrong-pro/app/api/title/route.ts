@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     // Truncate assistant content just in case it's massive
     const assistantContent = messages[1].content.substring(0, 500); 
 
-    // --- FIX: Simple, direct prompt as requested ---
+    // --- FIX: Simple, direct prompt as you requested ---
     const titlePrompt = `Summarize this chat into a title under 32 characters. Do not use quotes.\n\nUser: "${userContent}"\nAssistant: "${assistantContent}..."\n\nTitle:`;
     
     // --- DEBUG: Log the prompt being sent to OpenAI ---
