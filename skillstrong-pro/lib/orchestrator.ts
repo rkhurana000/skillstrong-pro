@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 import { findFeaturedMatching } from '@/lib/marketplace';
 // --- THIS IS THE FIX ---
-import type { Message, Role } from '@ai-sdk/react'; // Use Vercel AI SDK types
+import type { Message, Role } from 'ai/react'; // Use Vercel AI SDK v2 path
 
 export type { Message, Role };
 
@@ -16,12 +16,33 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // --- COACH_SYSTEM Prompt (Unchanged) ---
 export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
-... (rest of your system prompt) ...
+
+**Your Mission:** Provide encouraging, clear, and actionable advice on vocational paths in modern manufacturing (e.g., CNC, robotics, welding, maintenance, quality, additive).
+
+**Output Format:** Respond with Markdown, using short paragraphs and bullet points.
+
+**Non-Negotiable Rules:**
+1.  **Prioritize RAG Context & Synthesize Overviews:** Your system context may contain "Web Results" (with citations [#1], [#2]...) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
+    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text. Include inline citations (e.g., [#1]). **IMPORTANT: If the user asked a general "Tell me about [Role]" or similar overview question, synthesize a GENERAL OVERVIEW. Use facts from the "Web Results" (like typical skills, pay ranges, training) but structure your answer as a comprehensive overview, NOT a summary of a single job posting or specific program unless that was explicitly requested.**
+    * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. Only mention the failed search if the user explicitly asked for local/current specifics. Otherwise, provide the general answer seamlessly.
+2.  **Preserve Sources Section:** If context includes "**Sources**", include that *entire section* verbatim at the end of your main answer (before "Next Steps").
+3.  **Append SkillStrong Links:** *After* your main answer (and "**Sources**"), append the *entire* "### 🛡️ SkillStrong Search" block **only if provided** in the context.
+4.  **Handle No Results Info:** If context says "INFO: Could not find specific results for the user's local/current query...", *then* clearly inform the user you couldn't find specifics for their request and suggest alternatives.
+5.  **Audience Fit (≤2 Years Training):** ONLY recommend roles/programs needing ≤2 years training. Suggest tech paths instead of 4-year engineering.
+6.  **Truthfulness:** Rely *only* on "Web Results" for current facts. Cite sources. If unsure/lacking RAG, state that (unless it's a general overview).
+7.  **Geography:** Prioritize nearby options if location known & RAG provides local info. If local search needed but location missing, ONLY respond: "To find local results, please set your location using the button in the header." (empty followups).
+8.  **Accessibility & Tone:** Avoid jargon (explain if needed). Be supportive.
+9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response. (The orchestrator may provide a standard block for this).
 10. **No Chain-of-Thought:** Do not reveal internal reasoning.`;
 
 // --- COACH_SYSTEM_WEB_RAG (Unchanged) ---
 const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results about US manufacturing vocational careers.
-... (rest of your web rag prompt) ...
+**Core Rules:**
+1.  **Use Context Only:** Base your answer *strictly* on the provided 'RAG Context'.
+2.  **Cite Sources:** Cite sources in-line as [#1], [#2]. Use only the provided URLs.
+3.  **Strict Relevance Filter:** Answer *only* the specific user question, filtering context for relevant manufacturing vocational roles (technicians, operators, etc.).
+4.  **Stay on Topic:** US manufacturing vocational careers only.
+5.  **No Hallucinations:** Do not invent information or URLs.
 6.  **Concise:** Use bullets. Do NOT add 'Next Steps'.`;
 
 // --- Category Detection & Overview Prompt (Unchanged) ---
@@ -88,28 +109,36 @@ async function queryInternalDatabase(
   location?: string
 ): Promise<string> {
   const lowerQuery = query.toLowerCase();
-  // ... (rest of function) ...
+  // Check for trigger keywords
   const needsJobs = /\b(jobs?|openings?|hiring|apprenticeships?)\b/i.test(
     lowerQuery
   );
   const needsPrograms = /\b(programs?|training|certificates?|courses?|schools?|college)\b/i.test(
     lowerQuery
   );
+  // Check for location mention (required to trigger)
   const hasLocationSpecifier =
     /near me|local|in my area|nearby/i.test(lowerQuery) ||
     !!location ||
     /\b\d{5}\b/.test(query) ||
     /\b[A-Z]{2}\b/.test(query);
 
+  // --- TRIGGER GUARD ---
+  // Must ask for jobs/programs AND mention a location to proceed
   if (!((needsJobs || needsPrograms) && hasLocationSpecifier)) {
     return '';
   }
 
   let links: string[] = [];
+  
   if (needsJobs)
-    links.push(`* [Search all **jobs** on SkillStrong](/jobs/all)`);
+    links.push(
+      `* [Search all **jobs** on SkillStrong](/jobs/all)`
+    );
   if (needsPrograms)
-    links.push(`* [Search all **programs** on SkillStrong](/programs/all)`);
+    links.push(
+      `* [Search all **programs** on SkillStrong](/programs/all)`
+    );
 
   if (links.length > 0) {
     return `### 🛡️ SkillStrong Search
@@ -128,13 +157,13 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   const lastUserQuery = lastUserMessage.content || '';
   if (!lastUserQuery.trim()) return true;
 
+  // Added 'qc', 'diablo valley', 'chabot', 'college', 'visit', 'contact', 'laney', 'local'
   const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact|laney)\b/i;
-  
+
   if (allowHints.test(lastUserQuery)) {
     return true;
   }
-  
-  // ... (rest of domainGuard logic) ...
+
   const contextMessages = messages.slice(-4);
   const contextQuery = contextMessages
     .map((m) => `${m.role}: ${m.content}`)
@@ -142,7 +171,7 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   if (messages.filter((m) => m.role === 'user').length === 1) {
     return false;
   }
-  
+
   const systemPrompt = `Analyze the conversation context below. The user's goal is to learn about US MANUFACTURING careers/training/jobs (vocational roles like technicians, machinists, welders, etc., NOT 4-year degree engineering roles).\nIs the LAST user message in the conversation a relevant question or statement *within this specific manufacturing context*, considering the preceding messages?\nAnswer only IN or OUT.\n\nConversation Context:\n---\n${contextQuery}\n---\nIs the LAST user message relevant? Answer IN or OUT:`;
   try {
     const res = await openai.chat.completions.create({
@@ -160,7 +189,6 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
 
 // --- needsInternetRag (Unchanged) ---
 async function needsInternetRag(messageContent: string): Promise<boolean> {
-  // ... (rest of function) ...
   const contentLower = messageContent.toLowerCase().trim();
   let skipReason = '';
   const isOverviewPrompt = /Give a student-friendly overview.*Use these sections.*🔎\s*Overview/i.test(
@@ -190,7 +218,6 @@ async function internetRagCSE(
   location?: string,
   canonical?: string | null
 ): Promise<string | null> {
-  // ... (entire existing function) ...
   console.log('--- [Web RAG] Entered ---');
   let res: any;
   try {
@@ -199,23 +226,27 @@ async function internetRagCSE(
       lowerQuery
     );
     
+    // --- Platform Detection ---
     let platformSite = "";
     if (/\bcoursera\b/i.test(lowerQuery)) platformSite = "site:coursera.org";
     else if (/\budemy\b/i.test(lowerQuery)) platformSite = "site:udemy.com";
     else if (/\bedx\b/i.test(lowerQuery)) platformSite = "site:edx.org";
+    // --- End Platform Detection ---
 
     let q = '';
+    
+    // Use the full location string in quotes (e.g., "San Ramon, CA")
     const locationSearchTerm = location ? `"${location}"` : ""; 
 
     if (isGeneralInfoQuery && canonical) {
       q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
-      if (locationSearchTerm) q += ` ${locationSearchTerm}`;
+      if (locationSearchTerm) q += ` ${locationSearchTerm}`; // Add location if present
     } else if (isGeneralInfoQuery) {
       q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
     } else {
       let baseQuery = query
           .replace(/near me|local|in my area|nearby/gi, '')
-          .replace(/in\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i, '')
+          .replace(/in\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i, '') // Remove "in San Ramon, CA" etc.
           .trim();
       
       if (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query)) {
@@ -256,22 +287,25 @@ async function internetRagCSE(
       await Promise.all(
         items.slice(0, 3).map(async (it: any, index: number) => {
           const url: string | undefined = it.url || it.link;
-          if (!url || !url.startsWith('http')) return null;
+          if (!url || !url.startsWith('http')) {
+            return null;
+          }
           try {
             const doc = await fetchReadable(url);
-            if (doc && doc.text) return doc;
-            else return null;
+            if (doc && doc.text) {
+              return doc;
+            } else {
+              return null;
+            }
           } catch (fetchErr) {
             return null;
           }
         })
       )
     ).filter(Boolean) as Array<{ title: string; url: string; text: string }>;
-
     if (!pages.length) {
       return null;
     }
-
     const context = pages
       .map(
         (p, i) =>
@@ -284,7 +318,6 @@ async function internetRagCSE(
     const prompt = `User question: ${query} ${
       location ? `(Location: ${location})` : ''
     }\n\nRAG Context:\n---\n${context}\n---\n\nAnswer user question based *only* on context. Cite sources like [#1], [#2].`;
-    
     try {
       const out = await openai.chat.completions.create({
         model: 'gpt-4o',
@@ -320,7 +353,6 @@ async function internetRagCSE(
 
 // --- Sanitization and Defaults (Unchanged) ---
 function sanitizeFollowups(arr: any[]): string[] {
-  // ... (rest of function) ...
   const MAX_LEN = 65;
   const MAX_PROMPTS = 4;
   return arr
@@ -353,7 +385,6 @@ export async function generateFollowups(
   answer: string,
   location?: string
 ): Promise<string[]> {
-  // ... (entire existing function) ...
   let finalFollowups: string[] = [];
   let rawResponse = '{"followups": []}';
   try {
