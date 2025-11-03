@@ -67,11 +67,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
-    // --- FIX #1 (Follow-ups/Overwrite): onFinish is now ONLY for saving ---
     onFinish: async (message) => {
-      // `message` is the final assistant message (unenriched)
-      // `chatData` holds the enriched data from the stream
-      
       let finalAnswer = message.content;
       let finalData = null;
 
@@ -93,7 +89,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       }
       
       // 2. Create the final message list for saving
-      // `chatMessages` at this point already contains the final (unenriched) assistant message
       const finalMessagesForSave = chatMessages.map(m => 
         m.id === message.id ? { ...m, content: finalAnswer } : m
       );
@@ -133,7 +128,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   });
 
-  // --- FIX #1 (Follow-ups/Overwrite): Logic to get final answer for rendering ---
+  // --- FIX #1 (Follow-ups): Logic to get final answer for rendering ---
   const lastValidData = useMemo(() => {
     if (!chatData || chatData.length === 0) return null;
     for (let i = chatData.length - 1; i >= 0; i--) {
@@ -147,7 +142,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     return null;
   }, [chatData]);
 
-  // --- FIX #1 (Follow-ups/Overwrite): Effect to set follow-ups ---
+  // --- FIX #1 (Follow-ups): Effect to set follow-ups ---
   useEffect(() => {
     // Only set follow-ups when loading is finished AND we have valid data
     if (lastValidData && !chatIsLoading) {
@@ -184,7 +179,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          const titleRes = await fetch('/api/title', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ messages: convo.messages }),
+             // --- THIS IS THE FIX ---
+             // Send ONLY the first two messages (user + assistant)
+             body: JSON.stringify({ messages: convo.messages.slice(0, 2) }),
          });
          if (titleRes.ok) {
            const { title: generatedTitle } = await titleRes.json();
