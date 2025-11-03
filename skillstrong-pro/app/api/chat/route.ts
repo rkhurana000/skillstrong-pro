@@ -1,8 +1,10 @@
 // /app/api/chat/route.ts
-import { 
-  OpenAIStream, 
-  StreamingTextResponse, 
-  experimental_StreamData 
+import {
+  OpenAIStream, // Correct: This is imported from 'ai/openai'
+} from 'ai/openai';
+import {
+  StreamingTextResponse, // Correct: These are imported from 'ai'
+  experimental_StreamData,
 } from 'ai';
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,10 +13,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   orchestratePreamble,
   generateFollowups,
-  findFeaturedMatching,
   COACH_SYSTEM,
   Message,
 } from '@/lib/orchestrator';
+
+// --- THIS IS THE FIX ---
+// Import findFeaturedMatching from its correct source file
+import { findFeaturedMatching } from '@/lib/marketplace';
 
 export const runtime = 'nodejs'; // Must be nodejs for supabaseAdmin
 export const dynamic = 'force-dynamic';
@@ -27,19 +32,24 @@ export async function POST(req: NextRequest) {
 
   try {
     // 1. Run all "pre-work" (RAG, context building, checks)
-    const { 
-      messagesForLLM, 
-      lastUserRaw, 
-      effectiveLocation, 
+    const {
+      messagesForLLM,
+      lastUserRaw,
+      effectiveLocation,
       internalRAG,
-      domainGuarded 
+      domainGuarded,
     } = await orchestratePreamble({ messages, location });
 
     // 2. Handle guard conditions
     if (domainGuarded) {
-      return NextResponse.json({ 
-        answer: 'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
-        followups: ['Explore CNC Machinist careers', 'Find local apprenticeships', 'Compare typical salaries (BLS)']
+      return NextResponse.json({
+        answer:
+          'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
+        followups: [
+          'Explore CNC Machinist careers',
+          'Find local apprenticeships',
+          'Compare typical salaries (BLS)',
+        ],
       });
     }
 
@@ -48,7 +58,10 @@ export async function POST(req: NextRequest) {
       { role: 'system', content: COACH_SYSTEM },
     ];
     if (effectiveLocation) {
-      systemMessages.push({ role: 'system', content: `User location: ${effectiveLocation}` });
+      systemMessages.push({
+        role: 'system',
+        content: `User location: ${effectiveLocation}`,
+      });
     }
 
     // 4. Create the stream
@@ -61,7 +74,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Initialize Vercel AI SDK StreamData
     const data = new experimental_StreamData();
-    
+
     // 6. Create the stream, with post-work in onFinal
     const stream = OpenAIStream(response, {
       onFinal: async (completion) => {
@@ -71,7 +84,10 @@ export async function POST(req: NextRequest) {
         // a. Find Featured Listings
         let answerWithFeatured = completion;
         try {
-          const featured = await findFeaturedMatching(lastUserRaw, effectiveLocation);
+          const featured = await findFeaturedMatching(
+            lastUserRaw,
+            effectiveLocation
+          );
           if (Array.isArray(featured) && featured.length > 0) {
             const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
             const lines = featured
@@ -85,8 +101,12 @@ export async function POST(req: NextRequest) {
 
         // b. Add "Next Steps"
         let finalAnswerWithSteps = answerWithFeatured;
-        if (internalRAG) { // Check if we triggered the internal search
-          finalAnswerWithSteps = finalAnswerWithSteps.replace(/(\n\n\*\*Next Steps:\*\*.*)/is, '');
+        if (internalRAG) {
+          // Check if we triggered the internal search
+          finalAnswerWithSteps = finalAnswerWithSteps.replace(
+            /(\n\n\*\*Next Steps:\*\*.*)/is,
+            ''
+          );
           finalAnswerWithSteps += `\n\n**Next Steps**
 You can also search for more opportunities on your own:
 * [Search SkillStrong Programs](/programs/all)
@@ -94,9 +114,13 @@ You can also search for more opportunities on your own:
 * [Search US Department of Education for programs](https://collegescorecard.ed.gov/)
 * [Search for jobs on Indeed.com](https://www.indeed.com/)`;
         }
-        
+
         // c. Generate Followups
-        const followups = await generateFollowups(lastUserRaw, finalAnswerWithSteps, effectiveLocation);
+        const followups = await generateFollowups(
+          lastUserRaw,
+          finalAnswerWithSteps,
+          effectiveLocation
+        );
 
         // d. Append followups and final answer (with featured/steps) to the data stream
         data.append({
@@ -113,17 +137,17 @@ You can also search for more opportunities on your own:
 
     // 7. Return the streaming response
     return new StreamingTextResponse(stream, {}, data);
-
   } catch (e: any) {
-    if (e.message === "LOCATION_REQUIRED") {
+    if (e.message === 'LOCATION_REQUIRED') {
       // Handle the specific "location missing" error
-      return NextResponse.json({ 
-        answer: 'To find local results, please set your location using the button in the header.',
-        followups: []
+      return NextResponse.json({
+        answer:
+          'To find local results, please set your location using the button in the header.',
+        followups: [],
       });
     }
-    
-    console.error("Error in /api/chat route:", e);
+
+    console.error('Error in /api/chat route:', e);
     return NextResponse.json(
       { answer: "Sorry, I couldn't process that.", followups: [] },
       { status: 500 }
