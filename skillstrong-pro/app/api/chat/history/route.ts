@@ -63,28 +63,32 @@ export async function POST(req: NextRequest) {
       // --- MODIFICATION START ---
       let finalTitle = title || 'New Conversation';
 
-      // Check for duplicate titles
-      const { data: existing, error: titleError } = await supabase
-        .from('conversations')
-        .select('title')
-        .eq('user_id', user.id)
-        .ilike('title', `${finalTitle}%`);
+      // --- FIX: Only de-duplicate if the title is the default "New Conversation" ---
+      if (finalTitle === 'New Conversation') {
+        // Check for duplicate titles
+        const { data: existing, error: titleError } = await supabase
+          .from('conversations')
+          .select('title')
+          .eq('user_id', user.id)
+          .ilike('title', `${finalTitle}%`); // Search for "New Conversation%"
 
-      if (titleError) {
-        console.error("Error checking titles:", titleError);
-        // Proceed anyway, but log the error
-      }
+        if (titleError) {
+          console.error("Error checking titles:", titleError);
+          // Proceed anyway, but log the error
+        }
 
-      if (existing && existing.length > 0) {
-        const existingTitles = new Set(existing.map(e => e.title));
-        if (existingTitles.has(finalTitle)) {
-          let counter = 2;
-          while (existingTitles.has(`${finalTitle} (${counter})`)) {
-            counter++;
+        if (existing && existing.length > 0) {
+          const existingTitles = new Set(existing.map(e => e.title));
+          if (existingTitles.has(finalTitle)) {
+            let counter = 2;
+            while (existingTitles.has(`${finalTitle} (${counter})`)) {
+              counter++;
+            }
+            finalTitle = `${finalTitle} (${counter})`;
           }
-          finalTitle = `${finalTitle} (${counter})`;
         }
       }
+      // --- END FIX ---
 
       const { data, error } = await supabase
         .from('conversations')
