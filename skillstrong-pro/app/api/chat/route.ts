@@ -57,11 +57,11 @@ export async function POST(req: NextRequest) {
 
     // 3. Prepare the final LLM call
     const systemMessages: Message[] = [
-      { id: 'system_prompt', role: 'system', content: COACH_SYSTEM }, // <-- FIX: Added id
+      { id: 'system_prompt', role: 'system', content: COACH_SYSTEM },
     ];
     if (effectiveLocation) {
       systemMessages.push({
-        id: 'system_location', // <-- FIX: Added id
+        id: 'system_location',
         role: 'system',
         content: `User location: ${effectiveLocation}`,
       });
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     const responseStream = await openai.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.3,
-      messages: [...systemMessages, ...messagesForLLM],
+      messages: [...systemMessages, ...messagesForLLM] as any, // <-- THE FIX
       stream: true,
     });
 
