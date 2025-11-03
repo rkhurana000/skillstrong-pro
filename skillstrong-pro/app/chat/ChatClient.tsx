@@ -15,7 +15,7 @@ import './chat.css'; // Ensure chat.css is imported
 
 // Import Vercel AI SDK hook
 // --- THIS IS THE FIX ---
-import { useChat, type Message } from 'ai/react'; // v2 path
+import { useChat, type Message } from '@ai-sdk/react'; // v3 path
 
 // Type Definitions
 type HistoryItem = { id: string; title: string; updated_at?: string; provider: 'openai' | 'gemini' };
@@ -64,82 +64,61 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     isLoading: chatIsLoading, 
     setMessages: setChatMessages, 
     append: chatAppend,
-    data: chatData, // v2 uses `data` for the appended JSON
+    data: chatData, // v3 uses `data` for the appended JSON
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
-    onFinish: async (message) => {
-      // onFinish runs *after* the stream is done
-      // `message` is the final assistant message
-      // `chatData` will contain our appended JSON
-      
-      let finalAnswer = message.content;
-      let followups: string[] = [];
-
-      if (chatData) {
-        try {
-          // In v2, `data` is an array of the JSON strings
-          const lastDataPacket = (chatData as any[]).find(d => d.finalAnswer);
-          if (lastDataPacket) {
-            finalAnswer = lastDataPacket.finalAnswer;
-            followups = lastDataPacket.followups;
-            
-            // Update the UI *one last time* with the full final answer
-            setChatMessages(prevMessages => {
-               const newMessages = [...prevMessages];
-               const lastMessage = newMessages[newMessages.length - 1];
-               if (lastMessage.role === 'assistant') {
-                 lastMessage.content = finalAnswer;
-               }
-               return newMessages;
-            });
-            setCurrentFollowUps(followups);
-          }
-        } catch (e) {
-          console.error("Error parsing chat data:", e);
-        }
-      }
-
-      // Now save the conversation
-      const convoId = activeConvoId || searchParams.get('id');
-      // Get the *current* list of messages from the hook
-      // `chatMessages` might be stale, so we build it
-      const finalMessages = [
-          ...chatMessages, 
-          { ...message, content: finalAnswer } // Use the final answer
-      ];
-      // Remove the last message if it's already in chatMessages
-      if (chatMessages[chatMessages.length - 1]?.id === message.id) {
-          finalMessages.pop();
-          finalMessages.push({ ...message, content: finalAnswer });
-      }
-
-      
+    onData: (data) => {
+      // v3: `data` is the *raw* appended data object
       try {
-        const savedConvo = await saveConversation({
-          id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
-          messages: finalMessages,
-          provider: currentProvider,
-        });
-        
-        const finalId = savedConvo.id;
-        setHistory(prev => {
-          const newHistoryItem = { ...savedConvo };
-          const existing = prev.find(h => h.id === finalId);
-          if (existing) {
-            return prev.map(h => h.id === finalId ? newHistoryItem : h).sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
-          }
-          return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
-        });
+        if ((data as any).finalAnswer) {
+          const payload = data as any;
+          
+          // 1. Update the UI
+          setChatMessages(prevMessages => {
+            const newMessages = [...prevMessages];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage.role === 'assistant') {
+              lastMessage.content = payload.finalAnswer; // Update with full answer
+            }
+            return newMessages;
+          });
+          setCurrentFollowUps(payload.followups);
 
-        if (!convoId || convoId.startsWith('temp-')) {
-          setActiveConvoId(finalId);
-          router.push(`${pathname}?id=${finalId}`);
-        } else {
-          setActiveConvoId(convoId);
+          // 2. Save the conversation
+          const convoId = activeConvoId || searchParams.get('id');
+          const finalMessages = [...chatMessages]; // get current messages
+          const lastMsg = finalMessages[finalMessages.length - 1];
+          if (lastMsg.role === 'assistant') {
+             lastMsg.content = payload.finalAnswer; // ensure it's updated
+          }
+          
+          saveConversation({
+            id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
+            messages: finalMessages,
+            provider: currentProvider,
+          }).then(savedConvo => {
+            // 3. Update history list and URL
+            const finalId = savedConvo.id;
+            setHistory(prev => {
+              const newHistoryItem = { ...savedConvo };
+              const existing = prev.find(h => h.id === finalId);
+              if (existing) {
+                return prev.map(h => h.id === finalId ? newHistoryItem : h).sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+              }
+              return [newHistoryItem, ...prev.filter(h => h.id !== activeConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
+            });
+
+            if (!convoId || convoId.startsWith('temp-')) {
+              setActiveConvoId(finalId);
+              router.push(`${pathname}?id=${finalId}`);
+            } else {
+              setActiveConvoId(convoId);
+            }
+          }).catch(e => console.error("Failed to save conversation:", e));
         }
-      } catch (saveError) {
-        console.error("Failed to save conversation:", saveError);
+      } catch (e) { 
+        // This is expected: it's just a streaming text chunk
       }
     },
     onError: (error) => {
