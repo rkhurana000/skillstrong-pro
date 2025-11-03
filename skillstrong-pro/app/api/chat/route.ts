@@ -3,7 +3,7 @@ import {
   OpenAIStream,
   StreamingTextResponse,
   experimental_StreamData,
-} from 'ai'; // <--- Vercel AI SDK v2 imports
+} from 'ai'; // <--- Vercel AI SDK v3 imports
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -57,10 +57,11 @@ export async function POST(req: NextRequest) {
 
     // 3. Prepare the final LLM call
     const systemMessages: Message[] = [
-      { role: 'system', content: COACH_SYSTEM },
+      { id: 'system_prompt', role: 'system', content: COACH_SYSTEM }, // <-- FIX: Added id
     ];
     if (effectiveLocation) {
       systemMessages.push({
+        id: 'system_location', // <-- FIX: Added id
         role: 'system',
         content: `User location: ${effectiveLocation}`,
       });
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
     // 5. Initialize Vercel AI SDK StreamData
     const data = new experimental_StreamData();
 
-    // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v2 style)
+    // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v3 style)
     const stream = OpenAIStream(responseStream, {
       onFinal: async (completion) => {
         // This logic runs *after* the stream is done
@@ -124,7 +125,7 @@ You can also search for more opportunities on your own:
         );
 
         // d. Append final data to the StreamData
-        data.append(JSON.stringify({ // v2 expects a string
+        data.append(JSON.stringify({ // v3 expects a string
           finalAnswer: finalAnswerWithSteps,
           followups: followups,
         }));
