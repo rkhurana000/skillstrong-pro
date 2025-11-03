@@ -1,12 +1,11 @@
 // /app/api/chat/route.ts
 import {
-  OpenAIStream, // Correct: This is imported from 'ai/openai'
-} from 'ai/openai';
-import {
-  StreamingTextResponse, // Correct: These are imported from 'ai'
+  StreamingTextResponse,
   experimental_StreamData,
 } from 'ai';
 import OpenAI from 'openai';
+// We also need the OpenAI chunk type
+import type { ChatCompletionChunk } from 'openai/resources/chat/completions'; 
 import { NextRequest, NextResponse } from 'next/server';
 
 // Import our refactored orchestrator functions
@@ -17,7 +16,6 @@ import {
   Message,
 } from '@/lib/orchestrator';
 
-// --- THIS IS THE FIX ---
 // Import findFeaturedMatching from its correct source file
 import { findFeaturedMatching } from '@/lib/marketplace';
 
@@ -25,6 +23,15 @@ export const runtime = 'nodejs'; // Must be nodejs for supabaseAdmin
 export const dynamic = 'force-dynamic';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Helper to provide default followups on error
+function defaultFollowups(): string[] {
+  return [
+    'Find local apprenticeships',
+    'Explore training programs',
+    'Compare typical salaries (BLS)',
+  ].slice(0, 3);
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -45,11 +52,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         answer:
           'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
-        followups: [
-          'Explore CNC Machinist careers',
-          'Find local apprenticeships',
-          'Compare typical salaries (BLS)',
-        ],
+        followups: defaultFollowups(),
       });
     }
 
@@ -64,8 +67,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4. Create the stream
-    const response = await openai.chat.completions.create({
+    // 4. Create the OpenAI stream
+    const responseStream = await openai.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.3,
       messages: [...systemMessages, ...messagesForLLM],
@@ -75,15 +78,25 @@ export async function POST(req: NextRequest) {
     // 5. Initialize Vercel AI SDK StreamData
     const data = new experimental_StreamData();
 
-    // 6. Create the stream, with post-work in onFinal
-    const stream = OpenAIStream(response, {
-      onFinal: async (completion) => {
-        // Now that the stream is done, `completion` is the full answer.
-        // Run the "post-work".
+    // 6. Manually create the stream and handle post-processing
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        let fullResponse = '';
 
-        // a. Find Featured Listings
-        let answerWithFeatured = completion;
+        // 1. Stream the AI response chunks
+        for await (const chunk of responseStream) {
+          const delta = chunk.choices[0]?.delta?.content;
+          if (delta) {
+            fullResponse += delta;
+            controller.enqueue(encoder.encode(delta));
+          }
+        }
+
+        // 2. Now that streaming is done, run post-processing
         try {
+          // a. Find Featured Listings
+          let answerWithFeatured = fullResponse;
           const featured = await findFeaturedMatching(
             lastUserRaw,
             effectiveLocation
@@ -95,48 +108,53 @@ export async function POST(req: NextRequest) {
               .join('\n');
             answerWithFeatured += `\n\n**Featured${locTxt}:**\n${lines}`;
           }
-        } catch (err) {
-          console.error('Error finding featured items:', err);
-        }
 
-        // b. Add "Next Steps"
-        let finalAnswerWithSteps = answerWithFeatured;
-        if (internalRAG) {
-          // Check if we triggered the internal search
-          finalAnswerWithSteps = finalAnswerWithSteps.replace(
-            /(\n\n\*\*Next Steps:\*\*.*)/is,
-            ''
-          );
-          finalAnswerWithSteps += `\n\n**Next Steps**
+          // b. Add "Next Steps"
+          let finalAnswerWithSteps = answerWithFeatured;
+          if (internalRAG) {
+            // Check if we triggered the internal search
+            finalAnswerWithSteps = finalAnswerWithSteps.replace(
+              /(\n\n\*\*Next Steps:\*\*.*)/is,
+              ''
+            );
+            finalAnswerWithSteps += `\n\n**Next Steps**
 You can also search for more opportunities on your own:
 * [Search SkillStrong Programs](/programs/all)
 * [Search SkillStrong Jobs](/jobs/all)
 * [Search US Department of Education for programs](https://collegescorecard.ed.gov/)
 * [Search for jobs on Indeed.com](https://www.indeed.com/)`;
+          }
+
+          // c. Generate Followups
+          const followups = await generateFollowups(
+            lastUserRaw,
+            finalAnswerWithSteps,
+            effectiveLocation
+          );
+
+          // d. Append final data to the StreamData
+          data.append({
+            finalAnswer: finalAnswerWithSteps,
+            followups: followups,
+          });
+        } catch (postError) {
+          console.error("Error during stream post-processing:", postError);
+          // Still append *something* so the client knows we're done
+          data.append({
+            finalAnswer: fullResponse, // Send whatever we had
+            followups: defaultFollowups(), // Use defaults
+          });
+        } finally {
+          // 3. Close both the StreamData and the ReadableStream controller
+          data.close();
+          controller.close();
         }
-
-        // c. Generate Followups
-        const followups = await generateFollowups(
-          lastUserRaw,
-          finalAnswerWithSteps,
-          effectiveLocation
-        );
-
-        // d. Append followups and final answer (with featured/steps) to the data stream
-        data.append({
-          finalAnswer: finalAnswerWithSteps, // Send the *full* final answer
-          followups: followups,
-        });
-
-        // e. Close the data stream
-        data.close();
       },
-      // Append the data stream to the main response
-      experimental_streamData: true,
     });
 
     // 7. Return the streaming response
     return new StreamingTextResponse(stream, {}, data);
+    
   } catch (e: any) {
     if (e.message === 'LOCATION_REQUIRED') {
       // Handle the specific "location missing" error
@@ -147,7 +165,7 @@ You can also search for more opportunities on your own:
       });
     }
 
-    console.error('Error in /api/chat route:', e);
+    console.error("Error in /api/chat route:", e);
     return NextResponse.json(
       { answer: "Sorry, I couldn't process that.", followups: [] },
       { status: 500 }
