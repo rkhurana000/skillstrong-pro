@@ -21,8 +21,10 @@ export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guid
 **Output Format:** Respond with Markdown, using short paragraphs and bullet points.
 
 **Non-Negotiable Rules:**
-1.  **Prioritize RAG Context & Synthesize Overviews:** Your system context may contain "Web Results" (with citations [#1], [#2]...) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
-    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text. Include inline citations (e.g., [#1]). **IMPORTANT: If the user asked a general "Tell me about [Role]" or similar overview question, synthesize a GENERAL OVERVIEW. Use facts from the "Web Results" (like typical skills, pay ranges, training) but structure your answer as a comprehensive overview, NOT a summary of a single job posting or specific program unless that was explicitly requested.**
+1.  **Prioritize RAG Context & Synthesize Overviews:** Your system context may contain "Web Results" (with citations) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
+    * **--- FIX: Updated Citation Rule ---**
+    * **Preserve Inline Citations:** Your "Web Results" context may contain clickable inline citations like \`[#1](...url...)\`. You **MUST preserve these markdown links** exactly as they appear in the context.
+    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text.
     * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. Only mention the failed search if the user explicitly asked for local/current specifics. Otherwise, provide the general answer seamlessly.
 2.  **Preserve Sources Section:** If context includes "**Sources**", include that *entire section* verbatim at the end of your main answer (before "Next Steps").
 3.  **Append SkillStrong Links:** *After* your main answer (and "**Sources**"), append the *entire* "### 🛡️ SkillStrong Search" block **only if provided** in the context.
@@ -332,9 +334,9 @@ function defaultFollowups(): string[] {
   ].slice(0, 3);
 }
 
-// --- Followup Generation (FIX #2) ---
+// --- Followup Generation ---
 export async function generateFollowups(
-  messages: Message[], // Changed from question/answer
+  messages: Message[], // Changed
   finalAnswer: string,
   location?: string
 ): Promise<string[]> {
@@ -394,7 +396,7 @@ Generate JSON object with 4 relevant followups:`;
   }
 }
 
-// --- Preamble Function (FIX #1) ---
+// --- Preamble Function ---
 export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   messagesForLLM: Message[];
   lastUserRaw: string;
