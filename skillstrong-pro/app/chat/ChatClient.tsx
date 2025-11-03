@@ -98,7 +98,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       );
 
       // 3. Save the conversation
-      const convoId = activeConvoId || searchParams.get('id');
+      // const convoId = activeConvoId || searchParams.get('id'); // <-- THIS WAS THE BUG
+      const convoId = activeConvoId; // <-- THIS IS THE FIX
+
       try {
         const savedConvo = await saveConversation({
           id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
@@ -159,7 +161,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      
-     // --- THIS FIX IS FOR THE LOCATION BUG ---
+     // --- THIS IS THE FIX ---
      // Pass the *current* location and provider on every submit
      chatHandleSubmit(e, {
         options: {
@@ -173,7 +175,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     
-    // --- THIS FIX IS FOR THE LOCATION BUG ---
+    // --- THIS IS THE FIX ---
     // Pass the *current* location and provider on every append
     chatAppend({ role: 'user', content: prompt }, {
         options: {
