@@ -1,4 +1,4 @@
-// tailwind.config.ts
+// tailwind.config.js
 import type { Config } from "tailwindcss";
 
 const config: Config = {
@@ -13,12 +13,8 @@ const config: Config = {
     },
   },
   plugins: [
-    require('@tailwindcss/typography'), // <-- ADD THIS LINE
-    require('@tailwindcss/aspect-ratio'), // <-- ADD THIS LINE
+    require('@tailwindcss/typography'),
+    require('@tailwindcss/aspect-ratio'),
   ],
 };
-export default config;
-// tailwind.config.ts
-import type { Config } from "tailwindcss";
-
 export default config;
