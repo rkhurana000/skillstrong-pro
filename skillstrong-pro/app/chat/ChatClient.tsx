@@ -67,11 +67,15 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
+    // --- FIX #1 (Follow-ups/Overwrite): onFinish is now ONLY for saving ---
     onFinish: async (message) => {
+      // `message` is the final assistant message (unenriched)
+      // `chatData` holds the enriched data from the stream
+      
       let finalAnswer = message.content;
-      let followups: string[] = [];
-
       let finalData = null;
+
+      // 1. Parse chatData to get the enriched answer
       if (chatData && chatData.length > 0) {
         for (let i = chatData.length - 1; i >= 0; i--) {
           try {
@@ -86,21 +90,16 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
       if (finalData) { 
         finalAnswer = finalData.finalAnswer;
-        followups = finalData.followups;
       }
       
-      setCurrentFollowUps(followups);
+      // 2. Create the final message list for saving
+      // `chatMessages` at this point already contains the final (unenriched) assistant message
+      const finalMessagesForSave = chatMessages.map(m => 
+        m.id === message.id ? { ...m, content: finalAnswer } : m
+      );
 
+      // 3. Save the conversation
       const convoId = activeConvoId || searchParams.get('id');
-      const currentMessages = [...chatMessages, message];
-
-      const finalMessagesForSave = currentMessages.map(m => {
-        if (m.id === message.id) {
-          return { ...m, content: finalAnswer };
-        }
-        return m;
-      });
-      
       try {
         const savedConvo = await saveConversation({
           id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
@@ -108,6 +107,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
           provider: currentProvider,
         });
         
+        // 4. Update UI state
         const finalId = savedConvo.id;
         setHistory(prev => {
           const newHistoryItem = { ...savedConvo };
@@ -133,6 +133,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   });
 
+  // --- FIX #1 (Follow-ups/Overwrite): Logic to get final answer for rendering ---
   const lastValidData = useMemo(() => {
     if (!chatData || chatData.length === 0) return null;
     for (let i = chatData.length - 1; i >= 0; i--) {
@@ -145,31 +146,38 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
     return null;
   }, [chatData]);
+
+  // --- FIX #1 (Follow-ups/Overwrite): Effect to set follow-ups ---
+  useEffect(() => {
+    // Only set follow-ups when loading is finished AND we have valid data
+    if (lastValidData && !chatIsLoading) {
+      setCurrentFollowUps(lastValidData.followups || []);
+    }
+  }, [lastValidData, chatIsLoading]); // Reacts to data changes and loading state
   
   // --- Event Handlers ---
   const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
      if (!user) { router.push('/account'); return; }
-     setCurrentFollowUps([]);
+     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      chatHandleSubmit(e);
   };
   
   const handlePromptClickSubmit = (prompt: string) => {
     if (!user) { router.push('/account'); return; }
-    setCurrentFollowUps([]);
+    setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     chatAppend({ role: 'user', content: prompt });
   };
   
   const createNewChat = () => {
-    setChatMessages([]); // Clear messages from SDK
+    setChatMessages([]); 
     setActiveConvoId(null);
     setCurrentFollowUps([]);
-    initialUrlHandled.current = true; // Mark as handled
+    initialUrlHandled.current = true;
     router.push(pathname);
   };
   
-  // --- THIS FUNCTION CONTAINS THE FIX ---
+  // --- FIX #2 (Titles): Updated saveConversation ---
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
-    // --- FIX: Title generation logic updated ---
     // Generate title ONLY if it's a new conversation (no ID) and has at least 2 messages
     if (!convo.id && convo.messages && convo.messages.length >= 2) {
        try {
@@ -180,17 +188,15 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          });
          if (titleRes.ok) {
            const { title: generatedTitle } = await titleRes.json();
-           convo.title = generatedTitle || 'New Conversation';
+           convo.title = generatedTitle || 'New Conversation'; // Set the title
          } else {
-           // Fallback if API fails
-           convo.title = 'New Conversation';
+           convo.title = 'New Conversation'; // Fallback
          }
        } catch (e) {
          console.error("Error fetching title:", e);
-         convo.title = 'New Conversation';
+         convo.title = 'New Conversation'; // Fallback
        }
     }
-    // --- END FIX ---
     
     // Save to DB
     const res = await fetch('/api/chat/history', {
@@ -207,7 +213,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   };
   
   const handleHistoryClick = async (id: string, navigate = true) => {
-    if (activeConvoId === id && chatMessages.length > 0) return; // Already on it
+    if (activeConvoId === id && chatMessages.length > 0) return; 
     
     initialUrlHandled.current = true;
     try {
@@ -215,7 +221,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       if (!res.ok) throw new Error('Failed to fetch conversation');
       const convo: any = await res.json();
       
-      setChatMessages(convo.messages || []); // Load messages into SDK
+      setChatMessages(convo.messages || []); 
       setActiveConvoId(convo.id);
       setCurrentProvider(convo.provider || 'openai');
       setCurrentFollowUps([]); // Clear old follow-ups
@@ -277,7 +283,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   // --- Render ---
   return (
     <div className="chat-container">
-      {/* --- Sidebar --- */}
+      {/* --- Sidebar (Unchanged) --- */}
       <aside className={`chat-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
          <div className="sidebar-header-controls">
               <button
@@ -353,6 +359,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
             </div>
           )}
           
+          {/* --- Updated Message List Rendering --- */}
           <div className="message-list">
             {chatMessages.map((msg, idx) => {
               const isLastAssistantMessage = msg.role === 'assistant' && idx === chatMessages.length - 1;
@@ -386,6 +393,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          
          <footer className="chat-footer">
              <div className="footer-content">
+                 {/* --- This will now be set by the useEffect --- */}
                  {currentFollowUps.length > 0 && !chatIsLoading && (
                      <div className="follow-ups">
                          {currentFollowUps.map((prompt, i) => (
@@ -411,7 +419,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          </footer>
       </main>
 
-      {/* --- Confirmation Dialog --- */}
+      {/* --- Confirmation Dialog (Unchanged) --- */}
       {showClearConfirm && (
            <div className="clear-confirm-backdrop">
                <div className="clear-confirm-dialog">
