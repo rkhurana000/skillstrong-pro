@@ -14,7 +14,7 @@ import { useLocation } from '@/app/contexts/LocationContext';
 import './chat.css'; // Ensure chat.css is imported
 
 // Import Vercel AI SDK hook
-import { useChat, type Message } from 'ai/react'; // <--- Vercel AI SDK v2 import
+import { useChat, type Message } from 'ai/react'; // <--- Vercel AI SDK v3 import
 
 // Type Definitions
 type HistoryItem = { id: string; title: string; updated_at?: string; provider: 'openai' | 'gemini' };
@@ -63,7 +63,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     isLoading: chatIsLoading, 
     setMessages: setChatMessages, 
     append: chatAppend,
-    data: chatData, // v2 uses `data` for the appended JSON
+    data: chatData, // v3 uses `data` for the appended JSON
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
@@ -77,11 +77,23 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
       if (chatData) {
         try {
-          // In v2, `data` is an array of the JSON strings
-          const lastDataPacket = (chatData as any[]).find(d => d.finalAnswer);
-          if (lastDataPacket) {
-            finalAnswer = lastDataPacket.finalAnswer;
-            followups = lastDataPacket.followups;
+          // In v3, `data` is an array of the JSON strings
+          // We need to find the *last* data packet that has our expected structure
+          const allData = (chatData as any[]);
+          let lastValidData = null;
+          for (let i = allData.length - 1; i >= 0; i--) {
+            try {
+              const parsed = JSON.parse(allData[i]);
+              if (parsed.finalAnswer) {
+                lastValidData = parsed;
+                break;
+              }
+            } catch (e) { /* ignore parse errors */ }
+          }
+
+          if (lastValidData) {
+            finalAnswer = lastValidData.finalAnswer;
+            followups = lastValidData.followups;
             
             // Update the UI *one last time* with the full final answer
             setChatMessages(prevMessages => {
@@ -101,23 +113,23 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
       // Now save the conversation
       const convoId = activeConvoId || searchParams.get('id');
-      // Get the *current* list of messages from the hook
-      // `chatMessages` might be stale, so we build it
-      const finalMessages = [
-          ...chatMessages, 
-          { ...message, content: finalAnswer } // Use the final answer
-      ];
-      // Remove the last message if it's already in chatMessages
-      if (chatMessages[chatMessages.length - 1]?.id === message.id) {
-          finalMessages.pop();
-          finalMessages.push({ ...message, content: finalAnswer });
-      }
+      
+      // Get the *current* list of messages from the hook state
+      const currentMessages = [...chatMessages, message];
+
+      // Re-create the final message list for saving
+      const finalMessagesForSave = currentMessages.map(m => {
+        if (m.id === message.id) {
+          return { ...m, content: finalAnswer }; // Ensure final message has full content
+        }
+        return m;
+      });
 
       
       try {
         const savedConvo = await saveConversation({
           id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
-          messages: finalMessages,
+          messages: finalMessagesForSave, // Use the updated list
           provider: currentProvider,
         });
         
@@ -242,6 +254,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
     const convoId = searchParams.get('id');
     const category = searchParams.get('category');
+    const newChat = searchParams.get('newChat'); // Check for newChat param
 
     if (convoId) {
       initialUrlHandled.current = true;
@@ -249,6 +262,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     } else if (category) {
       initialUrlHandled.current = true;
       handlePromptClickSubmit(`Tell me about ${category}`);
+    } else if (newChat) { // Handle newChat param
+        initialUrlHandled.current = true;
+        createNewChat(); // Start a new chat
     }
   }, [searchParams, chatMessages.length]); // Re-run if searchParams change
 
@@ -345,7 +361,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
               <div key={msg.id} className={`message-wrapper ${msg.role}`}>
                 <div className={`message-bubble ${msg.role}`}>
                   <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
-                     <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
+                     <ReactMarkdown remarkPlugins={[remarkGfm as any]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
                        {msg.content}
                      </ReactMarkdown>
                   </article>
