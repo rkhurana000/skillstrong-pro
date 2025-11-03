@@ -155,18 +155,30 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   }, [lastValidData, chatIsLoading]); // Reacts to data changes and loading state
   
   // --- Event Handlers ---
-  const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
-     chatHandleSubmit(e);
+     
+     // FIX: Pass the current location and provider on submit
+     chatHandleSubmit(e, {
+        options: {
+            body: { location: location, provider: currentProvider }
+        }
+     });
   };
-  
+
   const handlePromptClickSubmit = (prompt: string) => {
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
-    chatAppend({ role: 'user', content: prompt });
+    
+    // FIX: Pass the current location and provider on append
+    chatAppend({ role: 'user', content: prompt }, {
+        options: {
+            body: { location: location, provider: currentProvider }
+        }
+    });
   };
-  
+    
   const createNewChat = () => {
     setChatMessages([]); 
     setActiveConvoId(null);
