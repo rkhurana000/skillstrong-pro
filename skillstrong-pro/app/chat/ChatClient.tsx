@@ -1,7 +1,7 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react'; // Added useMemo
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { 
@@ -67,69 +67,53 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
+    // --- FIX #1 & #2: Updated onFinish handler ---
     onFinish: async (message) => {
-      // onFinish runs *after* the stream is done
-      // `message` is the final assistant message
-      // `chatData` will contain our appended JSON
+      // `message` is the final message object from the hook (with unenriched content)
       
       let finalAnswer = message.content;
       let followups: string[] = [];
 
-      if (chatData) {
-        try {
-          // In v3, `data` is an array of the JSON strings
-          // We need to find the *last* data packet that has our expected structure
-          const allData = (chatData as any[]);
-          let lastValidData = null;
-          for (let i = allData.length - 1; i >= 0; i--) {
-            try {
-              const parsed = JSON.parse(allData[i]);
-              if (parsed.finalAnswer) {
-                lastValidData = parsed;
-                break;
-              }
-            } catch (e) { /* ignore parse errors */ }
-          }
-
-          if (lastValidData) {
-            finalAnswer = lastValidData.finalAnswer;
-            followups = lastValidData.followups;
-            
-            // Update the UI *one last time* with the full final answer
-            setChatMessages(prevMessages => {
-               const newMessages = [...prevMessages];
-               const lastMessage = newMessages[newMessages.length - 1];
-               if (lastMessage.role === 'assistant') {
-                 lastMessage.content = finalAnswer;
-               }
-               return newMessages;
-            });
-            setCurrentFollowUps(followups);
-          }
-        } catch (e) {
-          console.error("Error parsing chat data:", e);
+      // FIX #2: Parse chatData *inside* onFinish to get the latest data
+      let finalData = null;
+      if (chatData && chatData.length > 0) {
+        for (let i = chatData.length - 1; i >= 0; i--) {
+          try {
+            // Data is appended as JSON strings, find the last valid one
+            const parsed = JSON.parse((chatData as any)[i]);
+            if (parsed.finalAnswer) {
+              finalData = parsed;
+              break;
+            }
+          } catch (e) { /* ignore parse errors */ }
         }
       }
 
-      // Now save the conversation
-      const convoId = activeConvoId || searchParams.get('id');
+      // If we found enriched data, use it
+      if (finalData) { 
+        finalAnswer = finalData.finalAnswer;
+        followups = finalData.followups;
+      }
       
-      // Get the *current* list of messages from the hook state
-      const currentMessages = [...chatMessages, message];
+      // Always set followups (even if empty)
+      setCurrentFollowUps(followups);
 
-      // Re-create the final message list for saving
+      // Now, save the conversation to the DB with the *enriched* finalAnswer
+      const convoId = activeConvoId || searchParams.get('id');
+      const currentMessages = [...chatMessages, message]; // Get messages *from the hook*
+
       const finalMessagesForSave = currentMessages.map(m => {
         if (m.id === message.id) {
-          return { ...m, content: finalAnswer }; // Ensure final message has full content
+          // Save the message with the *enriched* content
+          return { ...m, content: finalAnswer };
         }
         return m;
       });
-
       
       try {
         const savedConvo = await saveConversation({
           id: convoId && !convoId.startsWith('temp-') ? convoId : undefined,
-          messages: finalMessagesForSave, // Use the updated list
+          messages: finalMessagesForSave,
           provider: currentProvider,
         });
         
@@ -157,8 +141,23 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       console.error("Chat error:", error);
     }
   });
+
+  // --- FIX #1: Logic to get final answer for rendering ---
+  // Use useMemo to parse the chatData stream efficiently for rendering
+  const lastValidData = useMemo(() => {
+    if (!chatData || chatData.length === 0) return null;
+    for (let i = chatData.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse((chatData as any)[i]);
+        if (parsed.finalAnswer) {
+          return parsed;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    return null;
+  }, [chatData]);
   
-  // --- Event Handlers ---
+  // --- Event Handlers (Unchanged) ---
   const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]);
@@ -228,7 +227,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   };
 
-  // --- (Clear History and Provider Change - unchanged) ---
   const handleClearHistory = async () => {
     if (!user) return;
     setShowClearConfirm(false);
@@ -355,19 +353,29 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
             </div>
           )}
           
-          {/* Message List */}
+          {/* --- FIX #1: Updated Message List Rendering --- */}
           <div className="message-list">
-            {chatMessages.map((msg) => (
-              <div key={msg.id} className={`message-wrapper ${msg.role}`}>
-                <div className={`message-bubble ${msg.role}`}>
-                  <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
-                     <ReactMarkdown remarkPlugins={[remarkGfm as any]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
-                       {msg.content}
-                     </ReactMarkdown>
-                  </article>
+            {chatMessages.map((msg, idx) => {
+              // Check if this is the last assistant message
+              const isLastAssistantMessage = msg.role === 'assistant' && idx === chatMessages.length - 1;
+              
+              // Determine content: Use enriched answer if available for the last message
+              const contentToRender = isLastAssistantMessage && lastValidData && !chatIsLoading
+                ? lastValidData.finalAnswer 
+                : msg.content;
+              
+              return (
+                <div key={msg.id} className={`message-wrapper ${msg.role}`}>
+                  <div className={`message-bubble ${msg.role}`}>
+                    <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
+                       <ReactMarkdown remarkPlugins={[remarkGfm as any]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
+                         {contentToRender}
+                       </ReactMarkdown>
+                    </article>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             
             {/* Typing indicator logic: show if loading AND last message is user */}
             {chatIsLoading && chatMessages[chatMessages.length - 1]?.role === 'user' && (
@@ -382,6 +390,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          
          <footer className="chat-footer">
              <div className="footer-content">
+                 {/* Follow-ups will now be set correctly by onFinish */}
                  {currentFollowUps.length > 0 && !chatIsLoading && (
                      <div className="follow-ups">
                          {currentFollowUps.map((prompt, i) => (
