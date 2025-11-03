@@ -35,19 +35,24 @@ function defaultFollowups(): string[] {
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { messages, location } = body;
+  
+  let messagesForLLM: Message[] = []; // Define here to have scope
+  let lastUserRaw = '';
+  let effectiveLocation: string | null = null;
+  let internalRAG = '';
 
   try {
     // 1. Run all "pre-work" (RAG, context building, checks)
-    const {
-      messagesForLLM,
-      lastUserRaw,
-      effectiveLocation,
-      internalRAG,
-      domainGuarded,
-    } = await orchestratePreamble({ messages, location });
-
+    const preambleResult = await orchestratePreamble({ messages, location });
+    
+    // Destructure results
+    messagesForLLM = preambleResult.messagesForLLM;
+    lastUserRaw = preambleResult.lastUserRaw;
+    effectiveLocation = preambleResult.effectiveLocation;
+    internalRAG = preambleResult.internalRAG;
+    
     // 2. Handle guard conditions
-    if (domainGuarded) {
+    if (preambleResult.domainGuarded) {
       return NextResponse.json({
         answer:
           'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
@@ -117,11 +122,17 @@ You can also search for more opportunities on your own:
 * [Search for jobs on Indeed.com](https://www.indeed.com/)`;
         }
 
-        // c. Generate Followups
+        // c. Generate Followups (FIX #2)
+        // We pass the full message history that the LLM used
+        const finalMessages: Message[] = [
+            ...messagesForLLM, 
+            { id: 'final_answer', role: 'assistant', content: finalAnswerWithSteps }
+        ];
+        
         const followups = await generateFollowups(
-          lastUserRaw,
+          finalMessages, // Pass full context
           finalAnswerWithSteps,
-          effectiveLocation ?? undefined // <-- THE FINAL FIX
+          effectiveLocation ?? undefined
         );
 
         // d. Append final data to the StreamData
@@ -146,13 +157,22 @@ You can also search for more opportunities on your own:
       return NextResponse.json({
         answer:
           'To find local results, please set your location using the button in the header.',
-        followups: [],
+        followups: [], // Send empty followups
       });
     }
 
     console.error("Error in /api/chat route:", e);
+    // Generate followups even on error
+     const errorFollowups = await generateFollowups(
+          messagesForLLM, // Pass whatever context we had
+          "Sorry, I couldn't process that.",
+          effectiveLocation ?? undefined
+     );
     return NextResponse.json(
-      { answer: "Sorry, I couldn't process that.", followups: [] },
+      { 
+          answer: "Sorry, I couldn't process that.", 
+          followups: errorFollowups.length > 0 ? errorFollowups : defaultFollowups()
+      },
       { status: 500 }
     );
   }
