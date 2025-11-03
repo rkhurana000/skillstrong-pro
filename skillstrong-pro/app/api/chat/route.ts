@@ -2,9 +2,9 @@
 import {
   StreamingTextResponse,
   experimental_StreamData,
-  streamText, // <--- Use streamText
+  streamText,
 } from 'ai';
-import { OpenAI } from '@ai-sdk/openai'; // <--- Use the SDK's OpenAI client
+import { OpenAI } from '@ai-sdk/openai';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Import our refactored orchestrator functions
@@ -16,7 +16,7 @@ import {
 } from '@/lib/orchestrator';
 
 // Import findFeaturedMatching from its correct source file
-import { findFeaturedMatching } from '@/lib/marketplace';
+import { findFeaturedMatching }from '@/lib/marketplace';
 
 export const runtime = 'nodejs'; // Must be nodejs for supabaseAdmin
 export const dynamic = 'force-dynamic';
@@ -59,7 +59,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Prepare the final LLM call
-    // Combine system prompts into one string for streamText
     const systemPrompt = [
       COACH_SYSTEM,
       effectiveLocation ? `User location: ${effectiveLocation}` : ''
@@ -71,9 +70,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Call streamText
     const result = await streamText({
-      // --- THIS IS THE FIX ---
       model: openai.chat('gpt-4o'), // Use .chat() to get the model
-      // --- END OF FIX ---
       system: systemPrompt,
       messages: messagesForLLM,
       onFinish: async (result) => {
