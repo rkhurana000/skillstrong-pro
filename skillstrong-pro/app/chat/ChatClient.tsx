@@ -1,7 +1,7 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react'; // Added useMemo
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { 
@@ -67,19 +67,14 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
-    // --- FIX #1 & #2: Updated onFinish handler ---
     onFinish: async (message) => {
-      // `message` is the final message object from the hook (with unenriched content)
-      
       let finalAnswer = message.content;
       let followups: string[] = [];
 
-      // FIX #2: Parse chatData *inside* onFinish to get the latest data
       let finalData = null;
       if (chatData && chatData.length > 0) {
         for (let i = chatData.length - 1; i >= 0; i--) {
           try {
-            // Data is appended as JSON strings, find the last valid one
             const parsed = JSON.parse((chatData as any)[i]);
             if (parsed.finalAnswer) {
               finalData = parsed;
@@ -89,22 +84,18 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         }
       }
 
-      // If we found enriched data, use it
       if (finalData) { 
         finalAnswer = finalData.finalAnswer;
         followups = finalData.followups;
       }
       
-      // Always set followups (even if empty)
       setCurrentFollowUps(followups);
 
-      // Now, save the conversation to the DB with the *enriched* finalAnswer
       const convoId = activeConvoId || searchParams.get('id');
-      const currentMessages = [...chatMessages, message]; // Get messages *from the hook*
+      const currentMessages = [...chatMessages, message];
 
       const finalMessagesForSave = currentMessages.map(m => {
         if (m.id === message.id) {
-          // Save the message with the *enriched* content
           return { ...m, content: finalAnswer };
         }
         return m;
@@ -142,8 +133,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   });
 
-  // --- FIX #1: Logic to get final answer for rendering ---
-  // Use useMemo to parse the chatData stream efficiently for rendering
   const lastValidData = useMemo(() => {
     if (!chatData || chatData.length === 0) return null;
     for (let i = chatData.length - 1; i >= 0; i--) {
@@ -157,7 +146,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     return null;
   }, [chatData]);
   
-  // --- Event Handlers (Unchanged) ---
+  // --- Event Handlers ---
   const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]);
@@ -178,17 +167,30 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     router.push(pathname);
   };
   
+  // --- THIS FUNCTION CONTAINS THE FIX ---
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
-    // Generate title
-    if (convo.messages?.length === 2 && (!convo.id || convo.id.startsWith('temp-'))) {
-       const titleRes = await fetch('/api/title', {
-           method: 'POST',
-           headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ messages: convo.messages }),
-       });
-       const { title: generatedTitle } = await titleRes.json();
-      convo.title = generatedTitle || 'New Conversation';
+    // --- FIX: Title generation logic updated ---
+    // Generate title ONLY if it's a new conversation (no ID) and has at least 2 messages
+    if (!convo.id && convo.messages && convo.messages.length >= 2) {
+       try {
+         const titleRes = await fetch('/api/title', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ messages: convo.messages }),
+         });
+         if (titleRes.ok) {
+           const { title: generatedTitle } = await titleRes.json();
+           convo.title = generatedTitle || 'New Conversation';
+         } else {
+           // Fallback if API fails
+           convo.title = 'New Conversation';
+         }
+       } catch (e) {
+         console.error("Error fetching title:", e);
+         convo.title = 'New Conversation';
+       }
     }
+    // --- END FIX ---
     
     // Save to DB
     const res = await fetch('/api/chat/history', {
@@ -246,13 +248,12 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   };
 
-  // Effect to load convo from URL (needs to run *after* SDK is initialized)
    useEffect(() => {
     if (initialUrlHandled.current || chatMessages.length > 0) return;
 
     const convoId = searchParams.get('id');
     const category = searchParams.get('category');
-    const newChat = searchParams.get('newChat'); // Check for newChat param
+    const newChat = searchParams.get('newChat'); 
 
     if (convoId) {
       initialUrlHandled.current = true;
@@ -260,24 +261,23 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     } else if (category) {
       initialUrlHandled.current = true;
       handlePromptClickSubmit(`Tell me about ${category}`);
-    } else if (newChat) { // Handle newChat param
+    } else if (newChat) { 
         initialUrlHandled.current = true;
-        createNewChat(); // Start a new chat
+        createNewChat(); 
     }
-  }, [searchParams, chatMessages.length]); // Re-run if searchParams change
+  }, [searchParams, chatMessages.length]); 
 
-  // Effect for auto-scrolling
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [chatMessages, chatIsLoading]); // Trigger on messages change OR loading state
+  }, [chatMessages, chatIsLoading]); 
   
   
   // --- Render ---
   return (
     <div className="chat-container">
-      {/* --- Sidebar (Unchanged) --- */}
+      {/* --- Sidebar --- */}
       <aside className={`chat-sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
          <div className="sidebar-header-controls">
               <button
@@ -327,7 +327,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       <main className="chat-main">
          <div className="chat-header">
            <h3>Coach Mach</h3>
-           {chatMessages.length > 0 && ( // Only show provider switch if in a chat
+           {chatMessages.length > 0 && ( 
              <div className="provider-switch">
                <button onClick={() => handleProviderChange('openai')} className={currentProvider === 'openai' ? 'active' : ''}><Bot size={16}/> GPT-4o</button>
                <button onClick={() => handleProviderChange('gemini')} className={currentProvider === 'gemini' ? 'active' : ''}><Gem size={16}/> Gemini</button>
@@ -353,13 +353,10 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
             </div>
           )}
           
-          {/* --- FIX #1: Updated Message List Rendering --- */}
           <div className="message-list">
             {chatMessages.map((msg, idx) => {
-              // Check if this is the last assistant message
               const isLastAssistantMessage = msg.role === 'assistant' && idx === chatMessages.length - 1;
               
-              // Determine content: Use enriched answer if available for the last message
               const contentToRender = isLastAssistantMessage && lastValidData && !chatIsLoading
                 ? lastValidData.finalAnswer 
                 : msg.content;
@@ -377,7 +374,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
               );
             })}
             
-            {/* Typing indicator logic: show if loading AND last message is user */}
             {chatIsLoading && chatMessages[chatMessages.length - 1]?.role === 'user' && (
                <div className="message-wrapper assistant">
                  <div className="message-bubble assistant">
@@ -390,7 +386,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          
          <footer className="chat-footer">
              <div className="footer-content">
-                 {/* Follow-ups will now be set correctly by onFinish */}
                  {currentFollowUps.length > 0 && !chatIsLoading && (
                      <div className="follow-ups">
                          {currentFollowUps.map((prompt, i) => (
@@ -416,7 +411,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          </footer>
       </main>
 
-      {/* --- Confirmation Dialog (Unchanged) --- */}
+      {/* --- Confirmation Dialog --- */}
       {showClearConfirm && (
            <div className="clear-confirm-backdrop">
                <div className="clear-confirm-dialog">
