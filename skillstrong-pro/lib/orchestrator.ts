@@ -2,9 +2,9 @@
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 import { findFeaturedMatching } from '@/lib/marketplace';
-import type { Message, Role } from 'ai/react'; // <--- Vercel AI SDK v2 import
+import type { Message } from 'ai/react'; // <--- Vercel AI SDK v3 import (FIXED)
 
-export type { Message, Role };
+export type { Message }; // (FIXED)
 
 export interface OrchestratorInput {
   messages: Message[];
@@ -434,6 +434,7 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   if (canonical && isFirstUserMessage) {
     const seedPrompt = buildOverviewPrompt(canonical);
     messagesForLLM[messagesForLLM.length - 1] = {
+      ...messagesForLLM[messagesForLLM.length - 1], // Spread existing properties like id
       role: 'user',
       content: seedPrompt,
     };
@@ -481,6 +482,7 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   }
   if (combinedContext) {
     messagesForLLM.push({
+      id: 'system_rag_context', // Add an ID
       role: 'system',
       content: `Use the following search results to answer the user's query...\n\n${combinedContext}`,
     });
