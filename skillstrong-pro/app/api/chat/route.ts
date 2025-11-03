@@ -1,8 +1,8 @@
 // /app/api/chat/route.ts
 import {
-  OpenAIStream, // <--- v2 import
-  StreamingTextResponse, // <--- v2 import
-  experimental_StreamData, // <--- v2 import
+  StreamingTextResponse,
+  experimental_StreamData,
+  OpenAIStream, // <--- Correct v3 import
 } from 'ai';
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
     // 5. Initialize Vercel AI SDK StreamData
     const data = new experimental_StreamData();
 
-    // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v2 style)
+    // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v3 style)
     const stream = OpenAIStream(responseStream, {
       onFinal: async (completion) => {
         // This logic runs *after* the stream is done
@@ -124,10 +124,11 @@ You can also search for more opportunities on your own:
         );
 
         // d. Append final data to the StreamData
-        data.append(JSON.stringify({ // v2 expects a string
+        // v3 appends an object, not a string
+        data.append({
           finalAnswer: finalAnswerWithSteps,
           followups: followups,
-        }));
+        });
 
         // e. Close the StreamData
         data.close();
