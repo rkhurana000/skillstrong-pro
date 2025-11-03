@@ -332,30 +332,37 @@ function defaultFollowups(): string[] {
   ].slice(0, 3);
 }
 
-// --- Followup Generation ---
+// --- Followup Generation (FIX #2) ---
 export async function generateFollowups(
-  question: string,
-  answer: string,
+  messages: Message[], // Changed from question/answer
+  finalAnswer: string,
   location?: string
 ): Promise<string[]> {
   let finalFollowups: string[] = [];
   let rawResponse = '{"followups": []}';
   try {
     const systemPrompt = `You are an assistant generating follow-up suggestions for a career coach chatbot.
-Based on the User Question and AI Answer, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
+Based on the conversation context, generate a JSON object with a key "followups" containing an array of 4 concise (under 65 chars), relevant, and action-oriented follow-up prompts.
 
 **RULES:**
-1.  Prompts MUST be directly related to the specific topics in the question or answer.
+1.  Prompts MUST be contextually relevant to the *last* exchange in the conversation.
 2.  Prompts SHOULD encourage exploration (e.g., "Find local programs," "Compare salaries").
 3.  **Prompts MUST NOT include specific locations** (e.g., "Find jobs in San Ramon"). Use generic terms like "nearby" or "in my area" if location is relevant.
 4.  AVOID generic prompts ("Anything else?", "More info?").
-5.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
+5.  AVOID repeating prompts that are similar to the last user question.
+6.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
 
-    const userMessage = `User Question: "${question}"
-AI Answer: "${answer}"
-${location ? `User Location: "${location}"` : ''}
+    // Create a formatted context string of the last 4 messages
+    const contextMessages = messages.slice(-4);
+    const contextString = contextMessages.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n\n');
+    // Add the final answer to the context
+    const fullContext = `${contextString}\n\nAssistant: ${finalAnswer}`;
+
+
+    const userMessage = `Conversation Context:\n---\n${fullContext}\n---\n${location ? `User Location: "${location}"` : ''}
 
 Generate JSON object with 4 relevant followups:`;
+
     const res = await openai.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.6,
@@ -387,7 +394,7 @@ Generate JSON object with 4 relevant followups:`;
   }
 }
 
-// --- Preamble Function ---
+// --- Preamble Function (FIX #1) ---
 export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   messagesForLLM: Message[];
   lastUserRaw: string;
@@ -412,26 +419,34 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
     return { 
       messagesForLLM: [], 
       lastUserRaw, 
-      effectiveLocation: effectiveLocation ?? null, // <-- THE FIX
+      effectiveLocation: effectiveLocation ?? null,
       internalRAG: "",
       domainGuarded: true 
     };
   }
-  const isLocalQuery =
-    /near me|local|in my area|nearby|\b\d{5}\b|[A-Z]{2}\b/i.test(lastUserRaw.toLowerCase()) ||
-    /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|tuition|start date|admission|employer|provider|scholarship)\b/i.test(
-      lastUserRaw.toLowerCase()
-    );
-  if (isLocalQuery && !effectiveLocation) {
-    throw new Error("LOCATION_REQUIRED");
-  }
+  
+  // --- START LOCATION LOGIC FIX ---
   const isFirstUserMessage =
     originalMessages.filter((m) => m.role === 'user').length === 1;
   const canonical = detectCanonicalCategory(lastUserRaw);
+  const isOverviewQuery = !!canonical && isFirstUserMessage; // Is it the first message *and* a known category?
+  
+  const hasExplicitLocalWord = /near me|local|in my area|nearby|\b\d{5}\b|([A-Za-z]+,\s*[A-Z]{2})\b/i.test(lastUserRaw.toLowerCase());
+  const hasImplicitLocalTopic = /\b(jobs?|openings?|hiring|apprenticeships?|programs?|training|tuition|start date|admission|employer|provider|scholarship)\b/i.test(lastUserRaw.toLowerCase());
+
+  // Throw error ONLY if:
+  // 1. Location is NOT set AND
+  // 2. The query has an *explicit* local word ("near me", "in CA", etc.) OR
+  // 3. The query has an *implicit* local topic (like "jobs" or "programs") AND it is *NOT* a general overview query.
+  if (!effectiveLocation && (hasExplicitLocalWord || (hasImplicitLocalTopic && !isOverviewQuery))) {
+    throw new Error("LOCATION_REQUIRED");
+  }
+  // --- END LOCATION LOGIC FIX ---
+
   let messagesForLLM: Message[] = [...originalMessages];
   let messageContentForRAGDecision = lastUserRaw;
-  let overviewActuallyUsed = false;
-  if (canonical && isFirstUserMessage) {
+  
+  if (isOverviewQuery) {
     const seedPrompt = buildOverviewPrompt(canonical);
     messagesForLLM[messagesForLLM.length - 1] = {
       ...messagesForLLM[messagesForLLM.length - 1], // Spread existing properties like id
@@ -439,8 +454,8 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
       content: seedPrompt,
     };
     messageContentForRAGDecision = seedPrompt;
-    overviewActuallyUsed = true;
   }
+  
   const internalRAG = await queryInternalDatabase(
     lastUserRaw,
     effectiveLocation ?? undefined
@@ -469,14 +484,12 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   }
   const wasSearchAttempted = needWeb || internalRAG !== '';
   const noResultsFound = webAnswer === null && internalRAG === '';
-  const userAskedForSpecifics = /\b(jobs?|openings?|program|training|salary|pay|near me|local|in my area)\b/i.test(
-    lastUserRaw.toLowerCase()
-  );
+  
   if (
     wasSearchAttempted &&
     noResultsFound &&
-    userAskedForSpecifics &&
-    !overviewActuallyUsed
+    (hasExplicitLocalWord || hasImplicitLocalTopic) && // Only say "no results" if they asked for specifics
+    !isOverviewQuery
   ) {
     combinedContext = `INFO: Could not find specific results for the user's local/current query ("${lastUserRaw}"). Provide a general answer or suggest alternatives.`;
   }
@@ -490,7 +503,7 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   return { 
     messagesForLLM, 
     lastUserRaw, 
-    effectiveLocation: effectiveLocation ?? null, // <-- Also fix here for consistency
+    effectiveLocation: effectiveLocation ?? null,
     internalRAG,
     domainGuarded: false 
   };
