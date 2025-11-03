@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     const responseStream = await openai.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.3,
-      messages: [...systemMessages, ...messagesForLLM] as any, // <-- THE FIX
+      messages: [...systemMessages, ...messagesForLLM] as any, // <-- Fix 1
       stream: true,
     });
 
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     const data = new experimental_StreamData();
 
     // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v3 style)
-    const stream = OpenAIStream(responseStream, {
+    const stream = OpenAIStream(responseStream as any, { // <-- THE NEW FIX
       onFinal: async (completion) => {
         // This logic runs *after* the stream is done
         
