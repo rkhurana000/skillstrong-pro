@@ -66,6 +66,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     data: chatData, // v3 uses `data` for the appended JSON
   } = useChat({
     api: '/api/chat',
+    // THIS BODY IS STATIC AND CAN BECOME STALE
     body: { location: location, provider: currentProvider },
     onFinish: async (message) => {
       // `message` is the final assistant message (unenriched)
@@ -155,30 +156,34 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   }, [lastValidData, chatIsLoading]); // Reacts to data changes and loading state
   
   // --- Event Handlers ---
-const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      
-     // FIX: Pass the current location and provider on submit
+     // --- THIS IS THE FIX ---
+     // Pass the *current* location and provider on every submit
      chatHandleSubmit(e, {
         options: {
             body: { location: location, provider: currentProvider }
         }
      });
+     // --- END FIX ---
   };
-
+  
   const handlePromptClickSubmit = (prompt: string) => {
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     
-    // FIX: Pass the current location and provider on append
+    // --- THIS IS THE FIX ---
+    // Pass the *current* location and provider on every append
     chatAppend({ role: 'user', content: prompt }, {
         options: {
             body: { location: location, provider: currentProvider }
         }
     });
+    // --- END FIX ---
   };
-    
+  
   const createNewChat = () => {
     setChatMessages([]); 
     setActiveConvoId(null);
