@@ -98,8 +98,11 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       );
 
       // 3. Save the conversation
+      
+      // --- THIS IS THE FIX ---
       // const convoId = activeConvoId || searchParams.get('id'); // <-- THIS WAS THE BUG
-      const convoId = activeConvoId; // <-- THIS IS THE FIX
+      const convoId = activeConvoId; // <-- THIS IS THE FIX. Trust the state.
+      // --- END FIX ---
 
       try {
         const savedConvo = await saveConversation({
@@ -134,7 +137,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   });
 
-  // --- FIX #1 (Follow-ups): Logic to get final answer for rendering ---
+  // --- Logic to get final answer for rendering ---
   const lastValidData = useMemo(() => {
     if (!chatData || chatData.length === 0) return null;
     for (let i = chatData.length - 1; i >= 0; i--) {
@@ -148,7 +151,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     return null;
   }, [chatData]);
 
-  // --- FIX #1 (Follow-ups): Effect to set follow-ups ---
+  // --- Effect to set follow-ups ---
   useEffect(() => {
     // Only set follow-ups when loading is finished AND we have valid data
     if (lastValidData && !chatIsLoading) {
@@ -161,7 +164,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
      if (!user) { router.push('/account'); return; }
      setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
      
-     // --- THIS IS THE FIX ---
+     // --- THIS FIX IS FOR THE LOCATION BUG ---
      // Pass the *current* location and provider on every submit
      chatHandleSubmit(e, {
         options: {
@@ -175,7 +178,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     if (!user) { router.push('/account'); return; }
     setCurrentFollowUps([]); // Clear old follow-ups immediately on submit
     
-    // --- THIS IS THE FIX ---
+    // --- THIS FIX IS FOR THE LOCATION BUG ---
     // Pass the *current* location and provider on every append
     chatAppend({ role: 'user', content: prompt }, {
         options: {
@@ -193,31 +196,37 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     router.push(pathname);
   };
   
-  // --- FIX #2 (Titles): Updated saveConversation ---
+  // --- saveConversation (with debug logs) ---
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
     // Generate title ONLY if it's a new conversation (no ID) and has at least 2 messages
     if (!convo.id && convo.messages && convo.messages.length >= 2) {
+       console.log("[ChatClient] New conversation detected, attempting to generate title..."); // DEBUG
        try {
          const titleRes = await fetch('/api/title', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             // --- THIS IS THE FIX ---
-             // Send ONLY the first two messages (user + assistant)
+             // This is correct: Send ONLY the first two messages
              body: JSON.stringify({ messages: convo.messages.slice(0, 2) }),
          });
+         
          if (titleRes.ok) {
            const { title: generatedTitle } = await titleRes.json();
+           console.log("[ChatClient] Title generated successfully:", generatedTitle); // DEBUG
            convo.title = generatedTitle || 'New Conversation'; // Set the title
          } else {
+           console.error("[ChatClient] /api/title call failed, using fallback."); // DEBUG
            convo.title = 'New Conversation'; // Fallback
          }
        } catch (e) {
-         console.error("Error fetching title:", e);
+         console.error("[ChatClient] Error fetching title:", e); // DEBUG
          convo.title = 'New Conversation'; // Fallback
        }
+    } else {
+       console.log("[ChatClient] Existing conversation, skipping title generation."); // DEBUG
     }
     
     // Save to DB
+    console.log("[ChatClient] Saving to /api/chat/history with title:", convo.title); // DEBUG
     const res = await fetch('/api/chat/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
