@@ -2,7 +2,7 @@
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 import { findFeaturedMatching } from '@/lib/marketplace';
-import type { Message, Role } from '@ai-sdk/react'; // Vercel AI SDK v3 import
+import type { Message, Role } from 'ai/react'; // <--- Vercel AI SDK v2 import
 
 export type { Message, Role };
 
