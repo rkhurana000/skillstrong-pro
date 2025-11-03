@@ -60,10 +60,10 @@ export async function POST(req: NextRequest) {
 
     } else {
       // Create new conversation
-      // --- MODIFICATION START ---
+      // --- THIS LOGIC IS CORRECT ---
       let finalTitle = title || 'New Conversation';
 
-      // --- FIX: Only de-duplicate if the title is the default "New Conversation" ---
+      // Only de-duplicate if the title is the default "New Conversation"
       if (finalTitle === 'New Conversation') {
         // Check for duplicate titles
         const { data: existing, error: titleError } = await supabase
@@ -88,14 +88,13 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-      // --- END FIX ---
+      // --- END CORRECT LOGIC ---
 
       const { data, error } = await supabase
         .from('conversations')
         .insert({ user_id: user.id, messages, provider, title: finalTitle }) // Use finalTitle
         .select('id, title, updated_at, provider')
         .single();
-      // --- MODIFICATION END ---
 
       if (error) throw error;
       return NextResponse.json(data);
