@@ -13,7 +13,7 @@ export interface OrchestratorInput {
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- COACH_SYSTEM Prompt (Unchanged) ---
+// --- COACH_SYSTEM Prompt ---
 export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
 
 **Your Mission:** Provide encouraging, clear, and actionable advice on vocational paths in modern manufacturing (e.g., CNC, robotics, welding, maintenance, quality, additive).
@@ -34,7 +34,7 @@ export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guid
 9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response. (The orchestrator may provide a standard block for this).
 10. **No Chain-of-Thought:** Do not reveal internal reasoning.`;
 
-// --- COACH_SYSTEM_WEB_RAG (Unchanged) ---
+// --- COACH_SYSTEM_WEB_RAG ---
 const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results about US manufacturing vocational careers.
 **Core Rules:**
 1.  **Use Context Only:** Base your answer *strictly* on the provided 'RAG Context'.
@@ -44,7 +44,7 @@ const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search resu
 5.  **No Hallucinations:** Do not invent information or URLs.
 6.  **Concise:** Use bullets. Do NOT add 'Next Steps'.`;
 
-// --- Category Detection & Overview Prompt (Unchanged) ---
+// --- Category Detection & Overview Prompt ---
 const CATEGORY_SYNONYMS: Record<string, string[]> = {
   'CNC Machinist': ['cnc machinist', 'cnc', 'machinist', 'cnc operator'],
   'Robotics Technician': [
@@ -91,7 +91,7 @@ function buildOverviewPrompt(canonical: string): string {
   return `Give a student-friendly overview of the **${canonical}** career. Use these sections with emojis and bullet points only:\n\n🔎 **Overview**...\n🧭 **Day-to-Day**...\n🧰 **Tools & Tech**...\n🧠 **Core Skills**...\n💰 **Typical Pay (US)**...\n⏱️ **Training Time**...\n📜 **Helpful Certs**...\n\nKeep it concise and friendly. Do **not** include local programs, openings, or links in this message.`;
 }
 
-// --- URL Domain Helper (Unchanged) ---
+// --- URL Domain Helper ---
 function getDomain(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
@@ -102,7 +102,7 @@ function getDomain(url: string | null | undefined): string | null {
   }
 }
 
-// --- Internal Database Link Generation (Unchanged) ---
+// --- Internal Database Link Generation ---
 async function queryInternalDatabase(
   query: string,
   location?: string
@@ -138,7 +138,7 @@ ${links.join('\n')}`;
   return '';
 }
 
-// --- Domain Guard (Unchanged) ---
+// --- Domain Guard ---
 async function domainGuard(messages: Message[]): Promise<boolean> {
   if (!messages.some((m) => m.role === 'user')) return true;
   const lastUserMessage = messages[messages.length - 1];
@@ -175,7 +175,7 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   }
 }
 
-// --- needsInternetRag (Unchanged) ---
+// --- needsInternetRag ---
 async function needsInternetRag(messageContent: string): Promise<boolean> {
   const contentLower = messageContent.toLowerCase().trim();
   let skipReason = '';
@@ -200,13 +200,12 @@ async function needsInternetRag(messageContent: string): Promise<boolean> {
   }
 }
 
-// --- internetRagCSE (Unchanged) ---
+// --- internetRagCSE ---
 async function internetRagCSE(
   query: string,
   location?: string,
   canonical?: string | null
 ): Promise<string | null> {
-  // ... (entire existing function) ...
   let res: any;
   try {
     const lowerQuery = query.toLowerCase();
@@ -305,7 +304,7 @@ async function internetRagCSE(
   } catch (outerError: any) { return null; }
 }
 
-// --- Sanitization and Defaults (Unchanged) ---
+// --- Sanitization and Defaults ---
 function sanitizeFollowups(arr: any[]): string[] {
   const MAX_LEN = 65;
   const MAX_PROMPTS = 4;
@@ -333,13 +332,12 @@ function defaultFollowups(): string[] {
   ].slice(0, 3);
 }
 
-// --- Followup Generation (Unchanged, but now EXPORTED) ---
+// --- Followup Generation ---
 export async function generateFollowups(
   question: string,
   answer: string,
   location?: string
 ): Promise<string[]> {
-  // ... (entire existing function) ...
   let finalFollowups: string[] = [];
   let rawResponse = '{"followups": []}';
   try {
@@ -389,7 +387,7 @@ Generate JSON object with 4 relevant followups:`;
   }
 }
 
-// --- NEW: EXPORTED PREAMBLE FUNCTION ---
+// --- Preamble Function ---
 export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   messagesForLLM: Message[];
   lastUserRaw: string;
