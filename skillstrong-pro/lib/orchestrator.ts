@@ -2,9 +2,9 @@
 import OpenAI from 'openai';
 import { cseSearch, fetchReadable } from '@/lib/search';
 import { findFeaturedMatching } from '@/lib/marketplace';
-import type { Message } from 'ai/react'; // <--- Vercel AI SDK v3 import (FIXED)
+import type { Message } from 'ai/react'; // <--- Vercel AI SDK v3 import
 
-export type { Message }; // (FIXED)
+export type { Message };
 
 export interface OrchestratorInput {
   messages: Message[];
@@ -412,7 +412,7 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
     return { 
       messagesForLLM: [], 
       lastUserRaw, 
-      effectiveLocation, 
+      effectiveLocation: effectiveLocation ?? null, // <-- THE FIX
       internalRAG: "",
       domainGuarded: true 
     };
@@ -490,7 +490,7 @@ export async function orchestratePreamble(input: OrchestratorInput): Promise<{
   return { 
     messagesForLLM, 
     lastUserRaw, 
-    effectiveLocation, 
+    effectiveLocation: effectiveLocation ?? null, // <-- Also fix here for consistency
     internalRAG,
     domainGuarded: false 
   };
