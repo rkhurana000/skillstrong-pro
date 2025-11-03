@@ -129,7 +129,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         if (!convoId || convoId.startsWith('temp-')) {
           console.log(`[ChatClient] onFinish: This was a new chat. Setting active ID to ${finalId} and updating URL.`); // DEBUG
           setActiveConvoId(finalId);
-          // --- FIX #2: Use router.replace to prevent adding to browser history ---
+          // --- FIX #2: Use router.replace to update URL without adding to history ---
           router.replace(`${pathname}?id=${finalId}`);
         } else {
           console.log(`[ChatClient] onFinish: This was an existing chat. Setting active ID to ${convoId}`); // DEBUG
@@ -303,10 +303,12 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
 
    useEffect(() => {
     console.log("[ChatClient] URL Effect running..."); // DEBUG
+    // --- THIS IS THE CRITICAL FIX ---
     if (initialUrlHandled.current || chatMessages.length > 0) {
-      console.log("[ChatClient] URL Effect: Skipping, already handled."); // DEBUG
+      console.log("[ChatClient] URL Effect: Skipping, already handled or has messages."); // DEBUG
       return;
     }
+    // --- END CRITICAL FIX ---
 
     const convoId = searchParams.get('id');
     const category = searchParams.get('category');
@@ -326,7 +328,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         initialUrlHandled.current = true;
         createNewChat(); 
     }
-  }, [searchParams, chatMessages.length]); 
+  }, [searchParams, chatMessages.length]); // Dependencies are correct
 
   useEffect(() => {
     if (chatContainerRef.current) {
