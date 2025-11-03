@@ -97,11 +97,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       );
 
       // 3. Save the conversation
-      
-      // --- THIS IS THE FIX ---
-      // const convoId = activeConvoId || searchParams.get('id'); // <-- THIS WAS THE BUG
-      const convoId = activeConvoId; // <-- THIS IS THE FIX. Trust the state.
-      // --- END FIX ---
+      const convoId = activeConvoId; // Trust the state
       
       console.log(`[ChatClient] onFinish: activeConvoId is: ${activeConvoId}`); // DEBUG
       console.log(`[ChatClient] onFinish: searchParams.get('id') is: ${searchParams.get('id')}`); // DEBUG
@@ -129,7 +125,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         if (!convoId || convoId.startsWith('temp-')) {
           console.log(`[ChatClient] onFinish: This was a new chat. Setting active ID to ${finalId} and updating URL.`); // DEBUG
           setActiveConvoId(finalId);
-          // --- FIX #2: Use router.replace to update URL without adding to history ---
           router.replace(`${pathname}?id=${finalId}`);
         } else {
           console.log(`[ChatClient] onFinish: This was an existing chat. Setting active ID to ${convoId}`); // DEBUG
@@ -206,10 +201,9 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     setCurrentFollowUps([]);
     initialUrlHandled.current = true;
     
-    // --- FIX #1: This now clears the URL query string ---
+    // --- This clears the URL query string ---
     console.log("[ChatClient] Pushing to /chat to clear URL params."); // DEBUG
     router.push('/chat'); 
-    // --- END FIX #1 ---
   };
   
   // --- saveConversation (with debug logs) ---
@@ -301,13 +295,15 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   };
 
+  // --- THIS IS THE CRITICAL FIX ---
    useEffect(() => {
     console.log("[ChatClient] URL Effect running..."); // DEBUG
-    // --- THIS IS THE CRITICAL FIX ---
-    // This check now prevents the race condition
-    if (initialUrlHandled.current || chatMessages.length > 0) {
-      console.log("[ChatClient] URL Effect: Skipping, already handled or has messages."); // DEBUG
-      return;
+    
+    // If we have already loaded from the URL, OR if we are in a new chat
+    // (activeConvoId is null and we have no messages), DON'T run.
+    if (initialUrlHandled.current) {
+        console.log("[ChatClient] URL Effect: Skipping, initialUrlHandled.current is true."); // DEBUG
+        return;
     }
     // --- END CRITICAL FIX ---
 
@@ -328,8 +324,12 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         console.log("[ChatClient] URL Effect: Handling newChat."); // DEBUG
         initialUrlHandled.current = true;
         createNewChat(); 
+    } else {
+        // This is the default case (e.g., just loading /chat)
+        console.log("[ChatClient] URL Effect: No params, setting initialUrlHandled to true."); // DEBUG
+        initialUrlHandled.current = true;
     }
-  }, [searchParams, chatMessages.length]); // Dependencies are correct
+  }, [searchParams]); // Dependency is correct, only run when URL params change
 
   useEffect(() => {
     if (chatContainerRef.current) {
