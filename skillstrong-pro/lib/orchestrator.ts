@@ -19,7 +19,7 @@ export interface OrchestratorOutput {
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// --- COACH_SYSTEM Prompt (Unchanged) ---
+// --- COACH_SYSTEM Prompt (Rule 9 is simplified, as logic is now in orchestrate) ---
 const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
 
 **Your Mission:** Provide encouraging, clear, and actionable advice on vocational paths in modern manufacturing (e.g., CNC, robotics, welding, maintenance, quality, additive).
@@ -37,7 +37,7 @@ const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helpi
 6.  **Truthfulness:** Rely *only* on "Web Results" for current facts. Cite sources. If unsure/lacking RAG, state that (unless it's a general overview).
 7.  **Geography:** Prioritize nearby options if location known & RAG provides local info. If local search needed but location missing, ONLY respond: "To find local results, please set your location using the button in the header." (empty followups).
 8.  **Accessibility & Tone:** Avoid jargon (explain if needed). Be supportive.
-9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end.
+9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response. (The orchestrator may provide a standard block for this).
 10. **No Chain-of-Thought:** Do not reveal internal reasoning.`;
 
 // System prompt for the web RAG synthesis step (unchanged)
@@ -108,7 +108,7 @@ function getDomain(url: string | null | undefined): string | null {
   }
 }
 
-// --- MODIFICATION START: Internal Database Link Generation (Fixed) ---
+// --- MODIFICATION START: Internal Database Link Generation (Simplified) ---
 async function queryInternalDatabase(
   query: string,
   location?: string
@@ -137,83 +137,33 @@ async function queryInternalDatabase(
     return '';
   }
 
-  console.log('[Internal RAG] Generating internal search links (keyword-only).');
+  console.log('[Internal RAG] Generating hardcoded internal search links.');
 
-  // --- New Search Term Logic ---
-  // 1. Prioritize detecting a canonical category from the *original* query.
-  let searchTerm = detectCanonicalCategory(query);
-  let linkQueryText = ''; // This is the text that goes inside the link
-
-  if (searchTerm) {
-    // We found a clean category like "Robotics Technician"
-    // Shorten it for the link text if it's long
-    if (searchTerm === 'Robotics Technician') searchTerm = 'Robotics';
-    if (searchTerm === 'CNC Machinist') searchTerm = 'CNC';
-    if (searchTerm === 'Maintenance Tech') searchTerm = 'Maintenance';
-    if (searchTerm === 'Quality Control Specialist') searchTerm = 'Quality Control';
-    
-    console.log(`[Internal RAG] Using detected category "${searchTerm}" for search term.`);
-    linkQueryText = ` for "${searchTerm}"`;
-  } else {
-    // 2. If no category, fall back to cleaning the query
-    searchTerm = query
-      .replace(/near me|local|in my area|nearby/gi, '')
-      .replace(/\b(jobs?|openings?|hiring|apprenticeships?)\b/gi, '')
-      .replace(/\b(programs?|training|certificates?|courses?|schools?|college)\b/gi, '')
-      .replace(/in\s+([A-Za-z\s]+,\s*[A-Z]{2}|\d{5}|[A-Z]{2})\b/gi, '')
-      .replace(/find|search for|search|about|tell me about/gi, '') // Remove action words
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (searchTerm.length < 3) {
-      console.log(
-        '[Internal RAG] No category detected and cleaned term is too short. No link will be generated.'
-      );
-      // --- FIX: Return empty string, not broken link ---
-      return ''; 
-    }
-
-    console.log(
-      `[Internal RAG] Using cleaned search term "${searchTerm}" for search term.`
-    );
-    linkQueryText = ` for "${searchTerm}"`;
-  }
-  // --- End New Search Term Logic ---
-
-  const params = new URLSearchParams();
-  if (searchTerm) {
-    // --- FIX: Add the cleaned/detected keyword to the query params ---
-    params.set('q', searchTerm); 
-  }
-
-  // --- Location block is REMOVED ---
-  // We no longer add city or state to the query parameters, per your request.
-
-  const queryString = params.toString(); // This will now be "q=CNC" or "q=Robotics"
   let links: string[] = [];
-
+  
+  // --- FIXED: Hardcode links to the main pages as requested ---
   if (needsJobs)
     links.push(
-      `* [Search all **jobs**${linkQueryText} on SkillStrong](/jobs/all?${queryString})`
+      `* [Search all **jobs** on SkillStrong](/jobs/all)`
     );
   if (needsPrograms)
     links.push(
-      `* [Search all **programs**${linkQueryText} on SkillStrong](/programs/all?${queryString})`
+      `* [Search all **programs** on SkillStrong](/programs/all)`
     );
+  // --- END FIX ---
 
   if (links.length > 0) {
     return `### 🛡️ SkillStrong Search
 You can also search our internal database directly:
 ${links.join('\n')}`;
   }
-
-  console.log('[Internal RAG] No relevant links generated.');
+  
   return '';
 }
 // --- MODIFICATION END ---
 
 
-// --- MODIFICATION START: Orchestrate Function (Added Location Extraction) ---
+// --- MODIFICATION START: Orchestrate Function (Added Location Extraction & Next Steps) ---
 export async function orchestrate(
   input: OrchestratorInput
 ): Promise<OrchestratorOutput> {
@@ -224,16 +174,10 @@ export async function orchestrate(
   // --- NEW LOCATION EXTRACTION LOGIC ---
   let effectiveLocation = input.location; // Start with the context location
   if (!effectiveLocation) {
-    // If context location is not set, try to extract from the query
-    // This regex looks for "in/near/around [City]" or "[City, ST]" or "[ZIP]"
     const locationMatch = lastUserRaw.match(
       /\b(in|near|around)\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i
     );
     if (locationMatch) {
-      // Prioritize the captures: 
-      // 1. (City, ST)
-      // 2. (near/in City)
-      // 3. (ZIP)
       effectiveLocation = (locationMatch[4] || locationMatch[2] || locationMatch[3] || "").trim().replace(/,$/, '');
       if (effectiveLocation) {
         console.log(`[Orchestrate] Extracted location from query: "${effectiveLocation}"`);
@@ -284,7 +228,6 @@ export async function orchestrate(
       lastUserRaw.toLowerCase()
     );
 
-  // This check is now correct: if the query *is* local AND our *effectiveLocation* is still null, ask user.
   if (isLocalQuery && !effectiveLocation) {
     console.log(
       '[Orchestrate] Local query detected but location is missing and not in query. Asking user.'
@@ -403,16 +346,35 @@ export async function orchestrate(
   } catch (err) {
     console.error('[Orchestrate] Error fetching/appending featured items:', err);
   }
+
+  // --- NEW: Manually append "Next Steps" if internal RAG was triggered ---
+  let finalAnswerWithSteps = finalAnswerWithFeatured;
+  // Check if internalRAG block was generated (meaning user asked for jobs/programs)
+  if (internalRAG !== '') {
+    // First, remove any "Next Steps:" the AI might have *also* generated
+    finalAnswerWithSteps = finalAnswerWithSteps.replace(/(\n\n\*\*Next Steps:\*\*.*)/is, ''); // 's' flag for multiline
+    
+    // Now, add the user-requested, standardized "Next Steps"
+    finalAnswerWithSteps += `\n\n**Next Steps**
+You can also search for more opportunities on your own:
+* [Search SkillStrong Programs](/programs/all)
+* [Search SkillStrong Jobs](/jobs/all)
+* [Search for jobs on Indeed.com](https://www.indeed.com/)`; // Added trailing slash for clarity
+    
+    console.log("[Orchestrate] Appended standardized 'Next Steps' block.");
+  }
+  // --- END NEW "Next Steps" LOGIC ---
+
   
   // 10. Generate Followups (passing effectiveLocation)
   const followups = await generateFollowups(
     lastUserRaw,
-    finalAnswerWithFeatured,
+    finalAnswerWithSteps, // Pass the *absolute final* answer
     effectiveLocation ?? undefined
   );
   console.log('[Orchestrate] Generated followups.');
   
-  return { answer: finalAnswerWithFeatured.trim(), followups };
+  return { answer: finalAnswerWithSteps.trim(), followups };
 }
 // --- MODIFICATION END ---
 
@@ -542,42 +504,55 @@ async function internetRagCSE(
 
     let q = '';
     
-    // Extract location string (e.g., "San Ramon" or "San Ramon, CA")
-    const locationSearchTerm = location ? `"${location}"` : ""; // Use the full location string in quotes
+    // Use the full location string in quotes (e.g., "San Ramon, CA")
+    const locationSearchTerm = location ? `"${location}"` : ""; 
 
     if (isGeneralInfoQuery && canonical) {
       q = `"${canonical}" career overview (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
+      if (locationSearchTerm) q += ` ${locationSearchTerm}`; // Add location if present
       console.log(
         '[Web RAG] Biasing search for general overview (canonical detected).'
       );
     } else if (isGeneralInfoQuery) {
       q = `${query} (site:bls.gov OR site:onetonline.org OR site:careeronestop.org)`;
+      // Location is already in the query string `query`
       console.log(
         '[Web RAG] Biasing search for general overview (no canonical).'
       );
     } else {
       // This is a specific query (jobs, programs, salary, etc.)
-      const baseQuery = (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query))
-          ? `"${canonical}" ${query.replace(canonical, '')}` // Use canonical + rest of query
-          : `"${query}"`; // Use full query in quotes
       
-      q = baseQuery;
+      // --- NEW QUERY LOGIC ---
+      // Clean the query of location phrases, as we will add the locationSearchTerm
+      let baseQuery = query
+          .replace(/near me|local|in my area|nearby/gi, '')
+          .replace(/in\s+([\w\s,]+(?:,\s*[A-Z]{2})?)|\b(\d{5})\b|([\w\s]+,\s*[A-Z]{2})\b/i, '') // Remove "in San Ramon, CA" etc.
+          .trim();
       
-      // --- New Location Logic ---
+      // Use canonical name if available and relevant
+      if (canonical && /salary|pay|wage|job|opening|program|training|certificate|skill|course/i.test(query)) {
+          // Replace canonical name to avoid duplication, or just use canonical?
+          baseQuery = `"${canonical}" ${baseQuery.replace(new RegExp(canonical, 'i'), '')}`;
+      } else {
+          baseQuery = `"${baseQuery}"`;
+      }
+      
+      q = baseQuery; // Start with the cleaned, quoted query
+      
       if (locationSearchTerm) {
-          q += ` ${locationSearchTerm}`; // Add "San Ramon" (or "San Ramon, CA") to the query
+          q += ` ${locationSearchTerm}`; // Add "San Ramon, CA"
           console.log(`[Web RAG] Added location term to query: ${locationSearchTerm}`);
       } else {
            console.log('[Web RAG] Using standard search logic for specific query (no location).');
       }
-      // --- End New Location Logic ---
+      // --- END NEW QUERY LOGIC ---
       
       // Add platform bias if detected
       if (platformSite) {
           console.log(`[Web RAG] Adding platform bias: ${platformSite}`);
           q += ` (${platformSite})`;
       } else {
-          // Add default biases *only if* a specific platform wasn't mentioned
+          // Add default biases
           if (/(salary|pay|wage|median|bls)/i.test(query)) q += ' (site:bls.gov OR site:onetonline.org)';
           if (/(program|training|certificate|certification|community college|course)/i.test(query)) q += ' (site:.edu OR site:manufacturingusa.com OR site:nims-skills.org OR site:careeronestop.org)';
           if (/jobs?|openings?|hiring|apprenticeship/i.test(query)) q += ' (site:indeed.com OR site:ziprecruiter.com OR site:linkedin.com/jobs OR site:apprenticeship.gov)';
@@ -696,7 +671,7 @@ async function internetRagCSE(
 // --- MODIFICATION END ---
 
 
-// --- Followup Generation (Unchanged) ---
+// --- MODIFICATION START: Followup Generation (Added Location Rule) ---
 async function generateFollowups(
   question: string,
   answer: string,
@@ -711,8 +686,9 @@ Based on the User Question and AI Answer, generate a JSON object with a key "fol
 **RULES:**
 1.  Prompts MUST be directly related to the specific topics in the question or answer.
 2.  Prompts SHOULD encourage exploration (e.g., "Find local programs," "Compare salaries").
-3.  AVOID generic prompts ("Anything else?", "More info?").
-4.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
+3.  **Prompts MUST NOT include specific locations** (e.g., "Find jobs in San Ramon"). Use generic terms like "nearby" or "in my area" if location is relevant.
+4.  AVOID generic prompts ("Anything else?", "More info?").
+5.  Return ONLY the JSON object. Example: {"followups": ["Local CNC Training", "CNC Salary Ranges", "Welding Apprenticeships"]}`;
 
     const userMessage = `User Question: "${question}"
 AI Answer: "${answer}"
@@ -775,6 +751,8 @@ Generate JSON object with 3 relevant followups:`;
     return defaultFollowups();
   }
 }
+// --- MODIFICATION END ---
+
 
 // --- Sanitization and Defaults (Unchanged) ---
 function sanitizeFollowups(arr: any[]): string[] {
