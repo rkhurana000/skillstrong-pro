@@ -62,7 +62,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     activeConvoIdRef.current = activeConvoId;
   }, [activeConvoId]);
   
-  // We will update this ref manually inside the hook
   const chatMessagesRef = useRef<Message[]>([]);
   // --- END: Refs ---
   
@@ -80,12 +79,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
 
-    // --- START: Update message ref ---
-    // This hook runs every time messages change
-    onMessagesChange: (messages) => {
-      chatMessagesRef.current = messages;
-    },
-    // --- END: Update message ref ---
+    // --- REMOVED: onMessagesChange (it was causing the build error) ---
 
     onFinish: async (message) => {
       console.log("[ChatClient] onFinish triggered."); // DEBUG
@@ -121,7 +115,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         m.id === message.id ? { ...m, content: finalAnswer } : m
       );
       
-      // Safety check: If onFinish fired before onMessagesChange, the list might not have the new message.
+      // Safety check: If onFinish fired before the ref updated, the list might not have the new message.
       // This ensures the final message is included.
       if (!finalMessagesForSave.find(m => m.id === message.id)) {
           finalMessagesForSave.push({ ...message, content: finalAnswer });
@@ -182,6 +176,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
       console.error("Chat error:", error);
     }
   });
+
+  // --- NEW: This useEffect replaces onMessagesChange ---
+  // It syncs the `chatMessages` state from the hook to our ref
+  useEffect(() => {
+    chatMessagesRef.current = chatMessages;
+  }, [chatMessages]);
+  // --- END NEW ---
 
   // --- Logic to get final answer for rendering ---
   const lastValidData = useMemo(() => {
@@ -346,17 +347,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     }
   };
 
-  // --- THIS IS THE CRITICAL FIX ---
    useEffect(() => {
     console.log("[ChatClient] URL Effect running..."); // DEBUG
     
-    // If we have already loaded from the URL, OR if we are in a new chat
-    // (activeConvoId is null and we have no messages), DON'T run.
     if (initialUrlHandled.current) {
         console.log("[ChatClient] URL Effect: Skipping, initialUrlHandled.current is true."); // DEBUG
         return;
     }
-    // --- END CRITICAL FIX ---
 
     const convoId = searchParams.get('id');
     const category = searchParams.get('category');
