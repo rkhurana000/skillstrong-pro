@@ -54,6 +54,17 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   const initialUrlHandled = useRef(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // --- START: Refs to fix stale closures ---
+  // Create refs to hold the *current* state values
+  const activeConvoIdRef = useRef(activeConvoId);
+  useEffect(() => {
+    activeConvoIdRef.current = activeConvoId;
+  }, [activeConvoId]);
+  
+  // We will update this ref manually inside the hook
+  const chatMessagesRef = useRef<Message[]>([]);
+  // --- END: Refs ---
   
   // --- useChat Hook ---
   const { 
@@ -68,10 +79,16 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   } = useChat({
     api: '/api/chat',
     body: { location: location, provider: currentProvider },
-    
-    // --- THIS IS THE UPDATED onFinish LOGIC ---
+
+    // --- START: Update message ref ---
+    // This hook runs every time messages change
+    onMessagesChange: (messages) => {
+      chatMessagesRef.current = messages;
+    },
+    // --- END: Update message ref ---
+
     onFinish: async (message) => {
-      console.log("[ChatClient] onFinish triggered.");
+      console.log("[ChatClient] onFinish triggered."); // DEBUG
       
       let finalAnswer = message.content;
       let finalData = null;
@@ -93,65 +110,69 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         finalAnswer = finalData.finalAnswer;
       }
       
-      // 2. Create the final message list for saving
-      const finalMessagesForSave = chatMessages.map(m => 
+      // --- START: MODIFIED LOGIC (Using Refs) ---
+      
+      // 2. Get the *current* messages from the ref
+      const currentMessages = chatMessagesRef.current;
+      
+      // 3. Create the final message list for saving
+      // Replace the streaming message with the final one
+      let finalMessagesForSave = currentMessages.map(m => 
         m.id === message.id ? { ...m, content: finalAnswer } : m
       );
+      
+      // Safety check: If onFinish fired before onMessagesChange, the list might not have the new message.
+      // This ensures the final message is included.
+      if (!finalMessagesForSave.find(m => m.id === message.id)) {
+          finalMessagesForSave.push({ ...message, content: finalAnswer });
+      }
 
-      // --- START: MODIFIED LOGIC ---
-      // Decide if it's a new chat based on message count, NOT stale state.
-      // A new chat will have exactly 2 messages: 1 user, 1 assistant.
+      // 4. Get the *current* conversation ID from its ref
+      const currentConvoId = activeConvoIdRef.current;
+      
+      // 5. Decide if it's a new chat based on the *correct* message count
       const isNewChat = finalMessagesForSave.length === 2;
-      const currentConvoId = activeConvoId; // Get the (potentially stale) ID from state
 
+      console.log(`[ChatClient] onFinish: Message count from ref: ${finalMessagesForSave.length}`);
       console.log(`[ChatClient] onFinish: Is this a new chat (message count = 2)? ${isNewChat}`);
-      console.log(`[ChatClient] onFinish: activeConvoId from state is: ${currentConvoId}`);
+      console.log(`[ChatClient] onFinish: activeConvoId from ref is: ${currentConvoId}`);
+      // --- END: MODIFIED LOGIC ---
 
       const convoToSave: Partial<any> = {
         messages: finalMessagesForSave,
-        provider: currentProvider
+        provider: currentProvider,
       };
 
-      // If it's *not* a new chat, use the ID from state.
-      // If it *is* a new chat, we leave `convoToSave.id` as undefined.
+      // Use the logic: If it's *not* a new chat, use the ref's ID.
       if (!isNewChat && currentConvoId && !currentConvoId.startsWith('temp-')) {
         console.log(`[ChatClient] onFinish: This is an existing chat. Using ID: ${currentConvoId}`);
         convoToSave.id = currentConvoId;
       } else {
          console.log(`[ChatClient] onFinish: This is a new chat. 'id' will be undefined, triggering title generation.`);
       }
-      // --- END: MODIFIED LOGIC ---
 
       try {
-        // `saveConversation` will now be called with either:
-        // 1. { messages, provider } (for a new chat, triggering title gen)
-        // 2. { id, messages, provider } (for an existing chat)
         const savedConvo = await saveConversation(convoToSave);
         
         // 4. Update UI state
         const finalId = savedConvo.id;
-        console.log(`[ChatClient] onFinish: Conversation saved/updated. Final ID: ${finalId}`);
+        console.log(`[ChatClient] onFinish: Conversation saved/updated. New ID: ${finalId}`); // DEBUG
         setHistory(prev => {
           const newHistoryItem = { ...savedConvo };
           const existing = prev.find(h => h.id === finalId);
           if (existing) {
             return prev.map(h => h.id === finalId ? newHistoryItem : h).sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
           }
-          // --- FIX: Ensure we don't add a duplicate if the ID was stale ---
           return [newHistoryItem, ...prev.filter(h => h.id !== finalId && h.id !== currentConvoId)].sort((a, b) => new Date(b.updated_at!).getTime() - new Date(a.updated_at!).getTime());
         });
 
-        // Update state and URL *only if it's a new chat*
         if (isNewChat) {
-          console.log(`[ChatClient] onFinish: New chat detected. Setting active ID to ${finalId} and updating URL.`);
+          console.log(`[ChatClient] onFinish: This was a new chat. Setting active ID to ${finalId} and updating URL.`); // DEBUG
           setActiveConvoId(finalId);
           router.replace(`${pathname}?id=${finalId}`);
         } else {
-          console.log(`[ChatClient] onFinish: Existing chat. ID ${currentConvoId} confirmed.`);
-          // Ensure state is correct, just in case
-          if (activeConvoId !== currentConvoId) {
-             setActiveConvoId(currentConvoId);
-          }
+          console.log(`[ChatClient] onFinish: This was an existing chat. Setting active ID to ${currentConvoId}`); // DEBUG
+          setActiveConvoId(currentConvoId);
         }
       } catch (saveError) {
         console.error("Failed to save conversation:", saveError);
@@ -321,8 +342,6 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   const handleProviderChange = (provider: 'openai' | 'gemini') => {
     setCurrentProvider(provider);
     if (activeConvoId && !activeConvoId.startsWith('temp-')) {
-      // This call is fine, but it was causing the "Message count: 0" log.
-      // We can make it cleaner.
       saveConversation({ id: activeConvoId, provider: provider });
     }
   };
