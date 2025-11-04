@@ -208,9 +208,13 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   
   // --- saveConversation (with debug logs) ---
   const saveConversation = async (convo: Partial<any>): Promise<HistoryItem> => {
+    
+    // --- START: MODIFIED DEBUGGING BLOCK ---
+    console.log(`[ChatClient] saveConversation: Received convo object. ID: ${convo.id}, Message count: ${convo.messages?.length}`);
+
     // Generate title ONLY if it's a new conversation (no ID) and has at least 2 messages
     if (!convo.id && convo.messages && convo.messages.length >= 2) {
-       console.log("[ChatClient] saveConversation: New conversation detected, attempting to generate title..."); // DEBUG
+       console.log("%c[ChatClient] saveConversation: Condition MET. Attempting to generate title...", "color: lightblue; font-weight: bold;"); // DEBUG
        try {
          const titleRes = await fetch('/api/title', {
              method: 'POST',
@@ -221,24 +225,27 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
          
          if (titleRes.ok) {
            const { title: generatedTitle } = await titleRes.json();
-           console.log("[ChatClient] saveConversation: Title generated successfully:", generatedTitle); // DEBUG
+           console.log("%c[ChatClient] saveConversation: Title API call SUCCESSFUL. Title: " + generatedTitle, "color: lightgreen;"); // DEBUG
            convo.title = generatedTitle || 'New Conversation'; // Set the title
          } else {
-           console.error("[ChatClient] saveConversation: /api/title call failed, using fallback."); // DEBUG
+           // Log the server-side error message if possible
+           const errorBody = await titleRes.json().catch(() => ({ error: "Unknown error" }));
+           console.error(`%c[ChatClient] saveConversation: /api/title call FAILED. Status: ${titleRes.status}, Error: ${errorBody.error}`, "color: red;"); // DEBUG
            convo.title = 'New Conversation'; // Fallback
          }
        } catch (e) {
-         console.error("[ChatClient] saveConversation: Error fetching title:", e); // DEBUG
+         console.error("%c[ChatClient] saveConversation: fetch('/api/title') threw a client-side exception:", "color: red;", e); // DEBUG
          convo.title = 'New Conversation'; // Fallback
        }
     } else if (convo.id) {
-       console.log(`[ChatClient] saveConversation: Existing conversation (${convo.id}), skipping title generation.`); // DEBUG
+       console.log(`[ChatClient] saveConversation: Condition SKIPPED (convo.id exists: ${convo.id}). Skipping title generation.`); // DEBUG
     } else {
-       console.log("[ChatClient] saveConversation: Not a new convo or not enough messages, skipping title gen."); // DEBUG
+       console.log(`[ChatClient] saveConversation: Condition SKIPPED (not enough messages: ${convo.messages?.length}). Skipping title gen.`); // DEBUG
     }
+    // --- END: MODIFIED DEBUGGING BLOCK ---
     
     // Save to DB
-    console.log("[ChatClient] saveConversation: Saving to /api/chat/history with title:", convo.title); // DEBUG
+    console.log(`[ChatClient] saveConversation: Saving to /api/chat/history with title: "${convo.title}"`); // DEBUG
     const res = await fetch('/api/chat/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -338,7 +345,7 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
   }, [chatMessages, chatIsLoading]); 
   
   
-  // --- Render ---
+  // --- Render (Rest of the file is unchanged) ---
   return (
     <div className="chat-container">
       {/* --- Sidebar (Unchanged) --- */}
