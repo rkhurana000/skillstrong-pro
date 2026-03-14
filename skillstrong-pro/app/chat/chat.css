@@ -334,6 +334,9 @@
   max-width: fit-content;
   margin-left: auto;
 }
+.message-bubble.streaming {
+  contain: content;
+}
 
 /* --- Footer & Input (New Theme) --- */
 .chat-footer {

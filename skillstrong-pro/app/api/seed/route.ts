@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       certs: ['Semiconductor Tech'],
       startDate: null,
       url: null,
-      externalUrl: 'https://www.maricopa.edu/degrees-certificates/science-technology-engineering-mathematics/semiconductor-manufacturing-3168-aas',
+      externalUrl: 'https://www.maricopa.edu/degrees-certificates/applied-technology/semiconductor-manufacturing-3168-aas',
       description: 'Associate in Applied Science focused on semiconductor manufacturing.',
       featured: markFeatured,
     },

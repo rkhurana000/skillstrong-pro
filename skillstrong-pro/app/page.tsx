@@ -11,6 +11,7 @@ import {
   Handshake,
   Briefcase,
   Compass,
+  Truck,
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -117,6 +118,7 @@ export default function HomePage() {
               { icon: Flame, title: 'Welding Programmer', blurb: 'Run advanced welding — including robotic & laser systems.', href: '/careers/welder' },
               { icon: Wrench, title: 'Maintenance Tech', blurb: 'The fixer who keeps high‑tech facilities running.', href: '/careers/industrial-maintenance' },
               { icon: Handshake, title: 'Quality Control Specialist', blurb: 'Use precision tools & data to keep standards high.', href: '/careers/quality-control' },
+              { icon: Truck, title: 'Logistics & Supply Chain', blurb: 'Coordinate the flow of goods from factory floor to final delivery.', href: '/careers/logistics' },
             ].map(({ icon: Icon, title, blurb, href }) => (
               <Link key={title} href={href} className="group block rounded-2xl border border-white/10 bg-white/5 p-6 shadow-sm hover:shadow-md hover:bg-white/10 transition">
                 <Icon className="h-10 w-10 text-cyan-400" />

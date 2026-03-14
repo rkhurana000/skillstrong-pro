@@ -8,6 +8,12 @@ import Link from 'next/link';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
+function ensureAbsoluteUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `https://${url}`;
+}
+
 const states = ["All States", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
 
 // Helper to parse location string "City, ST"
@@ -132,7 +138,7 @@ function ProgramResults() {
                  {!isLoading && programs.map((p: any) => (
                      <div key={p.id} className="p-4 border rounded-lg bg-white shadow-sm">
                           <a
-                            href={p.url || p.external_url}
+                            href={ensureAbsoluteUrl(p.url || p.external_url)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-lg font-semibold text-blue-700 hover:underline"

@@ -1,7 +1,7 @@
 // /app/chat/ChatClient.tsx
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { 
@@ -11,10 +11,9 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useLocation } from '@/app/contexts/LocationContext';
-import './chat.css'; // Ensure chat.css is imported
+import './chat.css';
 
-// Import Vercel AI SDK hook
-import { useChat, type Message } from 'ai/react'; // <--- Vercel AI SDK v3 import
+import { useChat, type Message } from 'ai/react';
 
 // Type Definitions
 type HistoryItem = { id: string; title: string; updated_at?: string; provider: 'openai' | 'gemini' };
@@ -34,6 +33,36 @@ const TypingIndicator = () => (
     <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse" />
     <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.2s]" />
     <div className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:0.4s]" />
+  </div>
+);
+
+const markdownComponents = {
+  a: ({ node, ...props }: any) => <a {...props} target="_blank" rel="noreferrer" />,
+};
+const remarkPlugins = [remarkGfm as any];
+
+const MemoizedMessage = React.memo(({ content, role }: { content: string; role: string }) => (
+  <div className={`message-wrapper ${role}`}>
+    <div className={`message-bubble ${role}`}>
+      <article className={`prose ${role === 'user' ? 'prose-invert' : ''}`}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+          {content}
+        </ReactMarkdown>
+      </article>
+    </div>
+  </div>
+));
+MemoizedMessage.displayName = 'MemoizedMessage';
+
+const StreamingMessage = ({ content }: { content: string }) => (
+  <div className="message-wrapper assistant">
+    <div className="message-bubble assistant streaming">
+      <article className="prose">
+        <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+          {content}
+        </ReactMarkdown>
+      </article>
+    </div>
   </div>
 );
 // --- End Welcome components ---
@@ -82,12 +111,11 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     // --- REMOVED: onMessagesChange (it was causing the build error) ---
 
     onFinish: async (message) => {
-      console.log("[ChatClient] onFinish triggered."); // DEBUG
+      console.log("[ChatClient] onFinish triggered.");
       
       let finalAnswer = message.content;
       let finalData = null;
 
-      // 1. Parse chatData to get the enriched answer
       if (chatData && chatData.length > 0) {
         for (let i = chatData.length - 1; i >= 0; i--) {
           try {
@@ -104,53 +132,32 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         finalAnswer = finalData.finalAnswer;
       }
       
-      // --- START: MODIFIED LOGIC (Using Refs) ---
-      
-      // 2. Get the *current* messages from the ref
       const currentMessages = chatMessagesRef.current;
       
-      // 3. Create the final message list for saving
-      // Replace the streaming message with the final one
       let finalMessagesForSave = currentMessages.map(m => 
         m.id === message.id ? { ...m, content: finalAnswer } : m
       );
       
-      // Safety check: If onFinish fired before the ref updated, the list might not have the new message.
-      // This ensures the final message is included.
       if (!finalMessagesForSave.find(m => m.id === message.id)) {
           finalMessagesForSave.push({ ...message, content: finalAnswer });
       }
 
-      // 4. Get the *current* conversation ID from its ref
       const currentConvoId = activeConvoIdRef.current;
-      
-      // 5. Decide if it's a new chat based on the *correct* message count
       const isNewChat = finalMessagesForSave.length === 2;
-
-      console.log(`[ChatClient] onFinish: Message count from ref: ${finalMessagesForSave.length}`);
-      console.log(`[ChatClient] onFinish: Is this a new chat (message count = 2)? ${isNewChat}`);
-      console.log(`[ChatClient] onFinish: activeConvoId from ref is: ${currentConvoId}`);
-      // --- END: MODIFIED LOGIC ---
 
       const convoToSave: Partial<any> = {
         messages: finalMessagesForSave,
         provider: currentProvider,
       };
 
-      // Use the logic: If it's *not* a new chat, use the ref's ID.
       if (!isNewChat && currentConvoId && !currentConvoId.startsWith('temp-')) {
-        console.log(`[ChatClient] onFinish: This is an existing chat. Using ID: ${currentConvoId}`);
         convoToSave.id = currentConvoId;
-      } else {
-         console.log(`[ChatClient] onFinish: This is a new chat. 'id' will be undefined, triggering title generation.`);
       }
 
       try {
         const savedConvo = await saveConversation(convoToSave);
         
-        // 4. Update UI state
         const finalId = savedConvo.id;
-        console.log(`[ChatClient] onFinish: Conversation saved/updated. New ID: ${finalId}`); // DEBUG
         setHistory(prev => {
           const newHistoryItem = { ...savedConvo };
           const existing = prev.find(h => h.id === finalId);
@@ -161,15 +168,34 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
         });
 
         if (isNewChat) {
-          console.log(`[ChatClient] onFinish: This was a new chat. Setting active ID to ${finalId} and updating URL.`); // DEBUG
           setActiveConvoId(finalId);
           router.replace(`${pathname}?id=${finalId}`);
         } else {
-          console.log(`[ChatClient] onFinish: This was an existing chat. Setting active ID to ${currentConvoId}`); // DEBUG
           setActiveConvoId(currentConvoId);
         }
       } catch (saveError) {
         console.error("Failed to save conversation:", saveError);
+      }
+
+      // Fetch followups asynchronously — does NOT block the stream
+      try {
+        const followupRes = await fetch('/api/chat/followups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: finalMessagesForSave.slice(-4),
+            finalAnswer,
+            location: location,
+          }),
+        });
+        if (followupRes.ok) {
+          const { followups } = await followupRes.json();
+          if (Array.isArray(followups) && followups.length > 0) {
+            setCurrentFollowUps(followups);
+          }
+        }
+      } catch (followupErr) {
+        console.error("Failed to fetch followups:", followupErr);
       }
     },
     onError: (error) => {
@@ -198,13 +224,8 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
     return null;
   }, [chatData]);
 
-  // --- Effect to set follow-ups ---
-  useEffect(() => {
-    // Only set follow-ups when loading is finished AND we have valid data
-    if (lastValidData && !chatIsLoading) {
-      setCurrentFollowUps(lastValidData.followups || []);
-    }
-  }, [lastValidData, chatIsLoading]); // Reacts to data changes and loading state
+  // Follow-ups are now set in onFinish via the /api/chat/followups endpoint.
+  // This effect is kept only for backwards-compatible data that arrives via stream.
   
   // --- Event Handlers ---
   const handleMainSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -465,26 +486,20 @@ export default function ChatClient({ user, initialHistory }: { user: User | null
             </div>
           )}
           
-          {/* --- Updated Message List Rendering --- */}
+          {/* --- Message List with memoized rendering --- */}
           <div className="message-list">
             {chatMessages.map((msg, idx) => {
               const isLastAssistantMessage = msg.role === 'assistant' && idx === chatMessages.length - 1;
-              
+              const isStreaming = isLastAssistantMessage && chatIsLoading;
+
               const contentToRender = isLastAssistantMessage && lastValidData && !chatIsLoading
                 ? lastValidData.finalAnswer 
                 : msg.content;
-              
-              return (
-                <div key={msg.id} className={`message-wrapper ${msg.role}`}>
-                  <div className={`message-bubble ${msg.role}`}>
-                    <article className={`prose ${msg.role === 'user' ? 'prose-invert' : ''}`}>
-                       <ReactMarkdown remarkPlugins={[remarkGfm as any]} components={{ a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>
-                         {contentToRender}
-                       </ReactMarkdown>
-                    </article>
-                  </div>
-                </div>
-              );
+
+              if (isStreaming) {
+                return <StreamingMessage key={msg.id} content={contentToRender} />;
+              }
+              return <MemoizedMessage key={msg.id} content={contentToRender} role={msg.role} />;
             })}
             
             {chatIsLoading && chatMessages[chatMessages.length - 1]?.role === 'user' && (

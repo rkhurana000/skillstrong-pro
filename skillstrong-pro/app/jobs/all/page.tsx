@@ -8,6 +8,12 @@ import Link from 'next/link';
 
 const fetcher = (u: string) => fetch(u).then(r => r.json());
 
+function ensureAbsoluteUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `https://${url}`;
+}
+
 // State list
 const states = ["All States", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"];
 
@@ -130,7 +136,7 @@ function JobResults() {
                      <div key={j.id} className="p-4 border rounded-lg bg-white shadow-sm">
                          <div className="flex items-start justify-between flex-wrap gap-x-4">
                              <div>
-                                 <a href={j.apply_url || j.external_url} target="_blank" rel="noopener noreferrer" className="text-lg font-semibold text-blue-700 hover:underline">{j.title}</a>
+                                 <a href={ensureAbsoluteUrl(j.apply_url || j.external_url)} target="_blank" rel="noopener noreferrer" className="text-lg font-semibold text-blue-700 hover:underline">{j.title}</a>
                                  <div className="text-sm text-gray-600 mt-1">{j.company} • {j.location} {j.apprenticeship ? '• Apprenticeship' : ''}</div>
                              </div>
                              {(j.pay_min || j.pay_max) && (

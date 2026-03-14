@@ -9,6 +9,12 @@ import { Briefcase, MapPin, ListChecks, Search, Bot, ChevronLeft, ChevronRight }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+function ensureAbsoluteUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `https://${url}`;
+}
+
 const TrendCard = ({ title, icon, data, type }: { title: string; icon: React.ReactNode; data: string[]; type: 'q' | 'location' }) => (
     <div className="bg-white p-6 rounded-lg border shadow-sm">
         <div className="flex items-center gap-3 mb-4">
@@ -123,7 +129,7 @@ const FeaturedJobsCarousel = () => {
                                     { (job.pay_min || job.pay_max) && ' / yr'}
                                 </p>
                             )}
-                            <a href={job.apply_url || job.external_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 font-semibold text-sm"> {/* Smaller text */}
+                            <a href={ensureAbsoluteUrl(job.apply_url || job.external_url)} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 font-semibold text-sm">
                                 View & Apply
                             </a>
                         </div>

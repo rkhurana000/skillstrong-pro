@@ -3,11 +3,10 @@ import {
   OpenAIStream,
   StreamingTextResponse,
   experimental_StreamData,
-} from 'ai'; // <--- Vercel AI SDK v3 imports
+} from 'ai';
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Import our refactored orchestrator functions
 import {
   orchestratePreamble,
   generateFollowups,
@@ -15,15 +14,13 @@ import {
   Message,
 } from '@/lib/orchestrator';
 
-// Import findFeaturedMatching from its correct source file
 import { findFeaturedMatching } from '@/lib/marketplace';
 
-export const runtime = 'nodejs'; // Must be nodejs for supabaseAdmin
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Helper to provide default followups on error
 function defaultFollowups(): string[] {
   return [
     'Find local apprenticeships',
@@ -32,11 +29,22 @@ function defaultFollowups(): string[] {
   ].slice(0, 3);
 }
 
+function quickStreamResponse(text: string): StreamingTextResponse {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
+  return new StreamingTextResponse(stream);
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { messages, location } = body;
   
-  let messagesForLLM: Message[] = []; // Define here to have scope
+  let messagesForLLM: Message[] = [];
   let lastUserRaw = '';
   let effectiveLocation: string | null = null;
   let internalRAG = '';
@@ -45,19 +53,16 @@ export async function POST(req: NextRequest) {
     // 1. Run all "pre-work" (RAG, context building, checks)
     const preambleResult = await orchestratePreamble({ messages, location });
     
-    // Destructure results
     messagesForLLM = preambleResult.messagesForLLM;
     lastUserRaw = preambleResult.lastUserRaw;
     effectiveLocation = preambleResult.effectiveLocation;
     internalRAG = preambleResult.internalRAG;
     
-    // 2. Handle guard conditions
+    // 2. Handle guard conditions — must return streaming format for useChat
     if (preambleResult.domainGuarded) {
-      return NextResponse.json({
-        answer:
-          'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.',
-        followups: defaultFollowups(),
-      });
+      return quickStreamResponse(
+        'I focus on modern manufacturing careers. We can explore roles like CNC Machinist, Robotics Technician, Welding Programmer, Additive Manufacturing, Maintenance Tech, or Quality Control.'
+      );
     }
 
     // 3. Prepare the final LLM call
@@ -84,68 +89,60 @@ export async function POST(req: NextRequest) {
     const data = new experimental_StreamData();
 
     // 6. Convert the OpenAI stream to the Vercel AI SDK stream (v3 style)
-    const stream = OpenAIStream(responseStream as any, { // Fix 2
+    const stream = OpenAIStream(responseStream as any, {
       onFinal: async (completion) => {
-        // This logic runs *after* the stream is done
-        
-        // a. Find Featured Listings
-        let answerWithFeatured = completion;
         try {
-          const featured = await findFeaturedMatching(
-            lastUserRaw,
-            effectiveLocation ?? undefined // Fix 3
-          );
-          if (Array.isArray(featured) && featured.length > 0) {
-            const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
-            const lines = featured
-              .map((f: any) => `- **${f.title}** — ${f.org} (${f.location})`)
-              .join('\n');
-            answerWithFeatured += `\n\n**Featured${locTxt}:**\n${lines}`;
-          }
-        } catch (err) {
-          console.error('Error finding featured items:', err);
-        }
+          let finalAnswer = completion;
 
-        // b. Add "Next Steps"
-        let finalAnswerWithSteps = answerWithFeatured;
-        if (internalRAG) {
-          // Check if we triggered the internal search
-          finalAnswerWithSteps = finalAnswerWithSteps.replace(
-            /(\n\n\*\*Next Steps:\*\*.*)/is,
-            ''
-          );
-          finalAnswerWithSteps += `\n\n**Next Steps**
+          // a. Find Featured Listings (fast Supabase query)
+          try {
+            const featured = await findFeaturedMatching(
+              lastUserRaw,
+              effectiveLocation ?? undefined
+            );
+            if (Array.isArray(featured) && featured.length > 0) {
+              const locTxt = effectiveLocation ? ` near ${effectiveLocation}` : '';
+              const lines = featured
+                .map((f: any) => `- **${f.title}** — ${f.org} (${f.location})`)
+                .join('\n');
+              finalAnswer += `\n\n**Featured${locTxt}:**\n${lines}`;
+            }
+          } catch (err) {
+            console.error('Error finding featured items:', err);
+          }
+
+          // b. Add "Next Steps"
+          if (internalRAG) {
+            finalAnswer = finalAnswer.replace(
+              /(\n\n\*\*Next Steps:\*\*.*)/is,
+              ''
+            );
+            finalAnswer += `\n\n**Next Steps**
 You can also search for more opportunities on your own:
 * [Search SkillStrong Programs](/programs/all)
 * [Search SkillStrong Jobs](/jobs/all)
 * [Search US Department of Education for programs](https://collegescorecard.ed.gov/)
-* [Search for jobs on Indeed.com](https://www.indeed.com/)`;
+* [Search for jobs on Indeed.com](https://www.indeed.com/)
+* [Find training institutions (Workforce Almanac)](https://workforcealmanac.com/explore)
+* [Search community colleges (College Navigator)](https://nces.ed.gov/collegenavigator/)`;
+          }
+
+          // c. Append data WITHOUT followups — client fetches them separately
+          data.append(JSON.stringify({
+            finalAnswer: finalAnswer,
+            followups: [],
+          }));
+        } catch (err) {
+          console.error('Error in onFinal:', err);
+          data.append(JSON.stringify({
+            finalAnswer: completion,
+            followups: [],
+          }));
+        } finally {
+          data.close();
         }
-
-        // c. Generate Followups (FIX #2)
-        // We pass the full message history that the LLM used
-        const finalMessages: Message[] = [
-            ...messagesForLLM, 
-            { id: 'final_answer', role: 'assistant', content: finalAnswerWithSteps }
-        ];
-        
-        const followups = await generateFollowups(
-          finalMessages, // Pass full context
-          finalAnswerWithSteps,
-          effectiveLocation ?? undefined
-        );
-
-        // d. Append final data to the StreamData
-        data.append(JSON.stringify({ // v3 expects a string
-          finalAnswer: finalAnswerWithSteps,
-          followups: followups,
-        }));
-
-        // e. Close the StreamData
-        data.close();
-
       },
-      experimental_streamData: true, // Tell it to use the data stream
+      experimental_streamData: true,
     });
 
     // 7. Return the streaming response
@@ -153,27 +150,14 @@ You can also search for more opportunities on your own:
     
   } catch (e: any) {
     if (e.message === 'LOCATION_REQUIRED') {
-      // Handle the specific "location missing" error
-      return NextResponse.json({
-        answer:
-          'To find local results, please set your location using the button in the header.',
-        followups: [], // Send empty followups
-      });
+      return quickStreamResponse(
+        'To find local results, please set your location using the **Set Location** button in the header.'
+      );
     }
 
     console.error("Error in /api/chat route:", e);
-    // Generate followups even on error
-     const errorFollowups = await generateFollowups(
-          messagesForLLM, // Pass whatever context we had
-          "Sorry, I couldn't process that.",
-          effectiveLocation ?? undefined
-     );
-    return NextResponse.json(
-      { 
-          answer: "Sorry, I couldn't process that.", 
-          followups: errorFollowups.length > 0 ? errorFollowups : defaultFollowups()
-      },
-      { status: 500 }
+    return quickStreamResponse(
+      "Sorry, I couldn't process that request. Please try rephrasing your question about manufacturing careers."
     );
   }
 }

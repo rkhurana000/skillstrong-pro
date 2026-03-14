@@ -5,7 +5,7 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, MapPin, Clock, Search, Bot } from 'lucide-react';
+import { BookOpen, MapPin, Clock, Search, Bot, ExternalLink } from 'lucide-react';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -120,6 +120,32 @@ export default function ProgramsPage() {
                  <TrendCard title="Course Duration" icon={<Clock className="text-blue-600"/>} data={data.commonDurations || []} type="duration" isDuration={true}/>
                </div>
              )}
+      </section>
+      <section className="max-w-6xl mx-auto py-12 px-4">
+           <h2 className="text-2xl font-bold text-slate-800 mb-6">Additional Resources</h2>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <a href="https://workforcealmanac.com/explore" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white p-5 rounded-lg border shadow-sm hover:shadow-md transition-shadow">
+               <ExternalLink className="w-5 h-5 text-blue-600 flex-shrink-0" />
+               <div>
+                 <h3 className="font-semibold text-slate-800">Workforce Almanac</h3>
+                 <p className="text-sm text-slate-500">National training institution data</p>
+               </div>
+             </a>
+             <a href="https://nces.ed.gov/collegenavigator/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white p-5 rounded-lg border shadow-sm hover:shadow-md transition-shadow">
+               <ExternalLink className="w-5 h-5 text-blue-600 flex-shrink-0" />
+               <div>
+                 <h3 className="font-semibold text-slate-800">College Navigator</h3>
+                 <p className="text-sm text-slate-500">Community college national database</p>
+               </div>
+             </a>
+             <a href="https://collegescorecard.ed.gov/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white p-5 rounded-lg border shadow-sm hover:shadow-md transition-shadow">
+               <ExternalLink className="w-5 h-5 text-blue-600 flex-shrink-0" />
+               <div>
+                 <h3 className="font-semibold text-slate-800">College Scorecard</h3>
+                 <p className="text-sm text-slate-500">U.S. Department of Education</p>
+               </div>
+             </a>
+           </div>
       </section>
       <section className="py-16 text-center px-4">
            <h2 className="text-3xl font-bold">Not Sure Where to Start?</h2>

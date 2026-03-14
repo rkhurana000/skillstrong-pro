@@ -1,6 +1,6 @@
 // /app/explore/page.tsx
 import Link from 'next/link';
-import { Cpu, Printer, Flame, Wrench, ScanSearch, Handshake } from 'lucide-react';
+import { Cpu, Printer, Flame, Wrench, ScanSearch, Handshake, Truck } from 'lucide-react';
 
 const careers = [
   { icon: ScanSearch, title: 'CNC Machinist', href: '/careers/cnc-machinist' },
@@ -9,6 +9,7 @@ const careers = [
   { icon: Wrench, title: 'Maintenance Tech', href: '/careers/industrial-maintenance' },
   { icon: Handshake, title: 'Quality Control Specialist', href: '/careers/quality-control' },
   { icon: Printer, title: 'Additive Manufacturing', href: '/careers/additive-manufacturing' },
+  { icon: Truck, title: 'Logistics & Supply Chain', href: '/careers/logistics' },
 ];
 
 export default function ExplorePage() {

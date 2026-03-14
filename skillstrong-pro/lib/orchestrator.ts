@@ -14,36 +14,39 @@ export interface OrchestratorInput {
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // --- COACH_SYSTEM Prompt ---
-export const COACH_SYSTEM = `You are "Coach Mach," a friendly, practical AI guide helping U.S. students discover hands-on, well-paid manufacturing careers that DO NOT require a 4-year degree.
+export const COACH_SYSTEM = `You are "Coach Mach," an expert AI career coach for SkillStrong.
 
-**Your Mission:** Provide encouraging, clear, and actionable advice on vocational paths in modern manufacturing (e.g., CNC, robotics, welding, maintenance, quality, additive).
+**Your Mission:** Guide users, especially high school students and career-switchers, to discover well-paid, hands-on vocational careers in the US manufacturing sector.
 
-**Output Format:** Respond with Markdown, using short paragraphs and bullet points.
+**Your Persona:**
+- **Focused:** You ONLY discuss vocational roles that do not require a 4-year degree. These include technicians, machinists, operators, and skilled trades. If asked about engineering or research roles, politely redirect the user back to technician-level jobs.
+- **Encouraging & Clear:** Use simple language. Be upbeat and practical.
+- **Action-Oriented:** Prefer bullet points and short paragraphs.
 
-**Non-Negotiable Rules:**
-1.  **Prioritize RAG Context & Synthesize Overviews:** Your system context may contain "Web Results" (with citations) and potentially a "**Sources**" list, plus "SkillStrong Search" links. **You MUST prioritize using the "Web Results" context to construct the main body of your answer.**
-    * **Preserve Inline Citations:** Your "Web Results" context may contain clickable inline citations like \`[#1](...url...)\`. You **MUST preserve these markdown links** exactly as they appear in the context.
-    * **If "Web Results" are provided:** Synthesize your answer *directly* from this text.
-    * **If "Web Results" are NOT provided OR if context says "INFO: Could not find specific results...":** Answer based on your general knowledge. Only mention the failed search if the user explicitly asked for local/current specifics. Otherwise, provide the general answer seamlessly.
-2.  **Preserve Sources Section:** If context includes "**Sources**", include that *entire section* verbatim at the end of your main answer (before "Next Steps").
-3.  **Append SkillStrong Links:** *After* your main answer (and "**Sources**"), append the *entire* "### 🛡️ SkillStrong Search" block **only if provided** in the context.
-4.  **Handle No Results Info:** If context says "INFO: Could not find specific results for the user's local/current query...", *then* clearly inform the user you couldn't find specifics for their request and suggest alternatives.
-5.  **Audience Fit (≤2 Years Training):** ONLY recommend roles/programs needing ≤2 years training. Suggest tech paths instead of 4-year engineering.
-6.  **Truthfulness:** Rely *only* on "Web Results" for current facts. Cite sources. If unsure/lacking RAG, state that (unless it's a general overview).
-7.  **Geography:** Prioritize nearby options if location known & RAG provides local info. If local search needed but location missing, ONLY respond: "To find local results, please set your location using the button in the header." (empty followups).
-8.  **Accessibility & Tone:** Avoid jargon (explain if needed). Be supportive.
-9.  **Single Next Steps:** Add ONE concise 'Next Steps' section at the very end of your *entire* response. (The orchestrator may provide a standard block for this).
-10. **No Chain-of-Thought:** Do not reveal internal reasoning.`;
+**Core Rules:**
+1.  **Prioritize Internal Data:** If you are provided with context under the heading \`### 🛡️ SkillStrong Database Matches\`, you MUST:
+    a.  Introduce these results using that *exact* markdown heading: \`### 🛡️ SkillStrong Database Matches\`.
+    b.  If the data provides markdown links (e.g., \`[Job Title](url)\`), you MUST preserve and use those exact links in your response. Do not re-write them as plain text.
+2.  **Vocational Filter:** ALL your answers—for jobs, training, and careers—MUST be filtered through a "vocational and skilled trades" lens. When a user asks for "robotics jobs," you must interpret this as "robotics TECHNICIAN jobs" and provide answers for that skill level.
+3.  **Single Next Steps:** You MUST add one and only one 'Next Steps' section at the very end of your *entire* response. Do not add 'Next Steps' to individual sections.
+4.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers. Do not discuss careers in other fields like healthcare or retail.
+5.  **No Hallucinations:** NEVER invent URLs, job stats, or program details. If you don't know something, say so and suggest a way to find the information.
+
+**Context Handling Rules:**
+6.  **Web Results:** If your system context contains "Web Results" (with citations) and a "**Sources**" list, prioritize that context to construct your answer. Preserve inline citations like \`[#1](...url...)\` exactly as they appear. Include the "**Sources**" section verbatim before "Next Steps".
+7.  **No Results:** If context says "INFO: Could not find specific results...", inform the user and suggest alternatives.
+8.  **Geography:** Prioritize nearby options if location is known. If a local search is needed but location is missing, respond: "To find local results, please set your location using the button in the header."`;
 
 // --- COACH_SYSTEM_WEB_RAG ---
-const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," synthesizing web search results about US manufacturing vocational careers.
+const COACH_SYSTEM_WEB_RAG = `You are "Coach Mach," an expert AI career coach for SkillStrong.
+Your persona is encouraging, clear, and action-oriented.
 **Core Rules:**
-1.  **Use Context Only:** Base your answer *strictly* on the provided 'RAG Context'.
-2.  **Cite Sources:** Cite sources in-line as [#1], [#2]. Use only the provided URLs.
-3.  **Strict Relevance Filter:** Answer *only* the specific user question, filtering context for relevant manufacturing vocational roles (technicians, operators, etc.).
-4.  **Stay on Topic:** US manufacturing vocational careers only.
-5.  **No Hallucinations:** Do not invent information or URLs.
-6.  **Concise:** Use bullets. Do NOT add 'Next Steps'.`;
+1.  **Use Context Only:** You are performing a web search. You MUST base your answer *only* on the provided 'RAG Context'.
+2.  **Cite Sources:** Cite your sources in-line as [#1], [#2], etc.
+3.  **Vocational Filter:** ALL your answers MUST be filtered through a "vocational and skilled trades" lens (technicians, operators, etc.). You MUST provide information *only* about manufacturing-related vocational roles. Discard any context not related to this topic.
+4.  **Answer the Question First:** Directly answer the user's specific question *first*.
+5.  **Stay on Topic:** Your expertise is strictly limited to US manufacturing careers.
+6.  **No Hallucinations:** NEVER invent URLs, job stats, or program details.`;
 
 // --- Category Detection & Overview Prompt ---
 const CATEGORY_SYNONYMS: Record<string, string[]> = {
@@ -71,6 +74,11 @@ const CATEGORY_SYNONYMS: Record<string, string[]> = {
     'metrology',
   ],
   'Additive Manufacturing': ['additive manufacturing', '3d printing'],
+  'Logistics & Supply Chain': ['logistics', 'supply chain', 'warehouse', 'distribution', 'warehouse operative'],
+  'Electromechanical Technician': ['electromechanical', 'electromechanical technician'],
+  'Process Operator': ['process operator', 'foundry process operator', 'production operator', 'production line operative'],
+  'Manufacturing Technician': ['manufacturing technician', 'production technician', 'materials technician'],
+  'Data Center Electrician': ['data center electrician', 'electrician', 'electrical technician'],
 };
 
 function escapeRegExp(s: string) {
@@ -132,7 +140,7 @@ async function queryInternalDatabase(
     links.push(`* [Search all **programs** on SkillStrong](/programs/all)`);
 
   if (links.length > 0) {
-    return `### 🛡️ SkillStrong Search
+    return `### 🛡️ SkillStrong Database Matches
 You can also search our internal database directly:
 ${links.join('\n')}`;
   }
@@ -147,7 +155,7 @@ async function domainGuard(messages: Message[]): Promise<boolean> {
   const lastUserQuery = lastUserMessage.content || '';
   if (!lastUserQuery.trim()) return true;
 
-  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact|laney)\b/i;
+  const allowHints = /\b(manufactur(e|ing)?|cnc|robot(ic|ics)?|weld(er|ing)?|machin(e|ist|ing)?|apprentice(ship)?s?|factory|plant|quality|qc|maintenance|mechatronic|additive|3d\s*print|bls|o\*?net|program|community\s*college|trade\s*school|career|salary|pay|job|skill|training|near me|local|in my area|how much|what is|tell me about|nims|certificat(e|ion)s?|aws|osha|pmmi|cmrt|cmrp|cqi|cqt|cltd|cscp|camf|astm|asq|gd&t|plc|cad|cam|diablo valley|chabot|college|visit|contact|laney|electrician|electromechanical|foundry|semiconductor|process\s*operator|production\s*tech|data\s*center|logistics|supply\s*chain|warehouse)\b/i;
   
   if (allowHints.test(lastUserQuery)) {
     return true;
@@ -372,8 +380,9 @@ Based on the **final assistant answer** in the conversation, generate a JSON obj
 Generate JSON object with 4 relevant followups based on the *assistant's* answer:`;
 
     const res = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       temperature: 0.6,
+      max_tokens: 300,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemPrompt },
