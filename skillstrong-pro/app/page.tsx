@@ -37,7 +37,7 @@ export default function HomePage() {
             <Link href="/chat" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-blue-700">
               Chat with Coach Mach <ArrowRight className="w-5 h-5 ml-2" />
             </Link>
-            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-white/10 px-5 py-3 font-semibold text-white border border-white/15 hover:bg-white/15 backdrop-blur">
+            <Link href="/quiz" className="inline-flex items-center rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-indigo-700">
               Take the Interest Quiz
             </Link>
           </div>
