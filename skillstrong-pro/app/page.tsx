@@ -22,15 +22,6 @@ export default function HomePage() {
         <div className="pointer-events-none absolute -top-32 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-blue-600/30 blur-3xl" />
         <div className="pointer-events-none absolute top-24 -left-24 h-72 w-72 rounded-full bg-fuchsia-600/20 blur-3xl" />
         <div className="pointer-events-none absolute top-48 -right-24 h-72 w-72 rounded-full bg-cyan-500/20 blur-3xl" />
-<div className="flex gap-3 mt-4">
- <a href="/jobs" className="px-5 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700">
-  Browse Jobs
-</a>
-
-<a href="/programs" className="px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">
-  Find Programs
-</a>
-</div>
         <div className="relative container mx-auto px-6 lg:px-8 py-20 md:py-28 text-center">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
             High‑Tech Careers. No 4‑Year Debt.
@@ -40,6 +31,9 @@ export default function HomePage() {
           </p>
 
           <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Link href="/programs" className="inline-flex items-center rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-indigo-700">
+              Find Programs
+            </Link>
             <Link href="/chat" className="inline-flex items-center rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white shadow-lg hover:bg-blue-700">
               Chat with Coach Mach <ArrowRight className="w-5 h-5 ml-2" />
             </Link>
