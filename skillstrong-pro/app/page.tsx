@@ -9,7 +9,6 @@ import {
   Wrench,
   ScanSearch,
   Handshake,
-  Briefcase,
   Compass,
   Truck,
 } from 'lucide-react';
@@ -64,8 +63,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Three info boxes */}
-          <div className="grid gap-5 md:grid-cols-3">
+          <div className="grid gap-5 md:grid-cols-2 max-w-3xl mx-auto">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
               <Compass className="h-8 w-8 text-cyan-400" />
               <h3 className="mt-3 text-lg font-semibold">Want to learn more about these jobs?</h3>
@@ -88,16 +86,6 @@ export default function HomePage() {
               </Link>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <Briefcase className="h-8 w-8 text-cyan-400" />
-              <h3 className="mt-3 text-lg font-semibold">Already have the skills?</h3>
-              <p className="mt-2 text-slate-300">
-                Get started right away – work with Coach Mach to find paid apprenticeships and job openings.
-              </p>
-              <Link href="/jobs" className="mt-3 inline-flex items-center text-cyan-300 hover:text-cyan-200">
-                Find apprenticeships & jobs <ArrowRight className="ml-1 h-4 w-4" />
-              </Link>
-            </div>
           </div>
         </div>
       </section>
